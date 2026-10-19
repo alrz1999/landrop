@@ -1,0 +1,26 @@
+name: Build macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build macos --release
+      - name: Zip app
+        run: ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Release/landrop.app landrop-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: landrop-macos
+          path: landrop-macos.zip
