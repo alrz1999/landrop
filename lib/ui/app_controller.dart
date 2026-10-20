@@ -7,6 +7,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
+import 'multicast_lock.dart';
 
 /// Persists alias + save directory. The default implementation writes a small
 /// JSON file in the application support directory.
@@ -153,6 +154,14 @@ class AppController extends ChangeNotifier {
       final d = await getDownloadsDirectory();
       if (d != null) return d.path;
     } catch (_) {}
+    if (Platform.isAndroid) {
+      // No Downloads dir via path_provider on Android; app-specific external
+      // storage needs no permission.
+      try {
+        final d = await getExternalStorageDirectory();
+        if (d != null) return d.path;
+      } catch (_) {}
+    }
     final d = await getApplicationDocumentsDirectory();
     return d.path;
   }
@@ -188,6 +197,7 @@ class AppController extends ChangeNotifier {
     lastError = null;
     _notify();
     try {
+      await MulticastLock.acquire();
       await core.start(alias: _alias, saveDir: _saveDir);
       status = CoreStatus.running;
     } catch (e) {
@@ -331,6 +341,7 @@ class AppController extends ChangeNotifier {
     }
     _incomingCtrl.close();
     core.stop().catchError((_) {});
+    MulticastLock.release();
     super.dispose();
   }
 }
