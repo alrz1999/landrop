@@ -73,6 +73,15 @@ Headers on every web response (page, JSON, file bytes, errors):
 - GET|HEAD /  (also /index.html) -> the self-contained page (inline CSS/JS, no external requests)
 - GET  /api/landrop/v1/web/info -> { alias }
 - GET  /api/landrop/v1/web/session -> 200 { paired: true, expiresIn } | 401
+- POST /api/landrop/v1/web/logout  (cookie or Bearer token; Origin rule below applies)
+    -> 200 { paired: false } + `Set-Cookie: landrop_session=; Max-Age=0; Path=/; HttpOnly;
+       SameSite=Strict` (`; Secure` on HTTPS). Ends the caller's session if it has one (always
+       200, so calling it twice is fine); afterwards the token gets 401 everywhere. The owner can
+       also end a session from the app ("Connected browsers", Disconnect) with the same effect.
+       Ending a session also cancels a receive session it prepared: its pending and running
+       uploads are refused (403 on upload; a running upload is aborted with 409 or a closed
+       connection and its `.part` deleted), and an
+       upload-prepare still waiting for the owner's decision answers 401.
 - POST /api/landrop/v1/web/pair -> 200 { id, code (4 digits), expiresIn } | 409 a pairing from this IP
     is already waiting | 429 rate limited or 5 pairings already waiting | 403 nobody to ask
     The app shows the same code with the browser summary ("Chrome on Android") and IP; the owner
@@ -117,6 +126,10 @@ Headers on every web response (page, JSON, file bytes, errors):
   4. A full read (no Range, or a Range from 0 to the last byte) holds a slot while it runs and is
      charged only after every byte was written to the socket; an aborted full read is not charged.
   HEAD is never charged. The listing returns 404 once no download is left.
+- Shares survive an app restart when "Keep shares after restart" is on (default): the same token
+  works at the device's current address and port (the link in the app is rebuilt), with the
+  remaining downloads and the original expiry. A share is dropped at restart when it expired,
+  has no downloads left, or any of its files is gone or changed size.
 - Rate limit, per remote IP: pairing requests, declined or expired pairings, unknown pairing ids,
   401s on upload endpoints, unknown/expired/exhausted share tokens or file ids count as attempts;
   at 10 within 1 minute every web API request from that IP gets 429 (the page itself still loads).

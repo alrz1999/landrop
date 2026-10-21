@@ -114,6 +114,9 @@ audio.preview { width: 100%; }
       <button id="send-btn" type="button" disabled>Send</button>
       <p id="upload-status" role="status" aria-live="polite"></p>
       <ul id="upload-list" class="files" aria-label="Files to send"></ul>
+      <div class="actions">
+        <button id="signout-btn" class="secondary" type="button">Sign out</button>
+      </div>
     </div>
   </section>
 </main>
@@ -323,6 +326,25 @@ audio.preview { width: 100%; }
   call('GET', API + '/web/session', null, function (st) {
     if (st === 200) showUpload(); else showPair();
   });
+  $('signout-btn').addEventListener('click', function () {
+    if (busy) return;
+    var btn = $('signout-btn');
+    btn.disabled = true;
+    // The server ends the session and clears the HttpOnly cookie.
+    call('POST', API + '/web/logout', {}, function (st) {
+      btn.disabled = false;
+      if (st === 200) {
+        picked = [];
+        renderPicked();
+        setText('upload-status', '');
+        showPair();
+        setText('pair-status', 'Signed out. This browser can no longer send files until it is paired again.', '');
+      } else {
+        setText('upload-status', st === 0 ? 'Could not reach the device.'
+          : 'Could not sign out (error ' + st + ').', 'error');
+      }
+    });
+  });
 
   // ---------------------------------------------------------------- upload
   function renderPicked() {
@@ -387,7 +409,7 @@ audio.preview { width: 100%; }
         f.label.textContent = 'done';
         uploadNext(sessionId, tokens, i + 1, okCount + 1);
       } else if (st === 401) {
-        showPair('Pairing expired. Pair this browser again.');
+        showPair('This browser is no longer paired (it expired or the owner disconnected it). Pair it again.');
         finish('', '');
       } else {
         f.label.textContent = 'failed';
@@ -417,7 +439,7 @@ audio.preview { width: 100%; }
       if (st === 200 && j && typeof j.sessionId === 'string' && j.files) {
         uploadNext(j.sessionId, j.files, 0, 0);
       } else if (st === 401) {
-        showPair('Pairing expired. Pair this browser again.');
+        showPair('This browser is no longer paired (it expired or the owner disconnected it). Pair it again.');
         finish('', '');
       } else {
         finish(st === 403 ? 'The owner declined the files.'

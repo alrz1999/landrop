@@ -78,14 +78,15 @@ Android:
 - Settings has a "Keep running in background" switch and a "Quit LanDrop" button.
 - Received files go to `Downloads/LanDrop` when the "All files access" permission is granted, so they show in the Files app. Otherwise they go to the app's hidden external folder. Only a folder chosen by the user is saved in settings, so the default can still change in later versions.
 - `permission_handler` is pinned to 12.x because 13.x needs compileSdk 37 while the Android Gradle plugin in use stops at 36.
+- The service notification shows what is active: "Ready to receive files on your network", or e.g. "Ready to receive · 2 active shares · 1 browser connected". Dart calls `update` on the `dev.landrop/service` channel (`BackgroundService.update`, from `AppController` whenever the share or browser count changes, only while "Keep running in background" is on); the service re-posts its notification under the same id if it is running and keeps the counts for a later start. The service now also builds its notification and starts itself in a way that is valid on API 24-25 (`Notification.Builder(Context)` and `startService` below API 26).
 
-iOS (not built): needs `NSLocalNetworkUsageDescription` and `NSBonjourServices` in `Info.plist`, and the multicast networking entitlement for raw multicast. It also limits background execution, so the foreground-service approach does not carry over.
+iOS (prepared, not built): `ios/Runner/Info.plist` has `NSLocalNetworkUsageDescription` (the text shown in the local network prompt) and `NSBonjourServices` with `_landrop._tcp` (declared for a future Bonjour/mDNS discovery; the app does not advertise or browse that service yet). Nothing else under `ios/` was changed, and the iOS app has never been built or run, so none of this is verified. Still missing: the multicast networking entitlement (`com.apple.developer.networking.multicast`, which needs Apple's approval) for raw UDP multicast; without it discovery would rely on scan and manual IP. iOS also limits background execution, so the foreground-service approach does not carry over.
 
 Windows, Linux (not built): the firewall must allow TCP and UDP on 53317. On Linux, `ufw` or `firewalld` may block it.
 
 ### 2.7 What has been verified, and how
 
-- 17 automated tests pass (`flutter test`): a 20 MB transfer between two cores with a SHA-256 comparison, decline path, wrong fingerprint, path traversal, busy (409) handling, port fallback, discovery over an in-memory transport, and UI widget tests against a fake core. `flutter analyze` is clean.
+- 17 automated tests passed when this section was written (103 after 4.9; `flutter test`): a 20 MB transfer between two cores with a SHA-256 comparison, decline path, wrong fingerprint, path traversal, busy (409) handling, port fallback, discovery over an in-memory transport, and UI widget tests against a fake core. `flutter analyze` is clean.
 - On a Mac, with the real app and a headless peer: real UDP multicast discovery, manual probe, subnet scan and a 5 MB transfer into the running app, byte-identical.
 - Mac and an Android phone on the same Wi-Fi: transfers in both directions, discovery by multicast and broadcast without a subnet scan, the server staying reachable with the screen off, and the server being gone after the app was swiped away.
 
@@ -242,7 +243,7 @@ A browser cannot hold a pinned certificate fingerprint, so authorisation moves t
 
 ### 4.6 Platform notes
 
-- Android: the foreground service already keeps the server alive, so a share stays reachable with the screen off. The notification should say when a share is active.
+- Android: the foreground service already keeps the server alive, so a share stays reachable with the screen off. The notification says when shares are active and browsers are connected (4.9).
 - iOS: the server stops when the app is suspended, so browser mode works only while the app is open.
 - Desktop: works as is. A headless mode (no UI) becomes possible later because the core has no Flutter dependency.
 
@@ -257,11 +258,20 @@ Where it differs from 4.1-4.6 (wire details in PROTOCOL.md, "Browser access"):
 - `lib/core/web_server.dart` (`WebService`) and `lib/core/web_assets.dart` (the page as a Dart string). The core only routes web paths to it and lends it its receive pipeline: `prepare-upload` was split so `_prepareIncoming` (sanitising, Accept dialog, sessions) serves both LocalSend senders and browsers, and the upload handler takes an optional browser-session owner. No upload safety logic is duplicated.
 - Browser uploads do not call `prepare-upload`/`upload` directly (4.3) but `web/upload-prepare` and `web/upload`, which require a paired browser session and then run the same code. The owner still sees the normal Accept dialog ("Browser <ip>") and the transfer in the normal list.
 - Pairing (4.5): no token in the QR fragment. The browser asks (`web/pair`), both screens show a 4-digit code, the owner approves. Result: a 1-hour HttpOnly, SameSite=Strict cookie (also usable as a Bearer token), bound to the browser's IP. 60 s timeout, at most 5 pairings waiting, one per IP, and a per-IP limit of 10 failed attempts a minute (429).
-- Shares: `createShare` (files or folders, folders keep relative paths), expiry (15 min / 1 h / 24 h / until stopped) and a download limit (unlimited / 1 / 5) in the UI. Links are `https://ip:port/#s=<token>` with the token in the fragment. Range requests as in 4.2 mode 3, so `<video>`/`<audio>` previews seek. A limited share counts one download per client per file; ranges are charged at the first partial request, so they cannot be used to bypass the limit (rule in PROTOCOL.md and on `WebService`). Shares live in memory only and do not survive an app restart.
+- Shares: `createShare` (files or folders, folders keep relative paths), expiry (15 min / 1 h / 24 h / until stopped) and a download limit (unlimited / 1 / 5) in the UI. Links are `https://ip:port/#s=<token>` with the token in the fragment. Range requests as in 4.2 mode 3, so `<video>`/`<audio>` previews seek. A limited share counts one download per client per file; ranges are charged at the first partial request, so they cannot be used to bypass the limit (rule in PROTOCOL.md and on `WebService`). Shares are kept across restarts (4.9).
 - The plain HTTP listener (4.4 option 2) exists as an opt-in Settings switch with a confirmation dialog, off by default, on port 53320 (or a free one). It serves only the page, the web endpoints and shares, never the LocalSend device API, and its cookie is not `Secure`.
 - UI: "Share with a browser" section and a Shares screen (app bar) with link, QR, copy, remaining time and downloads, Stop sharing; a "Use from a browser" card with the address, QR and how to get past the certificate warning; the pairing dialog is queued with incoming requests.
 - Verified: `flutter test` (web_test.dart: ranges incl. 5 MB reassembly by sha256, identical 404s, traversal, limits, pairing, rate limit, timeout, HTTP listener, page static checks, a 30 MB two-core end-to-end run) and one manual run in a Chromium-based browser pane over the plain HTTP listener on loopback: page, audio preview, pairing and a 3 MB upload, byte-identical.
-- Not done: the Android notification does not mention active shares (4.6); no live streaming (mode 4); no logout endpoint (sessions just expire); not tried on real phones, Safari, Firefox, or over HTTPS with a real certificate warning; no scripted headless-browser test (section 7).
+- Not done: no live streaming (mode 4); not tried on real phones, Safari, Firefox, or over HTTPS with a real certificate warning; no scripted headless-browser test (section 7).
+
+### 4.9 Implemented (2026-10-21): share button, browser sessions, persistent shares, notification
+
+- Home screen: a "Share" button next to "Send files" / "Send folder" opens a sheet with "Share files" and "Share folder", which run the same `startShareFlow` as the "Share with a browser" section (that section and the app-bar Shares screen stay). The buttons wrap inside the screen width, so they fit a 375 px phone (widget test at 375 and 1000 px).
+- Sign out: `POST /api/landrop/v1/web/logout` ends the caller's session and clears the cookie (`Max-Age=0`); the token then gets 401. The page has a "Sign out" button once paired.
+- Connected browsers: `LanDropCore.webSessions` / `webSessionsChanged` / `revokeWebSession(id)` (`WebSessionInfo`: opaque id, IP, user-agent summary, paired at, last seen; last seen is refreshed on every request but only announced every 30 s). A "Connected browsers" card on the home screen (under "Use from a browser"), on the Shares screen and in Settings lists them with "Disconnect". Ending a session (sign out or Disconnect) invalidates the token at once and cancels the receive session it prepared, so later uploads with its file tokens get 403, a running upload is aborted and its `.part` deleted, and a prepare still waiting for the Accept dialog gets 401.
+- Persistent shares (opt-out): with `LanDropCoreOptions.sharesStorePath` set (the app uses `landrop_shares.json` next to the settings file in the app support directory; null, as in the tests by default, keeps shares in memory only), every change to the shares (create, stop, download charged, expiry) rewrites the file: a temporary file, `chmod 600` where a `chmod` binary exists (macOS, Linux, Android; not Windows or iOS, whose app data folders are per user anyway), then rename. It holds id, token, expiry, download limit and downloads left, and per file its id, name, local path, size and MIME type. On the first start the core restores the shares that have not expired, have downloads left, and whose files all still exist with the stored size; the rest are dropped and the file is rewritten. A corrupt file is ignored (and replaced at the next change). Links are rebuilt from the current address, so a share keeps working when the port changed; the token is the credential. Settings has "Keep shares after restart" (default on); off deletes the file at once and stops writing it (the shares stay active until the app stops).
+- Android notification: see 2.6.
+- Not verified: the Kotlin changes were not compiled (no Android SDK on the machine they were written on); the notification text, the API 24-25 paths and `chmod` on Android are untested on a device.
 
 ## 5. Protocol work needed for both steps
 
@@ -280,7 +290,7 @@ Where it differs from 4.1-4.6 (wire details in PROTOCOL.md, "Browser access"):
 3. Transport interface with `lan-https` as the only implementation, capability record, guided diagnosis.
 4. Browser mode: web page, shares, range streaming, pairing.
 5. Hotspot assist, then Wi-Fi Direct (Android first), then BLE rendezvous.
-6. iOS build and the iOS-specific permissions.
+6. iOS build and the iOS-specific permissions (the `Info.plist` keys are in place, 2.6; the build and the multicast entitlement are not).
 7. Relay or WebRTC, only if there is real demand.
 
 Steps 3 and 4 are independent and can be built in parallel.

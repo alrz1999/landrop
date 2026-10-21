@@ -3,6 +3,7 @@ package dev.landrop.landrop
 import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -38,11 +39,23 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "start" -> {
                         try {
-                            startForegroundService(intent)
+                            // startForegroundService is API 26+; minSdk is 24.
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
                             result.success(true)
                         } catch (e: Exception) {
                             result.success(false)
                         }
+                    }
+                    "update" -> {
+                        // Dart ints arrive as Integer (or Long when large).
+                        val shares = (call.argument<Any>("shares") as? Number)?.toInt() ?: 0
+                        val browsers = (call.argument<Any>("browsers") as? Number)?.toInt() ?: 0
+                        LanDropService.updateStatus(shares, browsers)
+                        result.success(true)
                     }
                     "stop" -> {
                         stopService(intent)

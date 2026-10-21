@@ -462,6 +462,190 @@ void main() {
     expect(find.byKey(const Key('webHttpUrl')), findsNothing);
   });
 
+  for (final width in [375.0, 1000.0]) {
+    testWidgets('share FAB sits beside the send buttons at ${width.toInt()} px',
+        (tester) async {
+      await pumpApp(tester, size: Size(width, 800));
+      expect(tester.takeException(), isNull); // no overflow
+      for (final k in ['shareFab', 'sendFolderFab', 'sendFab']) {
+        final f = find.byKey(Key(k));
+        expect(f, findsOneWidget, reason: k);
+        final r = tester.getRect(f);
+        expect(r.left, greaterThanOrEqualTo(0), reason: k);
+        expect(r.right, lessThanOrEqualTo(width), reason: k);
+        expect(r.bottom, lessThanOrEqualTo(800), reason: k);
+      }
+      // No two buttons overlap.
+      final rects = [
+        for (final k in ['shareFab', 'sendFolderFab', 'sendFab'])
+          tester.getRect(find.byKey(Key(k)))
+      ];
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          expect(rects[i].overlaps(rects[j]), isFalse);
+        }
+      }
+      // The app bar icon and the section stay.
+      expect(find.byKey(const Key('sharesAction')), findsOneWidget);
+      expect(find.text('Share with a browser'), findsOneWidget);
+    });
+  }
+
+  testWidgets('share FAB sheet: "Share files" runs the share flow',
+      (tester) async {
+    final core = await pumpApp(tester,
+        size: const Size(375, 800), pick: () async => ['/x/a.txt']);
+    await tester.tap(find.byKey(const Key('shareFab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shareSheet')), findsOneWidget);
+    expect(find.text('Share folder'), findsWidgets);
+    await tester.tap(find.byKey(const Key('shareSheetFiles')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shareSheet')), findsNothing);
+    expect(find.text('Share 1 file'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmShare')));
+    await tester.pumpAndSettle();
+    expect(core.shareCalls.single.$1, ['/x/a.txt']);
+    expect(core.shares, hasLength(1));
+  });
+
+  testWidgets('share FAB sheet: "Share folder" shares the picked folder',
+      (tester) async {
+    final core = await pumpApp(tester,
+        size: const Size(375, 800), pickFolder: () async => '/x/Trip');
+    await tester.tap(find.byKey(const Key('shareFab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shareSheetFolder')));
+    await tester.pumpAndSettle();
+    expect(find.text('Share folder "Trip"'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmShare')));
+    await tester.pumpAndSettle();
+    expect(core.shareCalls.single.$1, ['/x/Trip']);
+  });
+
+  testWidgets('share FAB sheet dismissed: nothing is picked or shared',
+      (tester) async {
+    var picked = 0;
+    final core = await pumpApp(tester, pick: () async {
+      picked++;
+      return ['/x/a.txt'];
+    });
+    await tester.tap(find.byKey(const Key('shareFab')));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(200, 50)); // the scrim
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shareSheet')), findsNothing);
+    expect(picked, 0);
+    expect(core.shareCalls, isEmpty);
+  });
+
+  testWidgets('home: connected browsers card lists sessions; Disconnect',
+      (tester) async {
+    final core = await pumpApp(tester);
+    final card = find.byKey(const Key('connectedBrowsersCard'));
+    await scrollTo(tester, card);
+    expect(find.textContaining('No browser is paired'), findsOneWidget);
+    final s1 = core.simulateWebSession();
+    final s2 = core.simulateWebSession(
+        userAgent: 'Chrome on Windows', ip: '192.168.1.80');
+    await tester.pumpAndSettle();
+    expect(find.text('Safari on iPhone'), findsOneWidget);
+    expect(find.text('Chrome on Windows'), findsOneWidget);
+    expect(find.textContaining('192.168.1.80 · paired '), findsOneWidget);
+    expect(find.textContaining('last seen just now'), findsNWidgets(2));
+    await scrollTo(tester, find.byKey(Key('disconnect-${s1.id}')));
+    await tester.tap(find.byKey(Key('disconnect-${s1.id}')));
+    await tester.pumpAndSettle();
+    expect(core.revokedWebSessions, [s1.id]);
+    expect(find.byKey(Key('webSession-${s1.id}')), findsNothing);
+    expect(find.byKey(Key('webSession-${s2.id}')), findsOneWidget);
+    expect(find.text('Safari on iPhone disconnected'), findsOneWidget);
+  });
+
+  testWidgets('settings: connected browsers card with Disconnect',
+      (tester) async {
+    final core = await pumpApp(tester);
+    final s = core.simulateWebSession(userAgent: 'Firefox on Linux');
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.byKey(Key('disconnect-${s.id}')));
+    expect(find.text('Firefox on Linux'), findsOneWidget);
+    await tester.tap(find.byKey(Key('disconnect-${s.id}')));
+    await tester.pumpAndSettle();
+    expect(core.revokedWebSessions, [s.id]);
+    expect(find.text('Firefox on Linux'), findsNothing);
+    expect(find.textContaining('No browser is paired'), findsOneWidget);
+  });
+
+  testWidgets('settings: "Keep shares after restart" is on; off is saved',
+      (tester) async {
+    final store = MemorySettingsStore();
+    final core = FakeCore(simulateDelay: const Duration(milliseconds: 10));
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(LanDropApp(
+      core: core,
+      store: store,
+      initialSaveDir: '/tmp/landrop-test',
+      initialAlias: 'Tester',
+    ));
+    await tester.pumpAndSettle();
+    expect(core.sharesPersistence, isTrue);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    final sw = find.byKey(const Key('keepSharesSwitch'));
+    await scrollTo(tester, sw);
+    expect(tester.widget<SwitchListTile>(sw).value, isTrue);
+    await tester.tap(sw);
+    await tester.pumpAndSettle();
+    expect(core.sharesPersistence, isFalse);
+    expect(store.stored['keepShares'], isFalse);
+    expect(tester.widget<SwitchListTile>(sw).value, isFalse);
+  });
+
+  test('keepShares off in settings is applied before the core starts',
+      () async {
+    final core = FakeCore(simulateDelay: Duration.zero);
+    final c = AppController(
+        core: core,
+        store: MemorySettingsStore({'keepShares': false}),
+        initialSaveDir: '/tmp/landrop-test');
+    await c.init();
+    expect(c.keepShares, isFalse);
+    expect(core.sharesPersistence, isFalse);
+    c.dispose();
+  });
+
+  test('share and browser counts go to the service notification on change',
+      () async {
+    final calls = <(int, int)>[];
+    final core = FakeCore(simulateDelay: Duration.zero);
+    final c = AppController(
+        core: core,
+        store: MemorySettingsStore(),
+        initialSaveDir: '/tmp/landrop-test',
+        statusNotifier: (s, b) async => calls.add((s, b)));
+    await c.init();
+    expect(calls, [(0, 0)]);
+    final share = c.createShare(['/x/a.txt']);
+    c.createShare(['/x/b.txt']);
+    final web = core.simulateWebSession();
+    await Future<void>.delayed(Duration.zero);
+    c.revokeShare(share.id);
+    c.revokeWebSession(web.id);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls, [(0, 0), (1, 0), (2, 0), (2, 1), (1, 1), (1, 0)]);
+    // Unrelated changes do not repeat the call.
+    c.dismissDiscoveryError();
+    expect(calls, hasLength(6));
+    // Background off: nothing is sent (there is no service).
+    await c.setBackground(false);
+    c.createShare(['/x/c.txt']);
+    expect(calls, hasLength(6));
+    c.dispose();
+  });
+
   testWidgets('settings: plain HTTP switch is off, asks before turning on',
       (tester) async {
     final core = await pumpApp(tester);

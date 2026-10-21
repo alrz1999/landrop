@@ -161,6 +161,25 @@ class WebPairingRequest {
   WebPairingRequest(this.id, this.code, this.userAgent, this.remoteIp);
 }
 
+/// A paired browser (DESIGN.md 4.5), as shown under "Connected browsers".
+class WebSessionInfo {
+  /// Opaque id for [LanDropCore.revokeWebSession] (not the session token).
+  final String id;
+  final String remoteIp;
+  final String userAgent; // short summary, e.g. "Chrome on Android"
+  final DateTime pairedAt;
+
+  /// Last request made with this session.
+  final DateTime lastSeen;
+  const WebSessionInfo({
+    required this.id,
+    required this.remoteIp,
+    required this.userAgent,
+    required this.pairedAt,
+    required this.lastSeen,
+  });
+}
+
 /// One file of a [Share]. [id] is opaque (never a path).
 class SharedFile {
   final String id;
@@ -270,6 +289,23 @@ abstract class LanDropCore {
   /// Throws [ArgumentError] when nothing can be shared.
   Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads});
   void revokeShare(String id);
+
+  /// Whether shares are saved and restored across restarts (only when the
+  /// core has a store, e.g. `LanDropCoreOptions.sharesStorePath`). Turning it
+  /// off deletes the stored file; turning it on saves the current shares.
+  bool get sharesPersistence;
+  void setSharesPersistence(bool enabled);
+
+  /// Paired browsers whose session is still valid.
+  List<WebSessionInfo> get webSessions;
+
+  /// Emits [webSessions] when a browser pairs, signs out, is disconnected or
+  /// its session expires (and, at most every 30 s, when it is seen again).
+  Stream<List<WebSessionInfo>> get webSessionsChanged;
+
+  /// Ends a browser session at once: its token stops working and a browser
+  /// upload prepared under it is cancelled. Unknown ids are ignored.
+  void revokeWebSession(String id);
 
   /// The web page on the HTTPS server, `https://<ip>:<port>/`. Null when the
   /// core is not running.

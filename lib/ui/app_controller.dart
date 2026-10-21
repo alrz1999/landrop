@@ -22,6 +22,18 @@ class SettingsStore {
     return File('${dir.path}${Platform.pathSeparator}landrop_settings.json');
   }
 
+  /// The share store next to the settings file
+  /// (`LanDropCoreOptions.sharesStorePath`); null when there is no app
+  /// support directory.
+  static Future<String?> sharesPath() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      return '${dir.path}${Platform.pathSeparator}landrop_shares.json';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> load() async {
     try {
       final f = await _file();
@@ -96,6 +108,9 @@ class TransferSession {
 
 enum CoreStatus { stopped, starting, running, error }
 
+/// Receives the number of active shares and connected browsers.
+typedef StatusNotifier = Future<void> Function(int shares, int browsers);
+
 /// App-level controller wrapping a [LanDropCore].
 class AppController extends ChangeNotifier {
   AppController({
@@ -103,18 +118,27 @@ class AppController extends ChangeNotifier {
     SettingsStore? store,
     String? initialSaveDir,
     String? initialAlias,
+    StatusNotifier? statusNotifier,
   })  : _store = store ?? const SettingsStore(),
         _saveDir = initialSaveDir ?? '',
-        _alias = initialAlias ?? _defaultAlias();
+        _alias = initialAlias ?? _defaultAlias(),
+        _statusNotifier = statusNotifier ?? _defaultStatusNotifier;
 
   final LanDropCore core;
   final SettingsStore _store;
+
+  /// Shows the counts in the Android service notification (test seam).
+  final StatusNotifier _statusNotifier;
+  static Future<void> _defaultStatusNotifier(int shares, int browsers) =>
+      BackgroundService.update(shares: shares, browsers: browsers);
+  (int, int)? _lastStatus;
 
   String _alias;
   String _saveDir;
   bool _background = true; // Android foreground service on/off
   bool _customDir = false; // user picked a folder; only then is it persisted
   bool _webHttp = false; // plain HTTP listener for browsers (opt-in)
+  bool _keepShares = true; // shares survive a restart (opt-out)
   CoreStatus status = CoreStatus.stopped;
   String? lastError;
   List<DeviceInfo> peers = const [];
@@ -128,6 +152,9 @@ class AppController extends ChangeNotifier {
 
   /// Active shares (DESIGN.md 4.2 mode 2), newest last.
   List<Share> shares = const [];
+
+  /// Paired browsers (DESIGN.md 4.5), oldest first.
+  List<WebSessionInfo> webSessions = const [];
   final List<StreamSubscription<dynamic>> _subs = [];
 
   /// Progress for sessions not (yet) known here, latest event per file.
@@ -187,6 +214,9 @@ class AppController extends ChangeNotifier {
   /// The user's choice for the plain HTTP listener (persisted).
   bool get webHttpEnabled => _webHttp;
 
+  /// "Keep shares after restart" (persisted, default on).
+  bool get keepShares => _keepShares;
+
   String? _guard(String? Function() f) {
     if (status != CoreStatus.running) return null;
     try {
@@ -235,8 +265,14 @@ class AppController extends ChangeNotifier {
     _subs.add(core.incoming.listen(_incomingCtrl.add));
     _subs.add(core.progress.listen(_onProgress));
     _subs.add(core.webPairing.listen(_pairingCtrl.add));
-    _subs.add(core.sharesChanged.listen((s) {
-      shares = s;
+    // Events arrive asynchronously and may be older than what createShare /
+    // revoke already applied, so the current lists are read instead.
+    _subs.add(core.sharesChanged.listen((_) {
+      shares = core.shares;
+      _notify();
+    }));
+    _subs.add(core.webSessionsChanged.listen((_) {
+      webSessions = core.webSessions;
       _notify();
     }));
 
@@ -246,6 +282,7 @@ class AppController extends ChangeNotifier {
     }
     if (s['background'] is bool) _background = s['background'] as bool;
     if (s['webHttp'] is bool) _webHttp = s['webHttp'] as bool;
+    if (s['keepShares'] is bool) _keepShares = s['keepShares'] as bool;
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
       _customDir = true;
@@ -268,9 +305,12 @@ class AppController extends ChangeNotifier {
     try {
       await MulticastLock.acquire();
       if (_background) await BackgroundService.start();
+      // Before start: when off, the stored shares are deleted, not restored.
+      core.setSharesPersistence(_keepShares);
       await core.start(alias: _alias, saveDir: _saveDir);
       status = CoreStatus.running;
       shares = core.shares;
+      webSessions = core.webSessions;
       if (_webHttp && !core.webHttpEnabled) {
         try {
           await core.setWebHttpEnabled(true);
@@ -334,6 +374,7 @@ class AppController extends ChangeNotifier {
     } else {
       await BackgroundService.stop();
     }
+    _lastStatus = null; // send the counts to a (re)started service
     _notify();
   }
 
@@ -352,6 +393,25 @@ class AppController extends ChangeNotifier {
     if (status == CoreStatus.running) await core.setWebHttpEnabled(on);
     _webHttp = on;
     await _persist();
+    _notify();
+  }
+
+  /// Keep shares after a restart. Off deletes the stored shares at once
+  /// (the shares stay active until the app stops).
+  Future<void> setKeepShares(bool on) async {
+    if (on == _keepShares) return;
+    _keepShares = on;
+    try {
+      core.setSharesPersistence(on);
+    } catch (_) {}
+    await _persist();
+    _notify();
+  }
+
+  /// Ends a browser's session (it must pair again to send files).
+  void revokeWebSession(String id) {
+    core.revokeWebSession(id);
+    webSessions = core.webSessions;
     _notify();
   }
 
@@ -378,6 +438,7 @@ class AppController extends ChangeNotifier {
         'alias': _alias,
         'background': _background,
         'webHttp': _webHttp,
+        'keepShares': _keepShares,
         if (_customDir) 'saveDir': _saveDir,
       });
 
@@ -492,7 +553,22 @@ class AppController extends ChangeNotifier {
   }
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    _updateStatus();
+    notifyListeners();
+  }
+
+  /// Tells the background service how many shares and browsers are active,
+  /// when that changed. Errors are swallowed (no service off Android).
+  void _updateStatus() {
+    if (!_background || status != CoreStatus.running) return;
+    final now = (shares.where((s) => !s.expired && !s.exhausted).length,
+        webSessions.length);
+    if (now == _lastStatus) return;
+    _lastStatus = now;
+    try {
+      _statusNotifier(now.$1, now.$2).catchError((_) {});
+    } catch (_) {}
   }
 
   @override

@@ -18,6 +18,16 @@ class BackgroundService {
     } catch (_) {}
   }
 
+  /// Updates the service notification text ("2 active shares", "1 browser
+  /// connected"). The service only re-posts it while running.
+  static Future<void> update({required int shares, required int browsers}) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>(
+          'update', {'shares': shares, 'browsers': browsers});
+    } catch (_) {}
+  }
+
   static Future<void> stop() async {
     if (!Platform.isAndroid) return;
     try {

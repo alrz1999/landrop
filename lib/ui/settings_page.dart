@@ -7,6 +7,7 @@ import 'app_controller.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'format.dart';
+import 'shares.dart';
 import 'widgets.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -167,6 +168,22 @@ class SettingsPage extends StatelessWidget {
                   title: const Text('Browser address (plain HTTP)'),
                   subtitle: SelectableText(c.webHttpUrl ?? 'Starting…'),
                 ),
+              SwitchListTile(
+                key: const Key('keepSharesSwitch'),
+                secondary: const Icon(Icons.history),
+                title: const Text('Keep shares after restart'),
+                subtitle: const Text(
+                    'Share links keep working after LanDrop restarts, as long '
+                    'as they have not expired and the files are unchanged. The '
+                    'list of shared files is stored on this device. Off deletes '
+                    'it.'),
+                value: c.keepShares,
+                onChanged: c.setKeepShares,
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 8, 12, 16),
+                child: ConnectedBrowsersCard(),
+              ),
             ],
           ),
         ),

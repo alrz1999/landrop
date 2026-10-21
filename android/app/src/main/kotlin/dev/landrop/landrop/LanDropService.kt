@@ -13,29 +13,80 @@ import android.os.IBinder
 
 /** Keeps the process (and the HTTPS server inside it) alive while the app is in the background. */
 class LanDropService : Service() {
+    companion object {
+        private const val CHANNEL_ID = "landrop_service"
+        private const val NOTIFICATION_ID = 1
+
+        // Last counts from Dart (MethodChannel "update"); kept here so a service started later shows them too.
+        @Volatile
+        private var activeShares = 0
+
+        @Volatile
+        private var connectedBrowsers = 0
+
+        // The running service, if any. Set and cleared on the main thread.
+        private var instance: LanDropService? = null
+
+        /** Called by MainActivity on the main thread. Re-posts the notification if the service is running. */
+        fun updateStatus(shares: Int, browsers: Int) {
+            activeShares = if (shares < 0) 0 else shares
+            connectedBrowsers = if (browsers < 0) 0 else browsers
+            instance?.repostNotification()
+        }
+
+        /** "Ready to receive files on your network", or e.g. "Ready to receive · 2 active shares · 1 browser connected". */
+        fun statusText(shares: Int, browsers: Int): String {
+            if (shares <= 0 && browsers <= 0) return "Ready to receive files on your network"
+            val parts = ArrayList<String>()
+            parts.add("Ready to receive")
+            if (shares > 0) parts.add(if (shares == 1) "1 active share" else "$shares active shares")
+            if (browsers > 0) parts.add(if (browsers == 1) "1 browser connected" else "$browsers browsers connected")
+            return parts.joinToString(" · ")
+        }
+    }
+
     private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** Notification.Builder(Context, String) exists only on API 26+; minSdk is 24. */
+    @Suppress("DEPRECATION")
+    private fun newBuilder(): Notification.Builder =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            Notification.Builder(this)
+        }
+
+    private fun buildNotification(): Notification =
+        newBuilder()
+            .setContentTitle("LanDrop is running")
+            .setContentText(statusText(activeShares, connectedBrowsers))
+            .setSmallIcon(applicationInfo.icon)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+
+    internal fun repostNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // Same id as startForeground: replaces the foreground notification in place.
+        nm.notify(NOTIFICATION_ID, buildNotification())
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val channelId = "landrop_service"
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(channelId, "LanDrop", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "LanDrop", NotificationManager.IMPORTANCE_LOW)
             )
         }
-        val notification = Notification.Builder(this, channelId)
-            .setContentTitle("LanDrop is running")
-            .setContentText("Ready to receive files on your network")
-            .setSmallIcon(applicationInfo.icon)
-            .setOngoing(true)
-            .build()
+        val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            startForeground(1, notification)
+            startForeground(NOTIFICATION_ID, notification)
         }
+        instance = this
         if (wifiLock == null) {
             val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "landrop").apply {
@@ -54,6 +105,7 @@ class LanDropService : Service() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         wifiLock?.takeIf { it.isHeld }?.release()
         wifiLock = null
         super.onDestroy()

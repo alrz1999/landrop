@@ -339,8 +339,73 @@ class SharesPage extends StatelessWidget {
               SharesSection(pickFiles: pickFiles, pickFolder: pickFolder),
               const SectionHeader('Use from a browser'),
               const WebAccessCard(),
+              const ConnectedBrowsersCard(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+String _clock(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+String _ago(DateTime t) {
+  final d = DateTime.now().difference(t);
+  if (d.inMinutes < 1) return 'just now';
+  if (d.inHours < 1) return '${d.inMinutes} min ago';
+  return '${d.inHours} h ago';
+}
+
+/// Paired browsers with a "Disconnect" button each (DESIGN.md 4.5).
+class ConnectedBrowsersCard extends StatelessWidget {
+  const ConnectedBrowsersCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppScope.of(context);
+    final t = Theme.of(context).textTheme;
+    final list = c.webSessions;
+    return Card(
+      key: const Key('connectedBrowsersCard'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Text('Connected browsers', style: t.titleSmall),
+            ),
+            if (list.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                    'No browser is paired. A paired browser can send you '
+                    'files until it signs out, you disconnect it, or an hour '
+                    'passes.',
+                    style: t.bodySmall),
+              )
+            else
+              for (final s in list)
+                ListTile(
+                  key: Key('webSession-${s.id}'),
+                  leading: const Icon(Icons.public),
+                  title: Text(s.userAgent),
+                  subtitle: Text('${s.remoteIp} · paired ${_clock(s.pairedAt)}'
+                      ' · last seen ${_ago(s.lastSeen)}'),
+                  trailing: TextButton(
+                    key: Key('disconnect-${s.id}'),
+                    onPressed: () {
+                      c.revokeWebSession(s.id);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('${s.userAgent} disconnected')));
+                    },
+                    child: const Text('Disconnect'),
+                  ),
+                ),
+          ],
         ),
       ),
     );

@@ -17,8 +17,10 @@ LanDropCoreOptions _opts({
   int rateLimit = 1000,
   Duration pairingTimeout = const Duration(seconds: 10),
   Duration streamWindow = const Duration(minutes: 30),
+  String? sharesStorePath,
 }) =>
     LanDropCoreOptions(
+      sharesStorePath: sharesStorePath,
       port: 0,
       bindAddress: InternetAddress.loopbackIPv4,
       advertiseIp: '127.0.0.1',
@@ -795,4 +797,385 @@ void main() {
     final dst = File('${tmp.path}/b-save/big.bin');
     expect(_sha(await dst.readAsBytes()), _sha(data));
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  // ------------------------------------------------ browser sessions
+
+  test('logout ends the session, clears the cookie and is idempotent',
+      () async {
+    final a = await startCore(_opts());
+    final b = base(a);
+    final changes = <List<WebSessionInfo>>[];
+    final sub = a.webSessionsChanged.listen(changes.add);
+    final token = await pair(a);
+    final auth = {'Authorization': 'Bearer $token'};
+    expect(a.webSessions, hasLength(1));
+    final info = a.webSessions.single;
+    expect(info.remoteIp, '127.0.0.1');
+    expect(info.userAgent, 'Dart client');
+    expect(info.id, isNot(token));
+    expect(info.pairedAt.isAfter(info.lastSeen), isFalse);
+    expect(changes.last.single.id, info.id);
+
+    // A foreign Origin cannot sign the browser out (CSRF).
+    final xs = await _call('POST', '$b$_api/web/logout',
+        headers: {...auth, 'Origin': 'http://evil.test'}, json: {});
+    expect(xs.status, 403);
+    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        200);
+
+    final out = await _call('POST', '$b$_api/web/logout',
+        headers: {'Cookie': 'landrop_session=$token'}, json: {});
+    expect(out.status, 200);
+    _expectSecurityHeaders(out);
+    final cookie = out.headers['set-cookie']!.single;
+    expect(cookie, startsWith('landrop_session=;'));
+    for (final part in ['Max-Age=0', 'Path=/', 'HttpOnly', 'SameSite=Strict',
+        'Secure']) {
+      expect(cookie, contains(part));
+    }
+    expect(a.webSessions, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(changes.last, isEmpty);
+    await sub.cancel();
+
+    // The token is dead, by header and by cookie.
+    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        401);
+    expect(
+        (await _call('GET', '$b$_api/web/session',
+                headers: {'Cookie': 'landrop_session=$token'}))
+            .status,
+        401);
+    expect(
+        (await _call('POST', '$b$_api/web/upload-prepare',
+                headers: auth,
+                json: {
+                  'files': [
+                    {'id': '0', 'fileName': 'a.txt', 'size': 1}
+                  ]
+                }))
+            .status,
+        401);
+    // Signing out twice (or without a session) is fine.
+    expect((await _call('POST', '$b$_api/web/logout', json: {})).status, 200);
+  });
+
+  test('logout over plain HTTP clears the cookie without Secure', () async {
+    final a = await startCore(_opts(httpPort: 0));
+    final hb = 'http://127.0.0.1:${a.webHttpPort}';
+    final token = await pair(a, url: hb);
+    final out = await _call('POST', '$hb$_api/web/logout',
+        headers: {'Authorization': 'Bearer $token'}, json: {});
+    expect(out.status, 200);
+    final cookie = out.headers['set-cookie']!.single;
+    expect(cookie, contains('Max-Age=0'));
+    expect(cookie, isNot(contains('Secure')));
+    expect(a.webSessions, isEmpty);
+  });
+
+  test('revoking a browser: token dies, prepared uploads are refused',
+      () async {
+    final a = await startCore(_opts());
+    final b = base(a);
+    final token = await pair(a);
+    final auth = {'Authorization': 'Bearer $token'};
+    final inSub = a.incoming.listen((r) => r.decision.complete(true));
+    final prep = await _call('POST', '$b$_api/web/upload-prepare',
+        headers: auth,
+        json: {
+          'files': [
+            {'id': '0', 'fileName': 'one.txt', 'size': 3},
+            {'id': '1', 'fileName': 'two.txt', 'size': 3},
+          ]
+        });
+    expect(prep.status, 200);
+    final sid = prep.json!['sessionId'] as String;
+    final toks = prep.json!['files'] as Map;
+    String q(String id) => 'sessionId=$sid&fileId=$id&token=${toks[id]}';
+    expect(
+        (await _call('POST', '$b$_api/web/upload?${q('0')}',
+                headers: auth, bytes: [1, 2, 3]))
+            .status,
+        200);
+
+    final changes = <List<WebSessionInfo>>[];
+    final sub = a.webSessionsChanged.listen(changes.add);
+    a.revokeWebSession(a.webSessions.single.id);
+    a.revokeWebSession('unknown'); // ignored
+    expect(a.webSessions, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(changes.single, isEmpty);
+    await sub.cancel();
+
+    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        401);
+    // Upload after revoke: the browser token is refused ...
+    final after = await _call('POST', '$b$_api/web/upload?${q('1')}',
+        headers: auth, bytes: [4, 5, 6]);
+    expect(after.status, 401);
+    // ... and so is the receive session itself, even with its file token.
+    final direct = await _call(
+        'POST', '$b/api/localsend/v2/upload?${q('1')}',
+        bytes: [4, 5, 6]);
+    expect(direct.status, 403);
+    expect(File('${tmp.path}/a-save/one.txt').existsSync(), isTrue);
+    expect(File('${tmp.path}/a-save/two.txt').existsSync(), isFalse);
+    await inSub.cancel();
+  });
+
+  test('revoking a browser aborts its upload in flight', () async {
+    final a = await startCore(_opts());
+    final b = base(a);
+    final token = await pair(a);
+    final auth = {'Authorization': 'Bearer $token'};
+    final inSub = a.incoming.listen((r) => r.decision.complete(true));
+    const size = 4 << 20;
+    final prep = await _call('POST', '$b$_api/web/upload-prepare',
+        headers: auth,
+        json: {
+          'files': [
+            {'id': '0', 'fileName': 'big.bin', 'size': size}
+          ]
+        });
+    expect(prep.status, 200);
+    final sid = prep.json!['sessionId'] as String;
+    final ftok = (prep.json!['files'] as Map)['0'];
+    final started = a.progress
+        .firstWhere((p) => p.sessionId == sid && p.error == null);
+    final errored = a.progress.firstWhere((p) => p.sessionId == sid && p.error != null);
+
+    final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
+    int? status;
+    try {
+      final req = await c.postUrl(Uri.parse(
+          '$b$_api/web/upload?sessionId=$sid&fileId=0&token=$ftok'));
+      req.headers.set('Authorization', 'Bearer $token');
+      req.contentLength = size;
+      final data = _randomBytes(size, 11);
+      req.add(data.sublist(0, 256 << 10));
+      await req.flush();
+      await started; // the receiver is writing
+      a.revokeWebSession(a.webSessions.single.id);
+      req.add(data.sublist(256 << 10));
+      final res = await req.close();
+      status = res.statusCode;
+      await res.drain<void>();
+    } catch (_) {
+      status = null; // the receiver may cut the connection instead
+    } finally {
+      c.close(force: true);
+    }
+    expect(status, isNot(200));
+    final err = await errored.timeout(const Duration(seconds: 5));
+    expect(err.done, isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final left = Directory('${tmp.path}/a-save')
+        .listSync()
+        .map((e) => e.path.split(Platform.pathSeparator).last)
+        .toList();
+    expect(left, isNot(contains('big.bin')));
+    expect(left.where((n) => n.endsWith('.part')), isEmpty);
+    await inSub.cancel();
+  });
+
+  test('a browser disconnected while the owner decides gets 401', () async {
+    final a = await startCore(_opts());
+    final token = await pair(a);
+    final inSub = a.incoming.listen((r) {
+      a.revokeWebSession(a.webSessions.single.id);
+      r.decision.complete(true);
+    });
+    final prep = await _call('POST', '${base(a)}$_api/web/upload-prepare',
+        headers: {'Authorization': 'Bearer $token'},
+        json: {
+          'files': [
+            {'id': '0', 'fileName': 'x.txt', 'size': 1}
+          ]
+        });
+    expect(prep.status, 401);
+    await inSub.cancel();
+  });
+
+  test('page has a Sign out button that calls logout', () {
+    expect(webPageHtml, contains('id="signout-btn"'));
+    expect(webPageHtml, contains(">Sign out<"));
+    expect(webPageHtml, contains("API + '/web/logout'"));
+  });
+
+  // ------------------------------------------------ share persistence
+
+  group('share store', () {
+    late String store;
+    setUp(() => store = '${tmp.path}/support/landrop_shares.json');
+
+    Future<void> drop(LanDropCoreImpl c) async {
+      cores.remove(c);
+      await c.dispose();
+    }
+
+    test('shares survive a restart with the same tokens, limits and a new '
+        'port', () async {
+      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+      final data = _randomBytes(100000, 21);
+      final f = File('${tmp.path}/keep.bin')..writeAsBytesSync(data);
+      final limited = a.createShare([f.path],
+          ttl: const Duration(hours: 1), maxDownloads: 3);
+      final forever = a.createShare([f.path]);
+      final url =
+          '${base(a)}$_api/shares/${limited.token}/files/${limited.files.single.id}';
+      expect((await _call('GET', url)).status, 200);
+      await _settle();
+      expect(a.shares.firstWhere((s) => s.id == limited.id).downloadsLeft, 2);
+      final file = File(store);
+      expect(file.existsSync(), isTrue);
+      expect(File('$store.tmp').existsSync(), isFalse);
+      if (Platform.isMacOS || Platform.isLinux) {
+        expect(file.statSync().mode & 0x3f, 0, reason: 'owner-only');
+      }
+      await drop(a);
+
+      final b = await startCore(_opts(sharesStorePath: store), name: 'b');
+      expect(b.self.port, isNot(0));
+      final got = {for (final s in b.shares) s.id: s};
+      expect(got.keys.toSet(), {limited.id, forever.id});
+      final l = got[limited.id]!;
+      expect(l.token, limited.token);
+      expect(l.downloadsLeft, 2);
+      expect(l.maxDownloads, 3);
+      expect(l.expiresAt!.difference(limited.expiresAt!).inSeconds.abs(),
+          lessThan(1));
+      expect(l.files.single.id, limited.files.single.id);
+      expect(l.files.single.name, 'keep.bin');
+      expect(got[forever.id]!.expiresAt, isNull);
+      expect(got[forever.id]!.downloadsLeft, isNull);
+      // The link is rebuilt for the current address; the token is what counts.
+      expect(l.url, '${base(b)}/#s=${limited.token}');
+      final again = await _call('GET',
+          '${base(b)}$_api/shares/${l.token}/files/${l.files.single.id}');
+      expect(again.status, 200);
+      expect(_sha(again.body), _sha(data));
+      await _settle();
+      expect(b.shares.firstWhere((s) => s.id == limited.id).downloadsLeft, 1);
+      // And the new count is stored too.
+      final stored = jsonDecode(File(store).readAsStringSync()) as Map;
+      final row = (stored['shares'] as List)
+          .cast<Map>()
+          .firstWhere((s) => s['id'] == limited.id);
+      expect(row['downloadsLeft'], 1);
+    });
+
+    test('expired, missing and changed files are dropped on restore',
+        () async {
+      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+      File mk(String n) => File('${tmp.path}/$n')..writeAsStringSync('12345');
+      final expired =
+          a.createShare([mk('e.txt').path], ttl: const Duration(milliseconds: 300));
+      final missing = a.createShare([mk('m.txt').path]);
+      final changed = a.createShare([mk('c.txt').path]);
+      final dir = await Directory('${tmp.path}/Album').create();
+      File('${dir.path}/1.txt').writeAsStringSync('1');
+      File('${dir.path}/2.txt').writeAsStringSync('2');
+      final folderPartlyGone = a.createShare([dir.path]);
+      final good = a.createShare([mk('g.txt').path], maxDownloads: 1);
+      final storedTokens = File(store).readAsStringSync();
+      for (final s in [expired, missing, changed, folderPartlyGone, good]) {
+        expect(storedTokens, contains(s.token));
+      }
+      await drop(a);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      File('${tmp.path}/m.txt').deleteSync();
+      File('${tmp.path}/c.txt').writeAsStringSync('123456'); // new size
+      File('${dir.path}/2.txt').deleteSync();
+
+      final b = await startCore(_opts(sharesStorePath: store), name: 'b');
+      expect(b.shares.map((s) => s.id), [good.id]);
+      expect(b.shares.single.downloadsLeft, 1);
+      final after = File(store).readAsStringSync();
+      expect(after, contains(good.token));
+      for (final s in [expired, missing, changed, folderPartlyGone]) {
+        expect(after, isNot(contains(s.token)), reason: s.id);
+        expect(
+            (await _call('GET', '${base(b)}$_api/shares/${s.token}')).status,
+            404);
+      }
+    });
+
+    test('a used-up share is not restored', () async {
+      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+      final f = File('${tmp.path}/once.txt')..writeAsStringSync('once');
+      final s = a.createShare([f.path], maxDownloads: 1);
+      expect(
+          (await _call('GET',
+                  '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}'))
+              .status,
+          200);
+      await _settle();
+      await drop(a);
+      final b = await startCore(_opts(sharesStorePath: store), name: 'b');
+      expect(b.shares, isEmpty);
+    });
+
+    test('turning persistence off deletes the store and stops writing',
+        () async {
+      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+      expect(a.sharesPersistence, isTrue);
+      final f = File('${tmp.path}/p.txt')..writeAsStringSync('p');
+      final s1 = a.createShare([f.path]);
+      expect(File(store).existsSync(), isTrue);
+      a.setSharesPersistence(false);
+      expect(a.sharesPersistence, isFalse);
+      expect(File(store).existsSync(), isFalse);
+      a.createShare([f.path]);
+      a.revokeShare(s1.id);
+      expect(File(store).existsSync(), isFalse);
+      expect(a.shares, hasLength(1)); // still active until the app stops
+      a.setSharesPersistence(true);
+      expect(File(store).existsSync(), isTrue);
+      expect((jsonDecode(File(store).readAsStringSync())['shares'] as List),
+          hasLength(1));
+    });
+
+    test('off before start: the stored shares are deleted, not restored',
+        () async {
+      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+      final f = File('${tmp.path}/q.txt')..writeAsStringSync('q');
+      a.createShare([f.path]);
+      await drop(a);
+      final b = LanDropCoreImpl(_opts(sharesStorePath: store));
+      cores.add(b);
+      b.setSharesPersistence(false);
+      await b.start(
+          alias: 'b',
+          saveDir: (await Directory('${tmp.path}/b-save').create()).path);
+      expect(b.shares, isEmpty);
+      expect(File(store).existsSync(), isFalse);
+    });
+
+    test('a corrupt store is ignored without crashing', () async {
+      await File(store).create(recursive: true);
+      for (final (i, junk) in [
+        '{not json',
+        '[1, 2]',
+        '{"v": 1, "shares": "nope"}',
+        '{"v": 1, "shares": [42, {"id": 1}, {"id": "x", "token": "../..", '
+            '"files": []}]}',
+      ].indexed) {
+        File(store).writeAsStringSync(junk);
+        final c = await startCore(_opts(sharesStorePath: store), name: 'c$i');
+        expect(c.shares, isEmpty, reason: junk);
+        final f = File('${tmp.path}/ok$i.txt')..writeAsStringSync('ok');
+        final s = c.createShare([f.path]);
+        final stored = jsonDecode(File(store).readAsStringSync()) as Map;
+        expect((stored['shares'] as List).single['token'], s.token);
+        await drop(c);
+      }
+    });
+
+    test('no store path: nothing is written', () async {
+      final a = await startCore(_opts(), name: 'a');
+      final f = File('${tmp.path}/n.txt')..writeAsStringSync('n');
+      a.createShare([f.path]);
+      expect(Directory('${tmp.path}/support').existsSync(), isFalse);
+    });
+  });
 }

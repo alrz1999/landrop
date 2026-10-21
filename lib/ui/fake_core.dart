@@ -329,6 +329,47 @@ class FakeCore implements LanDropCore {
   }
 
   @override
+  bool sharesPersistence = true;
+
+  @override
+  void setSharesPersistence(bool enabled) => sharesPersistence = enabled;
+
+  final _sessionsCtrl = StreamController<List<WebSessionInfo>>.broadcast();
+  final List<WebSessionInfo> _webSessions = [];
+  int _webSessionSeq = 0;
+
+  /// Every [revokeWebSession] call, for tests.
+  final List<String> revokedWebSessions = [];
+
+  /// Test hook: a browser finished pairing.
+  WebSessionInfo simulateWebSession(
+      {String userAgent = 'Safari on iPhone', String ip = '192.168.1.77'}) {
+    final now = DateTime.now();
+    final s = WebSessionInfo(
+        id: 'web-${++_webSessionSeq}',
+        remoteIp: ip,
+        userAgent: userAgent,
+        pairedAt: now,
+        lastSeen: now);
+    _webSessions.add(s);
+    _sessionsCtrl.add(webSessions);
+    return s;
+  }
+
+  @override
+  List<WebSessionInfo> get webSessions => List.unmodifiable(_webSessions);
+
+  @override
+  Stream<List<WebSessionInfo>> get webSessionsChanged => _sessionsCtrl.stream;
+
+  @override
+  void revokeWebSession(String id) {
+    revokedWebSessions.add(id);
+    _webSessions.removeWhere((s) => s.id == id);
+    _sessionsCtrl.add(webSessions);
+  }
+
+  @override
   String? get webUrl => started ? 'https://${_self.ip}:${_self.port}/' : null;
 
   @override

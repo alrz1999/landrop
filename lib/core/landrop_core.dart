@@ -97,6 +97,10 @@ class LanDropCoreOptions {
   final Duration webSessionTtl;
   final Duration webStreamWindow;
 
+  /// JSON file where shares are kept across restarts (DESIGN.md 4.8). Null:
+  /// shares live in memory only. See [LanDropCore.setSharesPersistence].
+  final String? sharesStorePath;
+
   const LanDropCoreOptions({
     this.port = 53317,
     this.portFallbackRange = 20,
@@ -128,6 +132,7 @@ class LanDropCoreOptions {
     this.webRateWindow = const Duration(minutes: 1),
     this.webSessionTtl = const Duration(hours: 1),
     this.webStreamWindow = const Duration(minutes: 30),
+    this.sharesStorePath,
   });
 }
 
@@ -225,7 +230,18 @@ class LanDropCoreImpl implements LanDropCore {
     prepareUpload: (req, sender, files, owner) =>
         _prepareIncoming(req, sender, files, owner: owner),
     upload: (req, owner) => _handleUpload(req, owner: owner),
+    onSessionEnded: _onWebSessionEnded,
+    storePath: options.sharesStorePath,
   );
+
+  /// A browser signed out or was disconnected: its receive session (if any)
+  /// is cancelled, so uploads prepared under it are refused from now on.
+  void _onWebSessionEnded(String owner) {
+    final s = _session;
+    if (s != null && s.owner == owner) {
+      _endSession(s, reason: 'browser disconnected');
+    }
+  }
 
   static const _progressStep = 256 * 1024;
 
@@ -242,6 +258,16 @@ class LanDropCoreImpl implements LanDropCore {
       _web.createShare(paths, ttl: ttl, maxDownloads: maxDownloads);
   @override
   void revokeShare(String id) => _web.revokeShare(id);
+  @override
+  bool get sharesPersistence => _web.persistence;
+  @override
+  void setSharesPersistence(bool enabled) => _web.setPersistence(enabled);
+  @override
+  List<WebSessionInfo> get webSessions => _web.sessions;
+  @override
+  Stream<List<WebSessionInfo>> get webSessionsChanged => _web.sessionsChanged;
+  @override
+  void revokeWebSession(String id) => _web.revokeSession(id);
   @override
   String? get webUrl => _web.webUrl;
   @override
@@ -1256,6 +1282,10 @@ class LanDropCoreImpl implements LanDropCore {
       _pendingDecision = false;
     }
     if (!accepted || !_running) throw _HttpError(403, 'declined');
+    // The browser signed out or was disconnected while the owner decided.
+    if (owner != null && !_web.sessionActive(owner)) {
+      throw _HttpError(401, 'not paired');
+    }
     if (_session != null) throw _HttpError(409, 'busy');
 
     // Top-level folders get a unique name ("Photos (1)") so a second

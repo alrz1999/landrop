@@ -190,7 +190,7 @@ class _Share {
   final String id;
   final String token;
   final List<_ShareFile> files;
-  final DateTime createdAt = DateTime.now();
+  final DateTime createdAt;
   final DateTime? expiresAt;
   final int? maxDownloads;
 
@@ -202,7 +202,87 @@ class _Share {
 
   /// `fileId|ip` -> last request of a charged range sequence.
   final Map<String, DateTime> windows = {};
-  _Share(this.id, this.token, this.files, this.expiresAt, this.maxDownloads);
+  _Share(this.id, this.token, this.files, this.expiresAt, this.maxDownloads,
+      {DateTime? createdAt})
+      : createdAt = createdAt ?? DateTime.now();
+
+  /// Stored form (see [WebService.storePath]). Includes local paths, so the
+  /// file is kept owner-only.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'token': token,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+        'expiresAt': expiresAt?.toUtc().toIso8601String(),
+        'maxDownloads': maxDownloads,
+        'downloadsLeft': downloadsLeft,
+        'files': [
+          for (final f in files)
+            {
+              'id': f.id,
+              'name': f.name,
+              'path': f.path,
+              'size': f.size,
+              'mime': f.mime,
+            }
+        ],
+      };
+
+  static final _tokenRe = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
+
+  /// A stored share, or null when it is malformed, expired, used up, or any
+  /// of its files is gone or no longer has the stored size.
+  static _Share? fromJson(Object? j, DateTime now) {
+    if (j is! Map) return null;
+    final id = j['id'];
+    final token = j['token'];
+    final rawFiles = j['files'];
+    if (id is! String || token is! String || !_tokenRe.hasMatch(token)) {
+      return null;
+    }
+    if (rawFiles is! List || rawFiles.isEmpty) return null;
+    final exp = j['expiresAt'];
+    DateTime? expiresAt;
+    if (exp != null) {
+      expiresAt = exp is String ? DateTime.tryParse(exp)?.toLocal() : null;
+      if (expiresAt == null || !now.isBefore(expiresAt)) return null;
+    }
+    final maxRaw = j['maxDownloads'];
+    final leftRaw = j['downloadsLeft'];
+    int? maxDownloads;
+    var used = 0;
+    if (maxRaw != null) {
+      if (maxRaw is! int || maxRaw < 1 || leftRaw is! int || leftRaw < 1) {
+        return null;
+      }
+      maxDownloads = maxRaw;
+      used = maxRaw - min(leftRaw, maxRaw);
+    }
+    final files = <_ShareFile>[];
+    final ids = <String>{};
+    for (final f in rawFiles) {
+      if (f is! Map) return null;
+      final fid = f['id'];
+      final name = f['name'];
+      final path = f['path'];
+      final size = f['size'];
+      final mime = f['mime'];
+      if (fid is! String ||
+          name is! String ||
+          path is! String ||
+          size is! int ||
+          mime is! String ||
+          !ids.add(fid)) {
+        return null;
+      }
+      final st = File(path).statSync();
+      if (st.type != FileSystemEntityType.file || st.size != size) return null;
+      files.add(_ShareFile(fid, name, path, size, mime));
+    }
+    final created = j['createdAt'];
+    return _Share(id, token, files, expiresAt, maxDownloads,
+        createdAt: created is String ? DateTime.tryParse(created)?.toLocal() : null)
+      ..downloads = used;
+  }
 
   bool expired(DateTime now) => expiresAt != null && !now.isBefore(expiresAt!);
   int? get downloadsLeft =>
@@ -219,7 +299,16 @@ class _WebSession {
   final String ip;
   final String userAgent;
   DateTime expires;
+  final DateTime pairedAt = DateTime.now();
+  DateTime lastSeen = DateTime.now();
   _WebSession(this.id, this.token, this.ip, this.userAgent, this.expires);
+
+  WebSessionInfo get info => WebSessionInfo(
+      id: id,
+      remoteIp: ip,
+      userAgent: userAgent,
+      pairedAt: pairedAt,
+      lastSeen: lastSeen);
 }
 
 enum _PairState { pending, approved, declined, expired }
@@ -265,15 +354,30 @@ class WebService {
     required this.selfInfo,
     required this.prepareUpload,
     required this.upload,
+    this.onSessionEnded,
+    this.storePath,
   }) : _httpEnabled = config.httpPort != null;
+
+  /// JSON file the shares are kept in across restarts; null = memory only.
+  /// Written atomically (temporary file + rename, owner-only where chmod
+  /// exists) on every change; read once, on the first [start].
+  final String? storePath;
+  bool _persist = true;
+  bool _restored = false;
+  String? _lastSaved;
 
   final WebConfig config;
   final DeviceInfo Function() selfInfo;
   final WebPrepareUpload prepareUpload;
   final WebUpload upload;
 
+  /// Core hook: a browser session ended (sign out or revoked); the core
+  /// cancels a receive session it owns.
+  final void Function(String sessionId)? onSessionEnded;
+
   final _pairCtrl = StreamController<WebPairingRequest>.broadcast();
   final _sharesCtrl = StreamController<List<Share>>.broadcast();
+  final _sessionsCtrl = StreamController<List<WebSessionInfo>>.broadcast();
 
   final Map<String, _Share> _sharesByToken = {};
   final Map<String, _WebSession> _sessions = {}; // by token
@@ -308,6 +412,10 @@ class WebService {
   // ------------------------------------------------------------ lifecycle
 
   Future<void> start() async {
+    if (!_restored) {
+      _restored = true;
+      if (_persist) _restore();
+    }
     _running = true;
     _pruneTimer?.cancel();
     _pruneTimer = Timer.periodic(const Duration(seconds: 15), (_) => _prune());
@@ -333,6 +441,37 @@ class WebService {
     await stop();
     await _pairCtrl.close();
     await _sharesCtrl.close();
+    await _sessionsCtrl.close();
+  }
+
+  // ------------------------------------------------------------ sessions
+
+  Stream<List<WebSessionInfo>> get sessionsChanged => _sessionsCtrl.stream;
+
+  List<WebSessionInfo> get sessions {
+    final now = DateTime.now();
+    return [
+      for (final s in _sessions.values)
+        if (now.isBefore(s.expires)) s.info
+    ]..sort((a, b) => a.pairedAt.compareTo(b.pairedAt));
+  }
+
+  /// True while the browser session [id] is valid.
+  bool sessionActive(String id) {
+    final now = DateTime.now();
+    return _sessions.values.any((s) => s.id == id && now.isBefore(s.expires));
+  }
+
+  void _emitSessions() {
+    if (!_sessionsCtrl.isClosed) _sessionsCtrl.add(sessions);
+  }
+
+  void revokeSession(String id) {
+    final before = _sessions.length;
+    _sessions.removeWhere((_, s) => s.id == id);
+    if (_sessions.length == before) return;
+    onSessionEnded?.call(id);
+    _emitSessions();
   }
 
   Future<void> setHttpEnabled(bool on) async {
@@ -385,7 +524,9 @@ class WebService {
           (_, t) => now.difference(t) >= config.streamWindow);
     }
     if (_sharesByToken.length != before) _emitShares();
+    final sessionsBefore = _sessions.length;
     _sessions.removeWhere((_, s) => !now.isBefore(s.expires));
+    if (_sessions.length != sessionsBefore) _emitSessions();
     _pairings.removeWhere((_, p) =>
         p.state != _PairState.pending &&
         now.difference(p.created) > config.pairingTimeout * 2);
@@ -424,7 +565,95 @@ class WebService {
   }
 
   void _emitShares() {
+    _save();
     if (!_sharesCtrl.isClosed) _sharesCtrl.add(shares);
+  }
+
+  // ------------------------------------------------------------ share store
+
+  bool get persistence => _persist;
+
+  /// Off: the stored file is deleted and nothing is written any more. On:
+  /// the current shares are written (after the first start has read the
+  /// file, so an earlier store is never overwritten unread).
+  void setPersistence(bool on) {
+    _persist = on;
+    final p = storePath;
+    if (p == null) return;
+    if (on) {
+      _save();
+      return;
+    }
+    _restored = true; // nothing left to read
+    _lastSaved = null;
+    for (final f in [File(p), File('$p.tmp')]) {
+      try {
+        if (f.existsSync()) f.deleteSync();
+      } catch (_) {}
+    }
+  }
+
+  void _restore() {
+    final p = storePath;
+    if (p == null) return;
+    Object? data;
+    try {
+      final f = File(p);
+      if (!f.existsSync()) return;
+      data = jsonDecode(f.readAsStringSync());
+    } catch (e) {
+      // Corrupt or unreadable: start without shares; the next save replaces
+      // the file.
+      stderr.writeln('LanDrop: ignoring unreadable share store: $e');
+      return;
+    }
+    final list = data is Map ? data['shares'] : null;
+    if (list is! List) return;
+    final now = DateTime.now();
+    for (final j in list) {
+      try {
+        final s = _Share.fromJson(j, now);
+        if (s != null && !_sharesByToken.containsKey(s.token)) {
+          _sharesByToken[s.token] = s;
+        }
+      } catch (_) {
+        // one bad entry never blocks the others
+      }
+    }
+  }
+
+  void _save() {
+    final p = storePath;
+    if (p == null || !_persist || !_restored) return;
+    final now = DateTime.now();
+    final json = jsonEncode({
+      'v': 1,
+      'shares': [
+        for (final s in _sharesByToken.values)
+          if (!s.expired(now) && s.downloadsLeft != 0) s.toJson()
+      ],
+    });
+    if (json == _lastSaved) return;
+    final tmp = File('$p.tmp');
+    try {
+      tmp.parent.createSync(recursive: true);
+      tmp.writeAsStringSync(''); // create (or truncate), then restrict
+      _ownerOnly(tmp.path);
+      tmp.writeAsStringSync(json, flush: true);
+      tmp.renameSync(p); // atomic replace; keeps the temp file's mode
+      _lastSaved = json;
+    } catch (e) {
+      stderr.writeln('LanDrop: could not save shares: $e');
+    }
+  }
+
+  /// chmod 600 where a chmod binary exists (dart:io cannot set modes).
+  /// Elsewhere (Windows, iOS) the app data directory is already per user.
+  static void _ownerOnly(String path) {
+    if (!(Platform.isLinux || Platform.isMacOS || Platform.isAndroid)) return;
+    try {
+      Process.runSync('chmod', ['600', path]);
+    } catch (_) {}
   }
 
   static String _baseName(String path) => path
@@ -587,6 +816,10 @@ class WebService {
             'paired': true,
             'expiresIn': s.expires.difference(DateTime.now()).inSeconds,
           });
+        case ['web', 'logout'] when m == 'POST':
+          await req.drain<void>();
+          bodyRead = true;
+          _logout(req, ip, secure: secure);
         case ['web', 'pair'] when m == 'POST':
           await req.drain<void>();
           bodyRead = true;
@@ -681,13 +914,31 @@ class WebService {
     if (token == null || token.isEmpty) return null;
     final s = _sessions[token];
     if (s == null) return null;
-    if (!DateTime.now().isBefore(s.expires)) {
+    final now = DateTime.now();
+    if (!now.isBefore(s.expires)) {
       _sessions.remove(token);
+      _emitSessions();
       return null;
     }
     // Bound to the browser's address: a token copied off the (plain HTTP)
     // network is useless from another device.
-    return s.ip == ip ? s : null;
+    if (s.ip != ip) return null;
+    final quiet = now.difference(s.lastSeen) >= const Duration(seconds: 30);
+    s.lastSeen = now;
+    if (quiet) _emitSessions(); // not on every request
+    return s;
+  }
+
+  /// POST web/logout: ends the caller's session (if any) and clears the
+  /// cookie. Always 200, so it is safe to call twice.
+  void _logout(HttpRequest req, String ip, {required bool secure}) {
+    final s = _sessionOf(req, ip);
+    if (s != null) revokeSession(s.id);
+    req.response.headers.add(
+        HttpHeaders.setCookieHeader,
+        '$webSessionCookie=; Max-Age=0; Path=/; HttpOnly; '
+        'SameSite=Strict${secure ? '; Secure' : ''}');
+    _json(req.response, 200, {'paired': false});
   }
 
   static String? _cookie(HttpRequest req, String name) {
@@ -735,6 +986,7 @@ class WebService {
         _sessions[token] = s;
         p.session = s;
         p.set(_PairState.approved);
+        _emitSessions();
       } else {
         _fail(ip);
         p.set(_PairState.declined);

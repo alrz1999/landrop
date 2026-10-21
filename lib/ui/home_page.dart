@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -149,6 +150,40 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// "Share" button: choose files or a folder, then the normal share flow.
+  Future<void> _shareSheet() async {
+    final folder = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          key: const Key('shareSheet'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('shareSheetFiles'),
+              leading: const Icon(Icons.ios_share),
+              title: const Text('Share files'),
+              subtitle: const Text('Get a link any browser can open'),
+              onTap: () => Navigator.pop(ctx, false),
+            ),
+            ListTile(
+              key: const Key('shareSheetFolder'),
+              leading: const Icon(Icons.folder_shared_outlined),
+              title: const Text('Share folder'),
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (folder == null || !mounted) return;
+    await startShareFlow(context,
+        pickFiles: widget.pickFiles,
+        pickFolder: widget.pickFolder,
+        folder: folder);
+  }
+
   Future<void> _addByIp() async {
     final c = AppScope.read(context);
     final res = await showAddByIpDialog(context);
@@ -278,32 +313,46 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      floatingActionButton: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        alignment: WrapAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            key: const Key('sendFolderFab'),
-            heroTag: 'sendFolder',
-            onPressed: _sendFolderFlow,
-            icon: const Icon(Icons.drive_folder_upload),
-            label: const Text('Send folder'),
-          ),
-          FloatingActionButton.extended(
-            key: const Key('sendFab'),
-            heroTag: 'sendFiles',
-            onPressed: _sendFlow,
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Send files'),
-          ),
-        ],
+      // Kept inside the screen minus the FAB margins, so on a phone the
+      // buttons wrap instead of running off the left edge.
+      floatingActionButton: ConstrainedBox(
+        constraints: BoxConstraints(
+            maxWidth: max(0, MediaQuery.sizeOf(context).width - 32)),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          alignment: WrapAlignment.end,
+          children: [
+            FloatingActionButton.extended(
+              key: const Key('shareFab'),
+              heroTag: 'share',
+              onPressed: _shareSheet,
+              icon: const Icon(Icons.ios_share),
+              label: const Text('Share'),
+            ),
+            FloatingActionButton.extended(
+              key: const Key('sendFolderFab'),
+              heroTag: 'sendFolder',
+              onPressed: _sendFolderFlow,
+              icon: const Icon(Icons.drive_folder_upload),
+              label: const Text('Send folder'),
+            ),
+            FloatingActionButton.extended(
+              key: const Key('sendFab'),
+              heroTag: 'sendFiles',
+              onPressed: _sendFlow,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Send files'),
+            ),
+          ],
+        ),
       ),
       body: LayoutBuilder(builder: (context, box) {
         final wide = box.maxWidth >= 840;
         if (!wide) {
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+            // Room for the buttons, which wrap to two rows on phones.
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 168),
             children: [
               SelfCard(onEditAlias: _editAlias),
               ...peersSection,
@@ -311,6 +360,7 @@ class _HomePageState extends State<HomePage> {
               sharesSection,
               const SectionHeader('Use from a browser'),
               const WebAccessCard(),
+              const ConnectedBrowsersCard(),
               const SectionHeader('Connect manually'),
               const QrCard(),
             ],
@@ -339,6 +389,7 @@ class _HomePageState extends State<HomePage> {
                   const QrCard(),
                   const SectionHeader('Use from a browser'),
                   const WebAccessCard(),
+                  const ConnectedBrowsersCard(),
                 ],
               ),
             ),

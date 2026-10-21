@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'ui/app.dart';
 import 'ui/app_config.dart';
+import 'ui/app_controller.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(LanDropApp(core: createCore()));
+  runApp(LanDropApp(
+      core: createCore(sharesStorePath: await SettingsStore.sharesPath())));
 }

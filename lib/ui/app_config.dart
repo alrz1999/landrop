@@ -8,8 +8,11 @@ import 'fake_core.dart';
 /// and the real network core.
 const bool useFake = false;
 
-LanDropCore createCore() => useFake
+/// [sharesStorePath]: where shares are kept across restarts (null: memory
+/// only).
+LanDropCore createCore({String? sharesStorePath}) => useFake
     ? FakeCore()
     : LanDropCoreImpl(LanDropCoreOptions(
         deviceType:
-            Platform.isAndroid || Platform.isIOS ? 'mobile' : 'desktop'));
+            Platform.isAndroid || Platform.isIOS ? 'mobile' : 'desktop',
+        sharesStorePath: sharesStorePath));
