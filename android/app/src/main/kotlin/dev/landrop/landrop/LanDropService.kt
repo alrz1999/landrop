@@ -46,6 +46,13 @@ class LanDropService : Service() {
         return START_STICKY
     }
 
+    /** App swiped away from Recents: stop everything, including the server in this process. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
     override fun onDestroy() {
         wifiLock?.takeIf { it.isHeld }?.release()
         wifiLock = null

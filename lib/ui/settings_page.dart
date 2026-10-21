@@ -1,4 +1,6 @@
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
@@ -76,6 +78,23 @@ class SettingsPage extends StatelessWidget {
                   title: const Text('Certificate fingerprint'),
                   subtitle: SelectableText(shortFingerprint(fp)),
                 ),
+              if (Platform.isAndroid) ...[
+                const Divider(),
+                SwitchListTile(
+                  secondary: const Icon(Icons.sync_outlined),
+                  title: const Text('Keep running in background'),
+                  subtitle: const Text(
+                      'Stays reachable with the screen off. Shows a notification.'),
+                  value: c.background,
+                  onChanged: c.setBackground,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.power_settings_new),
+                  title: const Text('Quit LanDrop'),
+                  subtitle: const Text('Stops receiving and closes the app'),
+                  onTap: c.quit,
+                ),
+              ],
               ListTile(
                 leading: const Icon(Icons.restart_alt),
                 title: const Text('Restart service'),

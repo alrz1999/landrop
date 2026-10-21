@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -108,6 +109,7 @@ class AppController extends ChangeNotifier {
 
   String _alias;
   String _saveDir;
+  bool _background = true; // Android foreground service on/off
   bool _customDir = false; // user picked a folder; only then is it persisted
   CoreStatus status = CoreStatus.stopped;
   String? lastError;
@@ -122,6 +124,7 @@ class AppController extends ChangeNotifier {
 
   String get alias => _alias;
   String get saveDir => _saveDir;
+  bool get background => _background;
   Stream<IncomingRequest> get incomingRequests => _incomingCtrl.stream;
 
   DeviceInfo? get self {
@@ -187,6 +190,7 @@ class AppController extends ChangeNotifier {
     if (s['alias'] is String && (s['alias'] as String).trim().isNotEmpty) {
       _alias = s['alias'] as String;
     }
+    if (s['background'] is bool) _background = s['background'] as bool;
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
       _customDir = true;
@@ -207,7 +211,7 @@ class AppController extends ChangeNotifier {
     _notify();
     try {
       await MulticastLock.acquire();
-      await BackgroundService.start();
+      if (_background) await BackgroundService.start();
       await core.start(alias: _alias, saveDir: _saveDir);
       status = CoreStatus.running;
     } catch (e) {
@@ -256,8 +260,32 @@ class AppController extends ChangeNotifier {
     if (status != CoreStatus.stopped) await restart();
   }
 
+  /// Android: keep the server reachable while the app is in the background.
+  Future<void> setBackground(bool on) async {
+    if (on == _background) return;
+    _background = on;
+    await _persist();
+    if (on) {
+      await BackgroundService.start();
+    } else {
+      await BackgroundService.stop();
+    }
+    _notify();
+  }
+
+  /// Stop the server and the background service, then close the app.
+  Future<void> quit() async {
+    try {
+      await core.stop();
+    } catch (_) {}
+    await MulticastLock.release();
+    await BackgroundService.stop();
+    SystemNavigator.pop();
+  }
+
   Future<void> _persist() => _store.save({
         'alias': _alias,
+        'background': _background,
         if (_customDir) 'saveDir': _saveDir,
       });
 
