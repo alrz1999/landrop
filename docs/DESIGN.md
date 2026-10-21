@@ -1,7 +1,7 @@
 # LanDrop design document
 
 Status: living document. Last updated 2026-10-21.
-Scope: everything built so far, plus the proposed next steps (transport negotiation and a browser / local stream server mode).
+Scope: everything built so far (including transport selection and hotspot assist, 3.9), plus the proposed next steps.
 
 ## 1. Goal
 
@@ -21,12 +21,13 @@ Non-goals for now: internet transfers through a relay, sync of folders, backgrou
 
 - `lib/core/api.dart`: the contract between core and UI (`LanDropCore`, `DeviceInfo`, `FileOffer`, `IncomingRequest`, `TransferProgress`).
 - `lib/core/landrop_core.dart`: HTTPS server and client, peer table, discovery orchestration, transfer logic.
+- `lib/core/transport.dart`: `Transport`, `Link`, `LanHttpsTransport` and `TransportSelector` (section 3.9): how a send reaches a known peer.
 - `lib/core/discovery.dart`: pluggable discovery transport. The default is UDP multicast and broadcast. Tests inject an in-memory one.
 - `lib/core/identity.dart`: self-signed RSA-2048 certificate, generated in Dart, stored under `<saveDir>/.landrop/`.
 - `lib/core/util.dart`: file name sanitising, unique names, MIME guessing, local IPv4 lookup, VPN interface filter.
 - `lib/core/web_server.dart`, `lib/core/web_assets.dart`: browser access (section 4.8).
-- `lib/ui/`: Material 3 UI (home, settings, dialogs), `AppController` (a `ChangeNotifier`), a fake core for UI tests, and the Android helpers (`multicast_lock.dart`, `background_service.dart`, `storage_access.dart`).
-- `android/app/src/main/kotlin/.../MainActivity.kt` and `LanDropService.kt`: multicast lock, foreground service.
+- `lib/ui/`: Material 3 UI (home, settings, dialogs), `AppController` (a `ChangeNotifier`), a fake core for UI tests, and the Android helpers (`multicast_lock.dart`, `background_service.dart`, `storage_access.dart`, `hotspot_service.dart`). `hotspot_wizard.dart` is the "Connect without Wi-Fi" wizard (3.9).
+- `android/app/src/main/kotlin/.../MainActivity.kt`, `LanDropService.kt` and `HotspotManager.kt`: multicast lock, foreground service, local-only hotspot.
 - `PROTOCOL.md`: the wire protocol summary.
 
 ### 2.3 Wire protocol (LocalSend v2 compatible subset)
@@ -71,7 +72,7 @@ macOS:
 - Building needs full Xcode (not just the command line tools), CocoaPods, and an accepted licence. This was set up with Xcode 27.1.
 
 Android:
-- Permissions: INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE, FOREGROUND_SERVICE (data sync), POST_NOTIFICATIONS, WAKE_LOCK, MANAGE_EXTERNAL_STORAGE, and WRITE_EXTERNAL_STORAGE up to API 29.
+- Permissions: INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_MULTICAST_STATE, FOREGROUND_SERVICE (data sync), POST_NOTIFICATIONS, WAKE_LOCK, MANAGE_EXTERNAL_STORAGE, and WRITE_EXTERNAL_STORAGE up to API 29. For the local-only hotspot (3.9): CHANGE_WIFI_STATE, ACCESS_FINE_LOCATION and ACCESS_COARSE_LOCATION up to API 32 (Android 12 ignores a fine-location request without coarse), NEARBY_WIFI_DEVICES with `neverForLocation` (API 33+). They are only requested at runtime when the user taps "Start hotspot".
 - A `WifiManager.MulticastLock` must be held or Android drops incoming multicast.
 - A foreground service (`LanDropService`) keeps the process and the server alive when the app is in the background or the screen is off. It also holds a Wi-Fi lock, which cut Wi-Fi latency. Without it Android froze the app and the server stopped answering.
 - Swiping the app away stops the service and kills the process, so the server really stops.
@@ -86,7 +87,7 @@ Windows, Linux (not built): the firewall must allow TCP and UDP on 53317. On Lin
 
 ### 2.7 What has been verified, and how
 
-- 17 automated tests passed when this section was written (103 after 4.9; `flutter test`): a 20 MB transfer between two cores with a SHA-256 comparison, decline path, wrong fingerprint, path traversal, busy (409) handling, port fallback, discovery over an in-memory transport, and UI widget tests against a fake core. `flutter analyze` is clean.
+- 17 automated tests passed when this section was written (103 after 4.9, 139 after 3.9; `flutter test`): a 20 MB transfer between two cores with a SHA-256 comparison, decline path, wrong fingerprint, path traversal, busy (409) handling, port fallback, discovery over an in-memory transport, and UI widget tests against a fake core. `flutter analyze` is clean.
 - On a Mac, with the real app and a headless peer: real UDP multicast discovery, manual probe, subnet scan and a 5 MB transfer into the running app, byte-identical.
 - Mac and an Android phone on the same Wi-Fi: transfers in both directions, discovery by multicast and broadcast without a subnet scan, the server staying reachable with the screen off, and the server being gone after the app was swiped away.
 
@@ -161,6 +162,8 @@ abstract class Transport {
 
 A `Link` offers the same HTTPS-style request interface the core already uses, so `send()` and the receiver do not care which transport carries them. The existing LAN path becomes the first implementation (`lan-https`) with no behaviour change.
 
+Implemented (3.9), smaller than sketched: no `discover()` (rendezvous stays in `discovery.dart`), `open(DeviceInfo peer, {timeout, exclude})`, and a `Link` is an HTTPS endpoint (host, port, pinned fingerprint, measured round trip) rather than a request interface.
+
 ### 3.5 Candidate transports
 
 | Transport | Needs | Typical speed | Notes |
@@ -171,6 +174,8 @@ A `Link` offers the same HTTPS-style request interface the core already uses, so
 | ble | Bluetooth Low Energy | Under 100 KB/s | Rendezvous and handshake only, for example to exchange the hotspot name or IP. Not for bulk data. |
 | relay / WebRTC | Internet and a signalling server | Varies | For devices on different networks. Out of scope until needed. |
 
+Implemented (3.9): `lan-https` only. The hotspot is not a transport of its own: once both devices are on the hotspot, `lan-https` carries the data. LanDrop guides the user through it, and on Android it can create the hotspot itself (local-only hotspot with a join QR code). Joining is always manual. Wi-Fi Direct, BLE and relay are not started.
+
 ### 3.6 Selection algorithm
 
 1. Rendezvous by every available method at once (multicast, broadcast, scan, BLE). Merge peers by fingerprint, not by address.
@@ -178,6 +183,8 @@ A `Link` offers the same HTTPS-style request interface the core already uses, so
 3. Probe the top candidates in parallel with a short timeout (similar to "happy eyeballs"): open a link and time a small request. Prefer the lowest round trip among those that work, with `basePriority` as the tie-break.
 4. Cache the winner per peer fingerprint, with an expiry, so the next transfer starts immediately.
 5. During a transfer, if no bytes move for N seconds, fall back to the next candidate and continue from the last confirmed byte. This needs resumable uploads (section 5).
+
+Implemented (3.9): steps 3 to 5. Peers are merged by fingerprint (step 1 for the LAN methods only, no BLE). Step 2 has nothing to intersect yet with one transport: every transport whose `isAvailable()` is true is tried.
 
 ### 3.7 Guided diagnosis
 
@@ -191,13 +198,40 @@ When no transport reaches a peer, run rules over what was observed and show the 
 
 This turns the troubleshooting list from the start of the project into code.
 
+Implemented: see 3.8 (rules) and 3.9 (findings that a hotspot can fix carry an action that opens the hotspot wizard). The BLE rule is not possible without BLE.
+
 ### 3.8 Implemented (2026-10-21): capability record and guided diagnosis, LAN only
 
-- Capability record (3.3) is served in the info JSON (`landrop`) and at `GET /api/landrop/v1/capabilities`, with one transport (`lan-https`, local non-VPN IPv4 addresses, port) and the features `resume`, `folders`. Peers' records are parsed into `DeviceInfo.capabilities`. No transport selection yet (3.4-3.6 not started).
+- Capability record (3.3) is served in the info JSON (`landrop`) and at `GET /api/landrop/v1/capabilities`, with one transport (`lan-https`, local non-VPN IPv4 addresses, port) and the features `resume`, `folders`. Peers' records are parsed into `DeviceInfo.capabilities`. Transport selection (3.4-3.6) followed in 3.9, which also added the optional `hotspot` entry.
 - Each peer records how it was found in `DeviceInfo.foundVia`: `multicast` / `broadcast` (LanDrop tags its datagrams with `landropVia`; the receive API cannot see the destination), `announce` (untagged, e.g. LocalSend), `register`, `scan`, `manual`.
 - `lib/core/diagnosis.dart`: pure rules over a `DiagnosisInput` (discovery error, interfaces, own server listening, peers and how found, optional probe of a target IP: TCP connected / refused / timeout / unreachable, then TLS + info and fingerprint check). Rules: server down, discovery failed, no LAN address, VPN active, peers only by scan/manual (router blocks multicast and broadcast), probe refused, timeout, unreachable, fingerprint mismatch, not LanDrop, different /24, probe ok, all good; plus a network summary.
 - `LanDropCore.runDiagnosis({targetIp, targetPort})` gathers the observations and runs the rules. The UI shows it from the empty peer list ("Why can't I see my device?"), from Settings ("Diagnose connection") and after a failed Add by IP ("Diagnose this IP"), with "Run again" and "Copy report" (plain text, fingerprints shortened).
 - Not done: BLE and ping-based rules (no BLE, no ICMP from Dart without privileges); the subnet rule assumes /24 netmasks.
+
+### 3.9 Implemented (2026-10-21): transport interface, link selection with fallback, multi-address peers, hotspot assist
+
+Roadmap step 3 (rest) and the hotspot assist of step 5. Wire details are in PROTOCOL.md.
+
+Transport (`lib/core/transport.dart`):
+- `Transport { id, basePriority, isAvailable(), open(peer, {timeout, exclude}) }` returns a `Link`: host, port, pinned fingerprint, the measured round trip, and a `key` (`transport|host|port`) used to exclude a failed endpoint.
+- `LanHttpsTransport` (the only real one) collects the candidate endpoints: `DeviceInfo.ip`, `DeviceInfo.addresses`, then the `lan-https.addrs` of the peer's capability record (at most 8). It probes all of them in parallel with `GET /info`. The TLS certificate must have the peer's fingerprint, and the info must claim the same fingerprint. The first endpoint that passes wins, and its time is the RTT. An address with another fingerprint is never used.
+- `TransportSelector` opens every available transport in parallel (`selectTimeout`, default 2 s). When the first link arrives, the others get 100 ms of grace. Links are ranked by RTT, where differences under 10 ms count as equal, and then by `basePriority`. A link whose fingerprint differs from the peer's is dropped. The winner is cached per fingerprint (`linkCacheTtl`, default 5 min). `next(peer, exclude)` returns the best link that is not excluded, which is how fallback works. `LanDropCoreOptions.transports` (default `[LanHttpsTransport()]`) lets tests inject fakes.
+- `sendFiles` uses the selector for every request: prepare-upload, upload, upload-status and cancel. When nothing answers in time, it sends to `DeviceInfo.ip` as before, and the certificate is still pinned. Two kinds of failure lead to another link. A prepare-upload whose connection cannot be made (refused, timeout, wrong certificate) is retried on the next link. An upload that breaks or stalls (`stallTimeout`) moves to the next link, excluding the ones that failed, and the existing resume logic then asks `upload-status` on that link and continues from the receiver's byte count. When no other link answers, the retries stay on the current one (the earlier behaviour). A failed send clears the cached link. The receiver needs no change: it authenticates uploads by session token, not by source address.
+- Verified by `test/transport_test.dart` (16 tests). Fake transports cover RTT ranking, the priority tie-break, a slow transport losing after the grace period, failing, hanging and unavailable transports, cache hit, expiry and invalidate, `next()` fallback and a link with the wrong fingerprint. A parallel address race with an injected probe picks the fastest of four addresses. Two cores on loopback cover: the real fingerprint check (a second core's endpoint is rejected); a refused best link falling back before prepare-upload; and a TCP proxy that stops forwarding after 1 MB, so the upload stalls, moves to the direct link and resumes, and the 4 MB file arrives with the same SHA-256 and no `.part` left.
+
+Peer table:
+- The same fingerprint seen at several addresses is one peer. `DeviceInfo.addresses` (new, additive) lists every verified address, `ip` first. `ip` stays the current best one: it changes only when the current address has not been seen for `peerTimeout`, so the display does not flip between interfaces. Announces and register calls from any known address refresh the peer without a new probe. The prune step re-probes all addresses of a silent peer, keeps the ones that answer, and drops the peer only when none answers. Addresses not seen for 3 x `peerTimeout` are dropped while others are alive. The UI shows one row per device, with "+N more addresses", and `AppController` also de-duplicates by fingerprint.
+
+Capability record: an optional `{"id": "hotspot", "ssid": ..., "gateway": ...}` entry, present only while this device shares a hotspot created from LanDrop (`LanDropCore.setHotspotInfo`). The password is never advertised. `v` stays 1, and the existing fields are unchanged.
+
+Diagnosis: `Finding.action` (optional). `probe-timeout`, `announce-blocked`, `different-subnet` and `no-lan` carry `hotspot-wizard`. A new rule, `hotspot-likely-fix` (info), fires when this device is on a LAN and listening, no target was probed and no device was found at all. It replaces "No problems found" in that case. The diagnosis dialog shows "Connect with a hotspot" for these findings, which closes the dialog and opens the wizard.
+
+Hotspot assist:
+- `HotspotWizardPage` ("Connect without Wi-Fi") opens from that button, from Settings ("Connect without Wi-Fi / router") and from the empty peer list. The user picks a role: "This device shares the hotspot" or "This device joins it". The wizard then shows steps for this OS (Android: Settings > Hotspot & tethering, or the in-app button; iPhone: Personal Hotspot; macOS: Internet Sharing, though joining the other device's hotspot is recommended; Windows: Mobile hotspot; Linux: GNOME "Turn On Wi-Fi Hotspot", NetworkManager Hotspot mode or `nmcli`). A collapsible section shows the other role's steps for every OS, for the other device.
+- "I'm connected, find the other device" does four things. (a) `restartDiscovery()` (new core API) re-reads the interfaces, updates `self.ip` and the capability addresses, rebinds the discovery socket, rejoins multicast and announces. (b) `probeAddresses()` (new) probes the usual hotspot gateway addresses (192.168.43.1, 172.20.10.1, 192.168.2.1, 192.168.137.1) plus the `.1` of each own non-VPN /24, minus this device's own addresses, with the normal verified info probe. (c) It runs a subnet scan. (d) It lists what was found, or, when nothing was found, runs the diagnosis again and shows the findings in the wizard.
+- Android: "Start hotspot" asks for the runtime permission (Nearby devices on API 33+, location below; `permission_handler` stays 12.x). It then calls `start` on the `dev.landrop/hotspot` channel. `HotspotManager.kt` uses `WifiManager.startLocalOnlyHotspot` (API 26+, guarded; minSdk 24 gets "unsupported"), keeps the reservation and releases it on Stop and in `onDestroy`. It returns the SSID and password, plus the hotspot interface's address when it can find one (interface name `ap*`, `swlan*` or `softap*`). The wizard shows the name, the password and a `WIFI:T:WPA;S:…;P:…;;` QR code (with `\ ; , : "` escaped) that phone cameras can join from, plus "Stop hotspot". Starting and stopping update the capability record and call `restartDiscovery` (after 1 s, so the interface has its address). While the hotspot runs, the home screen shows a banner with Show and Stop.
+- Verified by `test/hotspot_test.dart` (18 tests): QR escaping, probe targets, permission choice per API level through an injectable permission function, mocked channel calls and error codes, steps per platform, the wizard with an injected platform (steps, find, results, empty state with diagnosis), the diagnosis action button, and the entry points from Settings and the empty state. Also 2 new diagnosis tests.
+- Not verified: the Kotlin code and the manifest changes were not compiled here (no Android SDK). They are only built in CI. The local-only hotspot, the permission prompts, the QR join and the gateway lookup have never run on a device. Nothing was tried on real networks with two interfaces. Known limits: Android may drop the phone's Wi-Fi while the local-only hotspot runs (devices without concurrent AP and station mode); a local-only hotspot gives no internet to joiners; joining a hotspot is always manual (no OS API is used to join).
 
 ## 4. Next step B: browser access and local stream server
 
@@ -287,13 +321,15 @@ Where it differs from 4.1-4.6 (wire details in PROTOCOL.md, "Browser access"):
 
 1. Stabilise what exists: verify Quit and the background switch, show discovery failures in the UI, add progress keyed by session, temporary file names, unit tests for the new Android logic where possible. Add Windows and Linux builds to CI.
 2. Resume support and folder transfer.
-3. Transport interface with `lan-https` as the only implementation, capability record, guided diagnosis.
-4. Browser mode: web page, shares, range streaming, pairing.
-5. Hotspot assist, then Wi-Fi Direct (Android first), then BLE rendezvous.
+3. Transport interface with `lan-https` as the only implementation, capability record, guided diagnosis. Done (3.8, 3.9).
+4. Browser mode: web page, shares, range streaming, pairing. Done (4.8, 4.9).
+5. Hotspot assist, then Wi-Fi Direct (Android first), then BLE rendezvous. Hotspot assist done (3.9: guided wizard for every OS, Android local-only hotspot with a join QR code, joining by hand). Wi-Fi Direct and BLE not started.
 6. iOS build and the iOS-specific permissions (the `Info.plist` keys are in place, 2.6; the build and the multicast entitlement are not).
 7. Relay or WebRTC, only if there is real demand.
 
 Steps 3 and 4 are independent and can be built in parallel.
+
+Known gaps after 3.9: there is no Wi-Fi Direct, BLE or relay transport, so `lan-https` is the only implementation and the selector chooses between a peer's addresses. Joining a hotspot is manual on every OS. The only exception is a hotspot created by the Android app, which other phones can join by scanning its QR code. iOS has no in-app hotspot or join (it would need the NEHotspotConfiguration entitlement). Address probing assumes /24 networks (the `.1` gateway guess, the subnet scan). The Android hotspot code has not run on a device.
 
 ## 7. Test plan additions
 

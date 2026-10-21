@@ -212,6 +212,31 @@ bool isVpnInterface(String name) {
       .any(n.startsWith);
 }
 
+/// Usual address of the device sharing a hotspot: Android (classic),
+/// iPhone Personal Hotspot, macOS Internet Sharing, Windows Mobile hotspot.
+const commonHotspotGateways = [
+  '192.168.43.1',
+  '172.20.10.1',
+  '192.168.2.1',
+  '192.168.137.1',
+];
+
+/// Addresses worth probing after joining a hotspot: [commonHotspotGateways]
+/// plus the `.1` of each of [ownAddresses]' /24 (the default gateway on a
+/// hotspot; newer Android picks a random subnet), minus [ownAddresses].
+List<String> hotspotProbeTargets(Iterable<String> ownAddresses) {
+  final own = ownAddresses.toSet();
+  final out = <String>{};
+  for (final a in own) {
+    final p = a.split('.');
+    if (p.length == 4 && p.every((x) => int.tryParse(x) != null)) {
+      out.add('${p[0]}.${p[1]}.${p[2]}.1');
+    }
+  }
+  out.addAll(commonHotspotGateways);
+  return out.where((a) => !own.contains(a)).toList();
+}
+
 /// Non-loopback, non-link-local IPv4 addresses of this host, private first.
 Future<List<InternetAddress>> localIPv4Addresses() async {
   final out = <InternetAddress>[];

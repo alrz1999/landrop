@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/api.dart';
+import 'hotspot_wizard.dart';
 import 'widgets.dart';
 
 /// Runs the guided diagnosis (optionally probing [targetIp]) and shows the
-/// findings with "Run again" and "Copy report".
+/// findings with "Run again" and "Copy report". A finding's action button
+/// ("Connect with a hotspot") closes the dialog and opens the wizard.
 Future<void> showDiagnosisDialog(BuildContext context,
-    {String? targetIp, int? targetPort}) {
+    {String? targetIp, int? targetPort}) async {
   final c = AppScope.read(context);
-  return showDialog<void>(
+  final action = await showDialog<String>(
     context: context,
     builder: (_) => DiagnosisDialog(
       run: () => c.runDiagnosis(targetIp: targetIp, targetPort: targetPort),
@@ -18,8 +20,18 @@ Future<void> showDiagnosisDialog(BuildContext context,
           : '$targetIp${targetPort == null ? '' : ':$targetPort'}',
     ),
   );
+  if (action == hotspotWizardAction && context.mounted) {
+    await openHotspotWizard(context);
+  }
 }
 
+/// Button label for a [Finding.action] the UI knows, else null.
+String? findingActionLabel(String? action) => switch (action) {
+      hotspotWizardAction => 'Connect with a hotspot',
+      _ => null,
+    };
+
+/// Pops with the finding's action (see [showDiagnosisDialog]).
 class DiagnosisDialog extends StatefulWidget {
   const DiagnosisDialog({super.key, required this.run, this.target});
   final Future<List<Finding>> Function() run;
@@ -100,7 +112,9 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
                               color: Theme.of(context).colorScheme.error)),
                     if (_running) const LinearProgressIndicator(),
                     for (final f in findings ?? const <Finding>[])
-                      FindingTile(finding: f),
+                      FindingTile(
+                          finding: f,
+                          onAction: (a) => Navigator.pop(context, a)),
                   ],
                 ),
               ),
@@ -126,8 +140,12 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
 }
 
 class FindingTile extends StatelessWidget {
-  const FindingTile({super.key, required this.finding});
+  const FindingTile({super.key, required this.finding, this.onAction});
   final Finding finding;
+
+  /// Called with [Finding.action] when its button is tapped; no button
+  /// when null or the action is unknown.
+  final void Function(String action)? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +188,16 @@ class FindingTile extends StatelessWidget {
                   SelectableText(f.technical!,
                       style: t.bodySmall
                           ?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
+                if (onAction != null &&
+                    findingActionLabel(f.action) != null) ...[
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    key: Key('findingAction-${f.code}'),
+                    onPressed: () => onAction!(f.action!),
+                    icon: const Icon(Icons.wifi_tethering, size: 18),
+                    label: Text(findingActionLabel(f.action)!),
+                  ),
                 ],
               ],
             ),

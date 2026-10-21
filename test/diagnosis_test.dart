@@ -233,6 +233,47 @@ void main() {
     ]);
   });
 
+  test('findings a hotspot can fix carry the hotspot-wizard action', () {
+    String? actionOf(List<Finding> f, String code) =>
+        f.firstWhere((x) => x.code == code).action;
+    final timeout = diagnose(
+        _in(probe: _probe(TcpOutcome.timeout, ip: '192.168.0.9')));
+    expect(actionOf(timeout, 'probe-timeout'), hotspotWizardAction);
+    expect(actionOf(timeout, 'different-subnet'), hotspotWizardAction);
+    final blocked = diagnose(_in(peers: const [
+      PeerObservation('Bob', '192.168.1.20', {'scan'})
+    ]));
+    expect(actionOf(blocked, 'announce-blocked'), hotspotWizardAction);
+    expect(actionOf(diagnose(_in(interfaces: const [])), 'no-lan'),
+        hotspotWizardAction);
+    // Nothing a hotspot would fix: no action.
+    final refused = diagnose(_in(probe: _probe(TcpOutcome.refused)));
+    expect(actionOf(refused, 'probe-refused'), isNull);
+    expect(refused.map((f) => f.code), isNot(contains('hotspot-likely-fix')));
+  });
+
+  test('hotspot-likely-fix when nothing at all was found', () {
+    final f = ruleHotspotLikelyFix(_in()).single;
+    expect(f.code, 'hotspot-likely-fix');
+    expect(f.severity, Severity.info);
+    expect(f.action, hotspotWizardAction);
+    expect(f.detail, contains('hotspot'));
+    expect(f.fix, contains('Connect with a hotspot'));
+    // It replaces "No problems found" (which would contradict it).
+    expect(_codes(diagnose(_in())), ['hotspot-likely-fix', 'network']);
+    // Not when devices were found, a target was probed, there is no LAN,
+    // or this device itself is not listening.
+    expect(
+        ruleHotspotLikelyFix(_in(peers: const [
+          PeerObservation('Bob', '192.168.1.20', {'multicast'})
+        ])),
+        isEmpty);
+    expect(ruleHotspotLikelyFix(_in(probe: _probe(TcpOutcome.timeout))),
+        isEmpty);
+    expect(ruleHotspotLikelyFix(_in(interfaces: const [])), isEmpty);
+    expect(ruleHotspotLikelyFix(_in(serverListening: false)), isEmpty);
+  });
+
   test('report is plain text with every finding', () {
     final f = diagnose(_in(probe: _probe(TcpOutcome.refused)));
     final r = formatDiagnosisReport(f, target: '192.168.1.20:53317');

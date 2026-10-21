@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import 'app_controller.dart';
 import 'home_page.dart';
+import 'hotspot_service.dart';
 import 'widgets.dart';
 
 class LanDropApp extends StatefulWidget {
@@ -14,9 +15,13 @@ class LanDropApp extends StatefulWidget {
     this.initialAlias,
     this.pickFiles = defaultPickFiles,
     this.pickFolder = defaultPickFolder,
+    this.hotspotService,
   });
 
   final LanDropCore core;
+
+  /// Android hotspot (test seam); default [HotspotService].
+  final HotspotService? hotspotService;
   final SettingsStore? store;
   final String? initialSaveDir;
   final String? initialAlias;
@@ -38,6 +43,7 @@ class _LanDropAppState extends State<LanDropApp> {
       store: widget.store,
       initialSaveDir: widget.initialSaveDir,
       initialAlias: widget.initialAlias,
+      hotspotService: widget.hotspotService,
     );
     controller.init();
   }

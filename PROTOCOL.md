@@ -35,10 +35,26 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 ## LanDrop extensions (ignored by LocalSend clients)
 - Capability record, in the info JSON as `landrop` and at GET /api/landrop/v1/capabilities:
     { "v": 1,
-      "transports": [ { "id": "lan-https", "addrs": ["192.168.1.103"], "port": 53317 } ],
+      "transports": [ { "id": "lan-https", "addrs": ["192.168.1.103", "192.168.43.1"], "port": 53317 },
+                      { "id": "hotspot", "ssid": "AndroidShare_1234", "gateway": "192.168.43.1" } ],
       "features": ["resume", "folders", "browser-ui"] }
-    `addrs` = the advertised IP plus the non-VPN, non-link-local local IPv4 addresses. Parsers must
-    ignore unknown transports, fields and features; a missing record means a plain LocalSend peer.
+    `addrs` = the advertised IP plus the non-VPN, non-link-local local IPv4 addresses (e.g. Wi-Fi
+    and hotspot interface); re-read when discovery restarts (after joining or starting a hotspot).
+    `hotspot` is present only while this device shares a hotspot it started from LanDrop (Android
+    local-only hotspot): `ssid` = its network name, `gateway` = this device's address on it (omitted
+    when unknown). The password is never sent. Parsers must ignore unknown transports, fields and
+    features; a missing record means a plain LocalSend peer.
+
+## Addresses and link selection (LanDrop sender)
+- A peer is identified by its fingerprint. The same fingerprint seen at several addresses is one peer
+  with several addresses; each address is verified (TLS certificate + info fingerprint) before use.
+- To send, the sender probes every candidate endpoint in parallel with GET /api/localsend/v2/info:
+  the peer's current IP, its other known addresses, then its `lan-https.addrs` (port = `lan-https.port`).
+  An endpoint counts only when the presented certificate and the info's `fingerprint` both equal the
+  peer's fingerprint. The fastest verified endpoint is used and remembered for 5 minutes.
+- If an upload breaks or stalls, the sender switches to the next verified endpoint and resumes there
+  with `upload-status` + `offset` (below). Receivers do not check the source address of uploads:
+  `sessionId` + per-file `token` authenticate them, so a session may continue from another address.
 - GET /api/landrop/v1/upload-status?sessionId=&fileId=&token=
     -> 200 { received, size, active, done } | 403 bad session/token
     `received` = bytes held in the temporary file; `active` = an upload connection for this file is

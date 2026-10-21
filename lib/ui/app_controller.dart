@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
 import 'background_service.dart';
+import 'hotspot_service.dart';
 import 'multicast_lock.dart';
 import 'storage_access.dart';
 
@@ -119,13 +120,28 @@ class AppController extends ChangeNotifier {
     String? initialSaveDir,
     String? initialAlias,
     StatusNotifier? statusNotifier,
+    HotspotService? hotspotService,
+    this.hotspotSettleDelay = const Duration(seconds: 1),
   })  : _store = store ?? const SettingsStore(),
         _saveDir = initialSaveDir ?? '',
         _alias = initialAlias ?? _defaultAlias(),
-        _statusNotifier = statusNotifier ?? _defaultStatusNotifier;
+        _statusNotifier = statusNotifier ?? _defaultStatusNotifier,
+        hotspotService = hotspotService ?? HotspotService();
 
   final LanDropCore core;
   final SettingsStore _store;
+
+  /// Android local-only hotspot (test seam).
+  final HotspotService hotspotService;
+
+  /// Wait after the hotspot started before re-reading the interfaces (the
+  /// hotspot interface gets its address a moment later).
+  final Duration hotspotSettleDelay;
+
+  /// The hotspot this device shares, while it does.
+  HotspotCredentials? hotspot;
+  bool hotspotStarting = false;
+  String? hotspotError;
 
   /// Shows the counts in the Android service notification (test seam).
   final StatusNotifier _statusNotifier;
@@ -226,6 +242,16 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  /// One entry per fingerprint (a device seen at several addresses is one
+  /// device; the core already merges them, this keeps the UI safe).
+  static List<DeviceInfo> _oneEntryPerDevice(List<DeviceInfo> list) {
+    final seen = <String>{};
+    return [
+      for (final d in list)
+        if (d.fingerprint.isEmpty || seen.add(d.fingerprint)) d
+    ];
+  }
+
   static String _defaultAlias() {
     try {
       final h = Platform.localHostname;
@@ -259,7 +285,7 @@ class AppController extends ChangeNotifier {
   /// Load settings, subscribe to core streams and start the core.
   Future<void> init() async {
     _subs.add(core.peers.listen((p) {
-      peers = p;
+      peers = _oneEntryPerDevice(p);
       _notify();
     }));
     _subs.add(core.incoming.listen(_incomingCtrl.add));
@@ -466,6 +492,61 @@ class AppController extends ChangeNotifier {
   Future<List<Finding>> runDiagnosis({String? targetIp, int? targetPort}) =>
       core.runDiagnosis(targetIp: targetIp, targetPort: targetPort);
 
+  /// Re-reads the network after joining or starting a hotspot.
+  Future<void> restartDiscovery() async {
+    if (status != CoreStatus.running) return;
+    try {
+      await core.restartDiscovery();
+    } catch (_) {}
+    _notify();
+  }
+
+  /// Probes likely addresses (hotspot gateways) and adds what answers.
+  Future<List<DeviceInfo>> probeAddresses(List<String> ips) async {
+    if (status != CoreStatus.running) return const [];
+    return core.probeAddresses(ips);
+  }
+
+  /// Starts the Android local-only hotspot; [hotspot] or [hotspotError] is
+  /// set afterwards. The core then advertises it and rediscovers.
+  Future<void> startHotspot() async {
+    if (hotspotStarting) return;
+    hotspotStarting = true;
+    hotspotError = null;
+    _notify();
+    try {
+      final h = await hotspotService.start();
+      hotspot = h;
+      _guardCall(() => core.setHotspotInfo(h.ssid, gateway: h.gateway));
+      if (hotspotSettleDelay > Duration.zero) {
+        await Future<void>.delayed(hotspotSettleDelay);
+      }
+      await restartDiscovery();
+    } on HotspotException catch (e) {
+      hotspotError = e.message;
+    } catch (e) {
+      hotspotError = 'The hotspot could not start: $e';
+    } finally {
+      hotspotStarting = false;
+      _notify();
+    }
+  }
+
+  Future<void> stopHotspot() async {
+    await hotspotService.stop();
+    hotspot = null;
+    hotspotError = null;
+    _guardCall(() => core.setHotspotInfo(null));
+    await restartDiscovery();
+    _notify();
+  }
+
+  void _guardCall(void Function() f) {
+    try {
+      f();
+    } catch (_) {}
+  }
+
   Future<void> rescan() async {
     if (scanning) return;
     scanning = true;
@@ -579,6 +660,7 @@ class AppController extends ChangeNotifier {
     }
     _incomingCtrl.close();
     _pairingCtrl.close();
+    if (hotspot != null) hotspotService.stop();
     core.stop().catchError((_) {});
     MulticastLock.release();
     BackgroundService.stop();

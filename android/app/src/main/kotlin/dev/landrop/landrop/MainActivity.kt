@@ -10,6 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var hotspot: HotspotManager? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -64,10 +65,28 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Local-only hotspot for the "Connect without Wi-Fi" wizard (hotspot_service.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/hotspot")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    "start" -> {
+                        val manager = hotspot ?: HotspotManager(this).also { hotspot = it }
+                        manager.start(result)
+                    }
+                    "stop" -> {
+                        hotspot?.stop()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     override fun onDestroy() {
         multicastLock?.takeIf { it.isHeld }?.release()
+        hotspot?.stop()
+        hotspot = null
         super.onDestroy()
     }
 }

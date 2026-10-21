@@ -4,17 +4,29 @@ import 'dart:async';
 
 import 'diagnosis.dart';
 
-export 'diagnosis.dart' show Finding, Severity, formatDiagnosisReport;
+export 'diagnosis.dart'
+    show Finding, Severity, formatDiagnosisReport, hotspotWizardAction;
 
 /// One way to reach a device, from its capability record (DESIGN.md 3.3).
 class TransportCapability {
-  final String id; // e.g. lan-https
+  final String id; // e.g. lan-https, hotspot
   final List<String> addrs;
   final int? port;
-  const TransportCapability(this.id, {this.addrs = const [], this.port});
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'addrs': addrs, 'port': ?port};
+  /// `hotspot` entry only: the network this device is sharing right now and
+  /// its own address on it (never the password).
+  final String? ssid;
+  final String? gateway;
+  const TransportCapability(this.id,
+      {this.addrs = const [], this.port, this.ssid, this.gateway});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        if (addrs.isNotEmpty) 'addrs': addrs,
+        'port': ?port,
+        'ssid': ?ssid,
+        'gateway': ?gateway,
+      };
 }
 
 /// The `landrop` field of a peer's info response (LanDrop peers only).
@@ -43,9 +55,13 @@ class PeerCapabilities {
         if (t is! Map || t['id'] is! String) continue;
         final addrs = t['addrs'];
         final port = t['port'];
+        final ssid = t['ssid'];
+        final gateway = t['gateway'];
         ts.add(TransportCapability(t['id'] as String,
             addrs: addrs is List ? addrs.whereType<String>().toList() : const [],
-            port: port is int ? port : null));
+            port: port is int ? port : null,
+            ssid: ssid is String ? ssid : null,
+            gateway: gateway is String ? gateway : null));
       }
     }
     final f = j['features'];
@@ -71,6 +87,11 @@ class DeviceInfo {
   /// How this peer was found: multicast, broadcast, announce (UDP, kind
   /// unknown), register, scan, manual. Empty for [LanDropCore.self].
   final Set<String> foundVia;
+
+  /// Every address this peer was verified at (same fingerprint), [ip] first,
+  /// e.g. its Wi-Fi and its hotspot interface. The real core always fills
+  /// it; empty means only [ip] is known.
+  final List<String> addresses;
   const DeviceInfo({
     required this.alias,
     required this.deviceType,
@@ -80,19 +101,24 @@ class DeviceInfo {
     this.port = 53317,
     this.capabilities,
     this.foundVia = const {},
+    this.addresses = const [],
   });
 
   DeviceInfo copyWith(
-          {PeerCapabilities? capabilities, Set<String>? foundVia}) =>
+          {String? ip,
+          PeerCapabilities? capabilities,
+          Set<String>? foundVia,
+          List<String>? addresses}) =>
       DeviceInfo(
         alias: alias,
         deviceType: deviceType,
         deviceModel: deviceModel,
         fingerprint: fingerprint,
-        ip: ip,
+        ip: ip ?? this.ip,
         port: port,
         capabilities: capabilities ?? this.capabilities,
         foundVia: foundVia ?? this.foundVia,
+        addresses: addresses ?? this.addresses,
       );
 }
 
@@ -253,6 +279,20 @@ abstract class LanDropCore {
 
   /// Re-scan /24 subnet (fallback when multicast is blocked).
   Future<void> scanSubnet();
+
+  /// Re-reads the network interfaces (e.g. after joining or starting a
+  /// hotspot), restarts UDP discovery on them (rebind, rejoin multicast)
+  /// and announces at once. Updates [self] and the capability record.
+  Future<void> restartDiscovery();
+
+  /// Probes each of [ips] (on [port], else 53317 and the configured port)
+  /// with a verified info request, adds what answers to [peers] and returns
+  /// it. Used by the hotspot wizard for likely gateway addresses.
+  Future<List<DeviceInfo>> probeAddresses(List<String> ips, {int? port});
+
+  /// Advertises that this device shares a hotspot (`hotspot` entry in the
+  /// capability record). [ssid] null: no hotspot.
+  void setHotspotInfo(String? ssid, {String? gateway});
 
   /// Why automatic (UDP) discovery could not start, or null when it runs (or
   /// is disabled). Rescan and manual IP still work when this is set.

@@ -4,6 +4,9 @@ import 'util.dart' show isVpnInterface;
 
 enum Severity { info, warn, problem }
 
+/// [Finding.action] that opens the hotspot wizard ("Connect without Wi-Fi").
+const hotspotWizardAction = 'hotspot-wizard';
+
 class Finding {
   final Severity severity;
 
@@ -22,8 +25,12 @@ class Finding {
   /// Optional technical detail, shown second (error text, addresses).
   final String? technical;
 
+  /// Optional UI action that helps with this finding, e.g.
+  /// [hotspotWizardAction]. The UI shows a button for actions it knows.
+  final String? action;
+
   const Finding(this.severity, this.code, this.title, this.detail,
-      {this.fix = '', this.technical});
+      {this.fix = '', this.technical, this.action});
 
   @override
   String toString() => '${severity.name}:$code';
@@ -183,7 +190,8 @@ List<Finding> ruleNoLan(DiagnosisInput i) => lanAddresses(i).isNotEmpty
                 'hotspot on one device and join it from the other.',
             technical: i.interfaces.isEmpty
                 ? 'no IPv4 interfaces'
-                : 'no private IPv4 on a non-VPN interface'),
+                : 'no private IPv4 on a non-VPN interface',
+            action: hotspotWizardAction),
       ];
 
 List<Finding> ruleVpnActive(DiagnosisInput i) {
@@ -219,7 +227,8 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
               'other (multicast and broadcast). Transfers still work by IP.',
           fix: 'Use "Rescan network" or "Add by IP". To fix it for good, turn '
               'on multicast / turn off "AP isolation" in the router.',
-          technical: 'found only by scan/manual: $names'),
+          technical: 'found only by scan/manual: $names',
+          action: hotspotWizardAction),
     ];
   }
   return [
@@ -257,7 +266,8 @@ List<Finding> ruleProbeTimeout(DiagnosisInput i) {
             'Allow LanDrop in the firewall. If it still fails, turn on a '
             'hotspot on one device and join it from the other.',
         technical: 'TCP connect to ${p.ip}:${p.port} timed out'
-            '${p.error == null ? '' : ' (${p.error})'}'),
+            '${p.error == null ? '' : ' (${p.error})'}',
+        action: hotspotWizardAction),
   ];
 }
 
@@ -336,7 +346,31 @@ List<Finding> ruleDifferentSubnet(DiagnosisInput i) {
             'Wi-Fi networks, or one is on a guest network.',
         fix: 'Connect both devices to the same Wi-Fi (not a guest network).',
         technical: 'this device ${own.join(', ')} vs target ${p.ip} '
-            '(compared as /24)'),
+            '(compared as /24)',
+        action: hotspotWizardAction),
+  ];
+}
+
+/// Nothing found at all, though this device is on a LAN and listening: the
+/// most common cause is a network that keeps devices apart, which a hotspot
+/// gets around. Only without a probe (a probe has its own findings).
+List<Finding> ruleHotspotLikelyFix(DiagnosisInput i) {
+  if (!i.serverListening ||
+      i.probe != null ||
+      i.peers.isNotEmpty ||
+      lanAddresses(i).isEmpty) {
+    return const [];
+  }
+  return const [
+    Finding(Severity.info, 'hotspot-likely-fix', 'No other device found yet',
+        'If LanDrop is open on the other device and it still does not show '
+        'up, this network probably keeps devices apart (common on guest, '
+        'office, school and hotel Wi-Fi). Connecting both devices through a '
+        'hotspot from a phone or laptop usually fixes it, and needs no '
+        'router.',
+        fix: 'Tap "Connect with a hotspot" for step-by-step help, or use '
+            '"Add by IP" if you know the other device\'s address.',
+        action: hotspotWizardAction),
   ];
 }
 
@@ -353,6 +387,7 @@ const List<DiagnosisRule> diagnosisRules = [
   ruleProbeNotLanDrop,
   ruleDifferentSubnet,
   ruleAnnounceBlocked,
+  ruleHotspotLikelyFix,
   ruleProbeOk,
 ];
 
@@ -360,7 +395,8 @@ const List<DiagnosisRule> diagnosisRules = [
 /// 'all-good' when nothing is wrong and a 'network' summary of interfaces.
 List<Finding> diagnose(DiagnosisInput input) {
   final out = [for (final r in diagnosisRules) ...r(input)];
-  if (!out.any((f) => f.severity != Severity.info)) {
+  if (!out.any((f) =>
+      f.severity != Severity.info || f.code == 'hotspot-likely-fix')) {
     out.add(const Finding(Severity.info, 'all-good', 'No problems found',
         'This device is on a local network and ready to send and receive.',
         fix: 'If a device is still missing, make sure LanDrop is open on it, '

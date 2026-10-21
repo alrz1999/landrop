@@ -2,17 +2,23 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'api.dart';
 import 'diagnosis.dart';
 import 'discovery.dart';
 import 'identity.dart';
+import 'transport.dart';
 import 'util.dart';
 import 'web_server.dart';
 
 export 'discovery.dart' show DiscoveryTransport, MulticastDiscoveryTransport;
 export 'identity.dart' show TlsIdentity, fingerprintOfDer;
+// `Link` is not re-exported (it would clash with dart:io's Link); import
+// transport.dart for it.
+export 'transport.dart'
+    show Transport, LanHttpsTransport, TransportSelector, InfoProbe;
 export 'util.dart' show sanitizeFileName, sanitizeRelativePath;
 export 'web_server.dart' show parseRange, ByteRange, RangeNotSatisfiable;
 
@@ -101,6 +107,15 @@ class LanDropCoreOptions {
   /// shares live in memory only. See [LanDropCore.setSharesPersistence].
   final String? sharesStorePath;
 
+  /// Ways to reach a peer when sending (DESIGN.md 3.4). The best link is
+  /// chosen by [TransportSelector] and cached for [linkCacheTtl]; a stalled
+  /// upload falls back to the next one.
+  final List<Transport> transports;
+
+  /// How long the selector waits for transports to open a link.
+  final Duration selectTimeout;
+  final Duration linkCacheTtl;
+
   const LanDropCoreOptions({
     this.port = 53317,
     this.portFallbackRange = 20,
@@ -133,12 +148,32 @@ class LanDropCoreOptions {
     this.webSessionTtl = const Duration(hours: 1),
     this.webStreamWindow = const Duration(minutes: 30),
     this.sharesStorePath,
+    this.transports = const [LanHttpsTransport()],
+    this.selectTimeout = const Duration(seconds: 2),
+    this.linkCacheTtl = const Duration(minutes: 5),
   });
 }
 
 typedef _HttpError = HttpStatusError;
 
-enum _Attempt { ok, retry, fatal }
+/// Upload attempt outcome. [broken]: the connection failed or stalled, so
+/// another link may work better; [retry]: the receiver answered 400/409.
+enum _Attempt { ok, retry, broken, fatal }
+
+/// Connecting to the peer failed (before anything was sent).
+class _ConnectFailed implements Exception {
+  final Object cause;
+  _ConnectFailed(this.cause);
+  @override
+  String toString() => '$cause';
+}
+
+/// The link a send currently uses, and the links that failed for it.
+class _Route {
+  Link link;
+  final List<Link> failed = [];
+  _Route(this.link);
+}
 
 class _Peer {
   DeviceInfo info;
@@ -147,7 +182,17 @@ class _Peer {
 
   /// How this peer was found (see [DeviceInfo.foundVia]).
   final Set<String> via = {};
-  _Peer(this.info) : lastSeen = DateTime.now();
+
+  /// Every address this peer was verified at, and when it was last seen
+  /// there. [info.ip] is the best one (see [LanDropCoreImpl._upsertPeer]).
+  final Map<String, DateTime> addrs = {};
+  _Peer(this.info) : lastSeen = DateTime.now() {
+    addrs[info.ip] = lastSeen;
+  }
+
+  /// [info.ip] first.
+  List<String> get addresses =>
+      [info.ip, ...addrs.keys.where((a) => a != info.ip)];
 }
 
 /// One file of an accepted incoming session.
@@ -213,6 +258,19 @@ class LanDropCoreImpl implements LanDropCore {
 
   /// Addresses advertised in the capability record (set on start).
   List<String> _capAddrs = const [];
+
+  /// Hotspot this device shares (capability `hotspot` entry), if any.
+  String? _hotspotSsid;
+  String? _hotspotGateway;
+
+  /// Chooses and caches the link used to send to a peer.
+  late final TransportSelector _selector = TransportSelector(
+      options.transports,
+      timeout: options.selectTimeout,
+      cacheTtl: options.linkCacheTtl);
+
+  /// Test/diagnostic access to the link selector.
+  TransportSelector get transportSelector => _selector;
 
   /// Browser access (web page, pairing, shares, HTTP listener).
   late final WebService _web = WebService(
@@ -301,8 +359,10 @@ class LanDropCoreImpl implements LanDropCore {
         c.onCancel = sub.cancel;
       }, isBroadcast: true);
 
-  List<DeviceInfo> get currentPeers => List.unmodifiable(_peers.values
-      .map((p) => p.info.copyWith(foundVia: Set.unmodifiable(p.via))));
+  List<DeviceInfo> get currentPeers => List.unmodifiable(_peers.values.map(
+      (p) => p.info.copyWith(
+          foundVia: Set.unmodifiable(p.via),
+          addresses: List.unmodifiable(p.addresses))));
 
   @override
   Stream<IncomingRequest> get incoming => _incomingCtrl.stream;
@@ -342,38 +402,120 @@ class LanDropCoreImpl implements LanDropCore {
 
     server.listen(_handle, onError: (_) {});
     await _web.start();
-    _discoveryError = null;
-
-    final transport = options.discoveryTransport ??
-        (options.multicastEnabled
-            ? MulticastDiscoveryTransport(port: options.multicastPort)
-            : null);
-    if (transport != null) {
-      try {
-        await transport.start(_onDiscoveryMessage);
-        _discovery = transport;
-        unawaited(_announce());
-        _announceTimer =
-            Timer.periodic(options.announceInterval, (_) => _announce());
-      } catch (e) {
-        // multicast unavailable; scanSubnet/addPeerByIp still work
-        stderr.writeln('LanDrop: UDP discovery unavailable: $e');
-        _discoveryError = e is SocketException
-            ? (e.osError?.message.isNotEmpty == true
-                ? '${e.message}: ${e.osError!.message}'
-                : e.message)
-            : '$e';
-        _discovery = null;
-        try {
-          await transport.close();
-        } catch (_) {}
-      }
-    }
+    await _startDiscovery();
     _pruneTimer = Timer.periodic(
         Duration(
             milliseconds:
                 (options.peerTimeout.inMilliseconds ~/ 4).clamp(250, 5000)),
         (_) => _prune());
+  }
+
+  /// Starts UDP discovery (a new socket bound and joined on the current
+  /// interfaces) and the announce timer. Failures end up in
+  /// [discoveryError].
+  Future<void> _startDiscovery() async {
+    _discoveryError = null;
+    final transport = options.discoveryTransport ??
+        (options.multicastEnabled
+            ? MulticastDiscoveryTransport(port: options.multicastPort)
+            : null);
+    if (transport == null) return;
+    try {
+      await transport.start(_onDiscoveryMessage);
+      if (!_running) {
+        await transport.close();
+        return;
+      }
+      _discovery = transport;
+      unawaited(_announce());
+      _announceTimer =
+          Timer.periodic(options.announceInterval, (_) => _announce());
+    } catch (e) {
+      // multicast unavailable; scanSubnet/addPeerByIp still work
+      stderr.writeln('LanDrop: UDP discovery unavailable: $e');
+      _discoveryError = e is SocketException
+          ? (e.osError?.message.isNotEmpty == true
+              ? '${e.message}: ${e.osError!.message}'
+              : e.message)
+          : '$e';
+      _discovery = null;
+      try {
+        await transport.close();
+      } catch (_) {}
+    }
+  }
+
+  /// Re-reads the local addresses: the capability record, and [self.ip]
+  /// unless it is fixed by [LanDropCoreOptions.advertiseIp] or still valid.
+  Future<void> _refreshAddresses() async {
+    final lanAddrs = [
+      for (final a in await localIPv4Addresses()) a.address
+    ];
+    final old = _self;
+    if (old == null) return;
+    final ip = options.advertiseIp ??
+        (lanAddrs.contains(old.ip) ? old.ip : null) ??
+        lanAddrs.firstOrNull ??
+        '127.0.0.1';
+    _capAddrs = {ip, ...lanAddrs}.toList();
+    if (ip != old.ip) _self = old.copyWith(ip: ip);
+  }
+
+  @override
+  Future<void> restartDiscovery() async {
+    if (!_running) return;
+    await _refreshAddresses();
+    _announceTimer?.cancel();
+    _announceTimer = null;
+    final d = _discovery;
+    _discovery = null;
+    try {
+      await d?.close();
+    } catch (_) {}
+    if (!_running) return;
+    await _startDiscovery();
+  }
+
+  @override
+  void setHotspotInfo(String? ssid, {String? gateway}) {
+    _hotspotSsid = ssid == null || ssid.isEmpty ? null : ssid;
+    _hotspotGateway = _hotspotSsid == null ? null : gateway;
+    if (_running) unawaited(_announce());
+  }
+
+  @override
+  Future<List<DeviceInfo>> probeAddresses(List<String> ips,
+      {int? port}) async {
+    if (!_running) return const [];
+    final ports = <int>{
+      ?port,
+      if (port == null) 53317,
+      if (port == null && options.port > 0) options.port,
+    };
+    final jobs = <(String, int)>[
+      for (final ip in {...ips.map((e) => e.trim())})
+        if (ip.isNotEmpty)
+          for (final p in ports)
+            if (!(_capAddrs.contains(ip) && p == _self?.port)) (ip, p)
+    ];
+    final found = <String>{};
+    var next = 0;
+    Future<void> worker() async {
+      while (next < jobs.length && _running) {
+        final (ip, p) = jobs[next++];
+        final info = await _fetchInfo(ip, p, timeout: options.probeTimeout);
+        if (info != null && info.fingerprint != _self?.fingerprint) {
+          _upsertPeer(info, via: 'scan');
+          found.add(info.fingerprint);
+        }
+      }
+    }
+
+    await Future.wait(List.generate(min(32, jobs.length), (_) => worker()));
+    return [
+      for (final p in currentPeers)
+        if (found.contains(p.fingerprint)) p
+    ];
   }
 
   @override
@@ -476,28 +618,38 @@ class LanDropCoreImpl implements LanDropCore {
       files[id] = (f, FileOffer(id, name, size, guessMime(name)));
     }
 
+    final peer = _withKnownAddresses(to);
+    final route = _Route(await _selector.select(peer) ?? _directLink(peer));
     final client = _newClient(expectFp: to.fingerprint);
     String? sessionId;
     String? cancelSecret;
     try {
-      // 1. prepare-upload (waits for the receiver's decision)
-      final prep = await _postJson(
-          client,
-          _uri(to.ip, to.port, '/prepare-upload'),
-          {
-            'info': _selfJson(),
-            'files': {
-              for (final e in files.entries)
-                e.key: {
-                  'id': e.value.$2.id,
-                  'fileName': e.value.$2.fileName,
-                  'size': e.value.$2.size,
-                  'fileType': e.value.$2.fileType,
-                }
-            },
-          },
-          expectFp: to.fingerprint,
-          timeout: options.decisionTimeout + const Duration(seconds: 30));
+      // 1. prepare-upload (waits for the receiver's decision). When the
+      // connection cannot be made, the next link is tried.
+      final body = {
+        'info': _selfJson(),
+        'files': {
+          for (final e in files.entries)
+            e.key: {
+              'id': e.value.$2.id,
+              'fileName': e.value.$2.fileName,
+              'size': e.value.$2.size,
+              'fileType': e.value.$2.fileType,
+            }
+        },
+      };
+      (int, Map<String, dynamic>?) prep;
+      while (true) {
+        try {
+          prep = await _postJson(
+              client, route.link.uri('$_apiBase/prepare-upload'), body,
+              expectFp: to.fingerprint,
+              timeout: options.decisionTimeout + const Duration(seconds: 30));
+          break;
+        } on _ConnectFailed {
+          if (!await _switchLink(peer, route)) rethrow;
+        }
+      }
       if (prep.$1 != 200 || prep.$2 == null) {
         return SendResult(
             ok: false,
@@ -523,22 +675,56 @@ class LanDropCoreImpl implements LanDropCore {
       for (final e in files.entries) {
         final token = tokens[e.key];
         if (token is! String) continue; // receiver skipped this file
-        final err = await _uploadOne(client, to, sid, e.key, token,
+        final err = await _uploadOne(client, peer, route, sid, e.key, token,
             e.value.$1, e.value.$2.size, e.value.$2.fileName);
         if (err != null) {
-          unawaited(_sendCancel(to, sid, cancelSecret));
+          _selector.invalidate(to.fingerprint);
+          unawaited(_sendCancel(route.link, sid, cancelSecret));
           return SendResult(ok: false, sessionId: sid, error: err);
         }
       }
       return SendResult(ok: true, sessionId: sid);
     } catch (e) {
+      _selector.invalidate(to.fingerprint);
       if (sessionId != null) {
-        unawaited(_sendCancel(to, sessionId, cancelSecret));
+        unawaited(_sendCancel(route.link, sessionId, cancelSecret));
       }
       return SendResult(ok: false, sessionId: sessionId, error: '$e');
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// [to] plus every address the peer table knows for it.
+  DeviceInfo _withKnownAddresses(DeviceInfo to) {
+    final known = _peers[to.fingerprint];
+    if (known == null) return to;
+    return to.copyWith(
+      addresses: {...to.addresses, ...known.addresses}.toList(),
+      capabilities: to.capabilities ?? known.info.capabilities,
+    );
+  }
+
+  /// Unverified link to the peer's [DeviceInfo.ip] (when no transport
+  /// answered in time); the certificate is still pinned on every request.
+  static Link _directLink(DeviceInfo to) => Link(
+      transportId: 'lan-https',
+      host: to.ip,
+      port: to.port,
+      fingerprint: to.fingerprint);
+
+  /// [route.link] failed: forget the cached link and move to the best other
+  /// one. False (and the link stays) when nothing else answers.
+  Future<bool> _switchLink(DeviceInfo peer, _Route route) async {
+    if (!route.failed.any((l) => l.key == route.link.key)) {
+      route.failed.add(route.link);
+    }
+    _selector.invalidate(peer.fingerprint);
+    if (!_running) return false;
+    final next = await _selector.next(peer, route.failed);
+    if (next == null) return false;
+    route.link = next;
+    return true;
   }
 
   // ------------------------------------------------------------ diagnosis
@@ -567,7 +753,7 @@ class LanDropCoreImpl implements LanDropCore {
     if (ip != null && ip.isNotEmpty) {
       final known = _peers.values
           .where((p) =>
-              p.info.ip == ip &&
+              p.addrs.containsKey(ip) &&
               (targetPort == null || p.info.port == targetPort))
           .firstOrNull;
       probe = await _probe(ip, targetPort ?? known?.info.port ?? 53317,
@@ -710,9 +896,19 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   /// Uploads one file, resuming from the receiver's byte count when the
-  /// connection breaks or stalls. Returns null on success, else the error.
-  Future<String?> _uploadOne(HttpClient client, DeviceInfo to, String sessionId,
-      String fileId, String token, File file, int size, String name) async {
+  /// connection breaks or stalls. A broken or stalled connection first moves
+  /// [route] to the next link (another address or transport), if any.
+  /// Returns null on success, else the error.
+  Future<String?> _uploadOne(
+      HttpClient client,
+      DeviceInfo peer,
+      _Route route,
+      String sessionId,
+      String fileId,
+      String token,
+      File file,
+      int size,
+      String name) async {
     final q = {'sessionId': sessionId, 'fileId': fileId, 'token': token};
     void emit(int sent, {bool done = false, String? error}) =>
         _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size,
@@ -720,14 +916,19 @@ class LanDropCoreImpl implements LanDropCore {
 
     emit(0);
     var offset = 0;
+    var broken = false;
     String lastError = 'upload failed';
     for (var attempt = 0; attempt <= options.uploadRetries; attempt++) {
       if (attempt > 0) {
         await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
         if (!_running) break;
+        if (broken) await _switchLink(peer, route);
         try {
-          final st = await _uploadStatus(to, q);
-          if (st == null) continue; // receiver unreachable right now
+          final st = await _uploadStatus(route.link, q);
+          if (st == null) {
+            broken = true; // receiver unreachable on this link right now
+            continue;
+          }
           if (st.done) {
             emit(size, done: true);
             return null;
@@ -738,15 +939,15 @@ class LanDropCoreImpl implements LanDropCore {
           break; // session gone: not resumable
         }
       }
-      final (outcome, msg) =
-          await _uploadAttempt(client, to, q, fileId, file, offset, size,
-              attempt, emit);
+      final (outcome, msg) = await _uploadAttempt(
+          client, route.link, q, fileId, file, offset, size, attempt, emit);
       if (outcome == _Attempt.ok) {
         emit(size, done: true);
         return null;
       }
       lastError = msg ?? lastError;
       if (outcome == _Attempt.fatal) break;
+      broken = outcome == _Attempt.broken;
     }
     emit(offset, done: true, error: lastError);
     return lastError;
@@ -754,7 +955,7 @@ class LanDropCoreImpl implements LanDropCore {
 
   Future<(_Attempt, String?)> _uploadAttempt(
       HttpClient client,
-      DeviceInfo to,
+      Link to,
       Map<String, String> q,
       String fileId,
       File file,
@@ -769,7 +970,7 @@ class LanDropCoreImpl implements LanDropCore {
     Timer? watchdog;
     try {
       final req = await client
-          .postUrl(_uri(to.ip, to.port, '/upload', {...q, 'offset': '$offset'}))
+          .postUrl(to.uri('$_apiBase/upload', {...q, 'offset': '$offset'}))
           .timeout(options.probeTimeout * 2);
       req.contentLength = size - offset;
       req.headers.contentType = ContentType.binary;
@@ -810,7 +1011,7 @@ class LanDropCoreImpl implements LanDropCore {
     } on HandshakeException catch (e) {
       return (_Attempt.fatal, e.message);
     } catch (e) {
-      return (_Attempt.retry, stalled ? 'upload stalled' : '$e');
+      return (_Attempt.broken, stalled ? 'upload stalled' : '$e');
     } finally {
       watchdog?.cancel();
     }
@@ -821,13 +1022,13 @@ class LanDropCoreImpl implements LanDropCore {
   /// connection as active. Null when unreachable; throws [_HttpError] when the
   /// session or token is no longer valid.
   Future<({int received, bool done})?> _uploadStatus(
-      DeviceInfo to, Map<String, String> q) async {
+      Link to, Map<String, String> q) async {
     final deadline = DateTime.now().add(options.stallTimeout);
     final c = _newClient(expectFp: to.fingerprint);
     try {
       while (true) {
         final req = await c
-            .getUrl(_uri(to.ip, to.port, '/upload-status', q, _landropBase))
+            .getUrl(to.uri('$_landropBase/upload-status', q))
             .timeout(options.probeTimeout);
         final res = await req.close().timeout(options.probeTimeout);
         _checkPeerCert(res, to.fingerprint);
@@ -858,11 +1059,11 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   Future<void> _sendCancel(
-      DeviceInfo to, String sessionId, String? cancelSecret) async {
+      Link to, String sessionId, String? cancelSecret) async {
     final c = _newClient(expectFp: to.fingerprint);
     try {
       final req = await c
-          .postUrl(_uri(to.ip, to.port, '/cancel', {
+          .postUrl(to.uri('$_apiBase/cancel', {
             'sessionId': sessionId,
             'cancelSecret': ?cancelSecret,
           }))
@@ -911,7 +1112,17 @@ class LanDropCoreImpl implements LanDropCore {
   Future<(int, Map<String, dynamic>?)> _postJson(
       HttpClient client, Uri uri, Map<String, dynamic> body,
       {String? expectFp, required Duration timeout}) async {
-    final req = await client.postUrl(uri).timeout(options.probeTimeout * 2);
+    final HttpClientRequest req;
+    try {
+      req = await client.postUrl(uri).timeout(options.probeTimeout * 2);
+    } on SocketException catch (e) {
+      throw _ConnectFailed(e);
+    } on TimeoutException catch (e) {
+      throw _ConnectFailed(e);
+    } on HandshakeException catch (e) {
+      // Wrong certificate at this address: never trusted, try another.
+      throw _ConnectFailed(e);
+    }
     req.headers.contentType = ContentType.json;
     req.add(utf8.encode(jsonEncode(body)));
     final res = await req.close().timeout(timeout);
@@ -998,10 +1209,14 @@ class LanDropCoreImpl implements LanDropCore {
     };
   }
 
-  /// This device's capability record (DESIGN.md 3.3). LAN only for now.
+  /// This device's capability record (DESIGN.md 3.3): the LAN path, plus
+  /// the hotspot this device shares while it does.
   PeerCapabilities _capabilities() => PeerCapabilities(
         transports: [
           TransportCapability('lan-https', addrs: _capAddrs, port: self.port),
+          if (_hotspotSsid != null)
+            TransportCapability('hotspot',
+                ssid: _hotspotSsid, gateway: _hotspotGateway),
         ],
         features: const {'resume', 'folders', 'browser-ui'},
       );
@@ -1025,7 +1240,10 @@ class LanDropCoreImpl implements LanDropCore {
 
   // ------------------------------------------------------------ peers
 
-  /// Adds or refreshes a peer; [via] records how it was found.
+  /// Adds or refreshes a peer; [via] records how it was found. The same
+  /// fingerprint at another address is the same peer: the address is added
+  /// to its list and [DeviceInfo.ip] stays the current best one (see
+  /// [_bestIp]).
   void _upsertPeer(DeviceInfo info, {String? via}) {
     if (!_running || info.fingerprint == _self?.fingerprint) return;
     final existing = _peers[info.fingerprint];
@@ -1034,53 +1252,108 @@ class LanDropCoreImpl implements LanDropCore {
       _emitPeers();
       return;
     }
-    existing.lastSeen = DateTime.now();
-    final newVia = via != null && existing.via.add(via);
+    final now = DateTime.now();
+    existing.lastSeen = now;
+    var changed = via != null && existing.via.add(via);
     final o = existing.info;
-    if (o.ip != info.ip ||
+    // Restarted on another port: the old addresses are stale.
+    if (o.port != info.port) existing.addrs.clear();
+    if (existing.addrs[info.ip] == null) changed = true;
+    existing.addrs[info.ip] = now;
+    final ip = o.port == info.port ? _bestIp(existing, info.ip) : info.ip;
+    if (o.ip != ip ||
         o.port != info.port ||
         o.alias != info.alias ||
         o.deviceType != info.deviceType ||
         o.deviceModel != info.deviceModel ||
         jsonEncode(o.capabilities?.toJson()) !=
             jsonEncode(info.capabilities?.toJson())) {
-      existing.info = info;
-      _emitPeers();
-    } else if (newVia) {
-      _emitPeers();
+      existing.info = info.copyWith(ip: ip);
+      changed = true;
     }
+    if (changed) _emitPeers();
   }
 
-  /// Records [via] for an already known peer (refresh without re-probing).
-  void _noteVia(_Peer p, String via) {
-    if (p.via.add(via)) _emitPeers();
+  /// The current address of [p] while it is still seen (within
+  /// [LanDropCoreOptions.peerTimeout]); otherwise [candidate], which was
+  /// just seen. Keeps the shown address from flipping between interfaces.
+  String _bestIp(_Peer p, String candidate) {
+    final seen = p.addrs[p.info.ip];
+    if (seen != null &&
+        DateTime.now().difference(seen) < options.peerTimeout) {
+      return p.info.ip;
+    }
+    return candidate;
+  }
+
+  /// A known peer was seen again at [ip] (already verified there): refresh
+  /// without re-probing, record [via].
+  void _seenAt(_Peer p, String ip, String via) {
+    p.lastSeen = DateTime.now();
+    p.addrs[ip] = p.lastSeen;
+    var changed = p.via.add(via);
+    final best = _bestIp(p, ip);
+    if (best != p.info.ip) {
+      p.info = p.info.copyWith(ip: best);
+      changed = true;
+    }
+    if (changed) _emitPeers();
   }
 
   void _emitPeers() {
     if (!_peerCtrl.isClosed) _peerCtrl.add(currentPeers);
   }
 
-  /// Peers not seen for [peerTimeout] get one re-probe; if that fails they
-  /// are removed. (Keeps manually added / scanned peers alive while
-  /// reachable, without multicast.)
+  /// Peers not seen for [peerTimeout] get one re-probe of every known
+  /// address; addresses that do not answer are dropped, and the peer when
+  /// none does. (Keeps manually added / scanned peers alive while
+  /// reachable, without multicast.) For peers still seen, addresses not
+  /// seen for 3 x [peerTimeout] are dropped.
   void _prune() {
     final now = DateTime.now();
     for (final p in _peers.values.toList()) {
-      if (p.probing || now.difference(p.lastSeen) < options.peerTimeout) {
+      if (p.probing) continue;
+      if (now.difference(p.lastSeen) < options.peerTimeout) {
+        final stale = [
+          for (final e in p.addrs.entries)
+            if (now.difference(e.value) >= options.peerTimeout * 3) e.key
+        ];
+        if (stale.isNotEmpty && stale.length < p.addrs.length) {
+          stale.forEach(p.addrs.remove);
+          if (!p.addrs.containsKey(p.info.ip)) {
+            final newest = p.addrs.entries
+                .reduce((a, b) => a.value.isAfter(b.value) ? a : b);
+            p.info = p.info.copyWith(ip: newest.key);
+          }
+          _emitPeers();
+        }
         continue;
       }
       p.probing = true;
-      _fetchInfo(p.info.ip, p.info.port,
-              expectFp: p.info.fingerprint, timeout: options.probeTimeout)
-          .then((info) {
+      final fp = p.info.fingerprint;
+      final port = p.info.port;
+      Future.wait([
+        for (final ip in p.addresses)
+          _fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout)
+      ]).then((infos) {
         p.probing = false;
-        if (!_running) return;
-        if (info != null) {
-          _upsertPeer(info);
-        } else if (identical(_peers[p.info.fingerprint], p)) {
-          _peers.remove(p.info.fingerprint);
+        if (!_running || !identical(_peers[fp], p)) return;
+        final alive = infos.whereType<DeviceInfo>().toList();
+        if (alive.isEmpty) {
+          _peers.remove(fp);
           _emitPeers();
+          return;
         }
+        final before = p.addrs.length;
+        p.addrs.removeWhere((a, _) => !alive.any((i) => i.ip == a));
+        final t = DateTime.now();
+        for (final i in alive) {
+          p.addrs[i.ip] = t;
+        }
+        final best = alive.firstWhere((i) => i.ip == p.info.ip,
+            orElse: () => alive.first);
+        _upsertPeer(best);
+        if (p.addrs.length != before) _emitPeers();
       });
     }
   }
@@ -1106,10 +1379,11 @@ class LanDropCoreImpl implements LanDropCore {
         : 'announce';
 
     final known = _peers[fp];
-    if (known != null && known.info.ip == ip && known.info.port == port) {
+    if (known != null &&
+        known.addrs.containsKey(ip) &&
+        known.info.port == port) {
       // Already verified at this address; refresh without reconnecting.
-      known.lastSeen = DateTime.now();
-      _noteVia(known, via);
+      _seenAt(known, ip, via);
       if (announce) unawaited(_register(ip, port, fp));
       return;
     }
@@ -1207,9 +1481,10 @@ class LanDropCoreImpl implements LanDropCore {
     if (fp == null || fp == _self?.fingerprint) return;
     final ip = _remoteIp(req);
     final known = _peers[fp];
-    if (known != null && known.info.ip == ip && known.info.port == port) {
-      known.lastSeen = DateTime.now();
-      _noteVia(known, 'register');
+    if (known != null &&
+        known.addrs.containsKey(ip) &&
+        known.info.port == port) {
+      _seenAt(known, ip, 'register');
       return;
     }
     unawaited(_fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout)

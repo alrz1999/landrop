@@ -122,11 +122,14 @@ class PeerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Same device reachable at other addresses (e.g. Wi-Fi + hotspot).
+    final more = peer.addresses.where((a) => a != peer.ip).toSet().length;
     return ListTile(
       leading: CircleAvatar(child: Icon(deviceIcon(peer.deviceType))),
       title: Text(peer.alias),
       subtitle: Text([
         '${peer.ip}:${peer.port}',
+        if (more > 0) '+$more more address${more == 1 ? '' : 'es'}',
         if (peer.deviceModel != null) peer.deviceModel!,
       ].join(' · ')),
       trailing: FilledButton.tonalIcon(
@@ -140,10 +143,13 @@ class PeerTile extends StatelessWidget {
 }
 
 class EmptyPeersHelp extends StatelessWidget {
-  const EmptyPeersHelp({super.key, this.onDiagnose});
+  const EmptyPeersHelp({super.key, this.onDiagnose, this.onHotspot});
 
   /// Shows a "Why can't I see my device?" button when set.
   final VoidCallback? onDiagnose;
+
+  /// Shows a "Connect without Wi-Fi / router" button when set.
+  final VoidCallback? onHotspot;
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +179,15 @@ class EmptyPeersHelp extends StatelessWidget {
               onPressed: onDiagnose,
               icon: const Icon(Icons.troubleshoot),
               label: const Text("Why can't I see my device?"),
+            ),
+          ],
+          if (onHotspot != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('hotspotHelp'),
+              onPressed: onHotspot,
+              icon: const Icon(Icons.wifi_tethering),
+              label: const Text('Connect without Wi-Fi / router'),
             ),
           ],
         ],

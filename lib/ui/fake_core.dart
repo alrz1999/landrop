@@ -155,9 +155,52 @@ class FakeCore implements LanDropCore {
     return d;
   }
 
+  /// Test hook: [scanSubnet] finds "Living Room PC" (default) or nothing.
+  bool scanFindsDevice = true;
+
+  /// Number of [restartDiscovery] calls, for tests.
+  int restartDiscoveryCalls = 0;
+
+  /// Every [probeAddresses] call, for tests.
+  final List<List<String>> probeCalls = [];
+
+  /// Test hook: devices "answering" [probeAddresses], by IP.
+  final Map<String, DeviceInfo> probeAnswers = {};
+
+  /// Last [setHotspotInfo] value (ssid, gateway), for tests.
+  (String?, String?) hotspotInfo = (null, null);
+
+  @override
+  Future<void> restartDiscovery() async {
+    restartDiscoveryCalls++;
+    await Future<void>.delayed(simulateDelay);
+  }
+
+  @override
+  Future<List<DeviceInfo>> probeAddresses(List<String> ips,
+      {int? port}) async {
+    probeCalls.add(List.of(ips));
+    await Future<void>.delayed(simulateDelay);
+    final found = [
+      for (final ip in ips)
+        if (probeAnswers[ip] != null) probeAnswers[ip]!
+    ];
+    for (final d in found) {
+      _peers.removeWhere((p) => p.fingerprint == d.fingerprint);
+      _peers.add(d);
+    }
+    if (found.isNotEmpty) _emitPeers();
+    return found;
+  }
+
+  @override
+  void setHotspotInfo(String? ssid, {String? gateway}) =>
+      hotspotInfo = (ssid, ssid == null ? null : gateway);
+
   @override
   Future<void> scanSubnet() async {
     await Future<void>.delayed(simulateDelay);
+    if (!scanFindsDevice) return;
     if (!_peers.any((p) => p.fingerprint == 'cc33')) {
       _peers.add(const DeviceInfo(
         alias: 'Living Room PC',
@@ -225,11 +268,13 @@ class FakeCore implements LanDropCore {
             Finding(Severity.problem, 'probe-timeout',
                 'No answer from that address',
                 'Nothing came back from $targetIp.',
-                fix: 'Check both devices are on the same Wi-Fi.'),
+                fix: 'Check both devices are on the same Wi-Fi.',
+                action: hotspotWizardAction),
           const Finding(Severity.warn, 'announce-blocked',
               'Devices only show up after a scan',
               'Your router seems to block discovery messages.',
-              fix: 'Use "Rescan network" or "Add by IP".'),
+              fix: 'Use "Rescan network" or "Add by IP".',
+              action: hotspotWizardAction),
           const Finding(Severity.info, 'network', 'Your network',
               'Addresses this device has, for reference.',
               technical: 'en0: 192.168.1.10\nLanDrop listening on port 53317'),

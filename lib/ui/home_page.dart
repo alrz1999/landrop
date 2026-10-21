@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
+import 'hotspot_wizard.dart';
 import 'settings_page.dart';
 import 'shares.dart';
 import 'widgets.dart';
@@ -269,8 +270,30 @@ class _HomePageState extends State<HomePage> {
           ),
         ]),
       ),
+      if (c.hotspot != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: MaterialBanner(
+            key: const Key('hotspotBanner'),
+            leading: const Icon(Icons.wifi_tethering),
+            content: Text('Sharing hotspot "${c.hotspot!.ssid}"'),
+            actions: [
+              TextButton(
+                onPressed: () => openHotspotWizard(context),
+                child: const Text('Show'),
+              ),
+              TextButton(
+                key: const Key('bannerStopHotspot'),
+                onPressed: c.stopHotspot,
+                child: const Text('Stop'),
+              ),
+            ],
+          ),
+        ),
       if (c.peers.isEmpty)
-        EmptyPeersHelp(onDiagnose: () => showDiagnosisDialog(context))
+        EmptyPeersHelp(
+            onDiagnose: () => showDiagnosisDialog(context),
+            onHotspot: () => openHotspotWizard(context))
       else
         Card(
           child: Column(children: [

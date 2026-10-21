@@ -7,6 +7,7 @@ import 'app_controller.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'format.dart';
+import 'hotspot_wizard.dart';
 import 'shares.dart';
 import 'widgets.dart';
 
@@ -141,6 +142,14 @@ class SettingsPage extends StatelessWidget {
                 title: const Text('Diagnose connection'),
                 subtitle: const Text('Find out why devices cannot connect'),
                 onTap: () => showDiagnosisDialog(context),
+              ),
+              ListTile(
+                key: const Key('hotspotSettings'),
+                leading: const Icon(Icons.wifi_tethering),
+                title: const Text('Connect without Wi-Fi / router'),
+                subtitle: const Text(
+                    'Use a hotspot from a phone or laptop, step by step'),
+                onTap: () => openHotspotWizard(context),
               ),
               ListTile(
                 leading: const Icon(Icons.restart_alt),
