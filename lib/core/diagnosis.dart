@@ -94,6 +94,22 @@ class PeerObservation {
   final Set<String> foundVia;
   const PeerObservation(this.alias, this.ip, this.foundVia);
   bool get foundAutomatically => foundVia.any(autoDiscoveryVias.contains);
+  bool get foundByMdns => foundVia.contains('mdns');
+}
+
+/// A device seen in mDNS (even when HTTPS verification of it failed).
+class MdnsPeerObservation {
+  final String alias;
+  final String fingerprint;
+  final String ip;
+  final int port;
+
+  /// Why verification over HTTPS failed: `refused`, `timeout`,
+  /// `fingerprint-mismatch` or `other`; null when it was verified.
+  final String? failure;
+  const MdnsPeerObservation(this.alias, this.fingerprint, this.ip, this.port,
+      {this.failure});
+  bool get verified => failure == null;
 }
 
 class DiagnosisInput {
@@ -108,6 +124,16 @@ class DiagnosisInput {
   final List<PeerObservation> peers;
   final ProbeObservation? probe;
 
+  /// mDNS (DESIGN.md 2.4a) is configured at all (false: mDNS rules skipped).
+  final bool mdnsEnabled;
+
+  /// Our mDNS socket started; [mdnsError] says why not.
+  final bool mdnsStarted;
+  final String? mdnsError;
+
+  /// Devices mDNS reported, verified or not.
+  final List<MdnsPeerObservation> mdnsPeers;
+
   const DiagnosisInput({
     this.discoveryError,
     this.discoveryEnabled = true,
@@ -116,6 +142,10 @@ class DiagnosisInput {
     this.serverPort,
     this.peers = const [],
     this.probe,
+    this.mdnsEnabled = false,
+    this.mdnsStarted = false,
+    this.mdnsError,
+    this.mdnsPeers = const [],
   });
 }
 
@@ -248,7 +278,11 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
   if (!i.discoveryEnabled || i.discoveryError != null || i.peers.isEmpty) {
     return const [];
   }
-  final silent = i.peers.where((p) => !p.foundAutomatically).toList();
+  // Peers that mDNS found are explained by ruleMdnsOnly: LanDrop's own
+  // announcements are blocked, but discovery as a whole is not.
+  final silent = i.peers
+      .where((p) => !p.foundAutomatically && !p.foundByMdns)
+      .toList();
   if (silent.isEmpty) return const [];
   final names = silent.map((p) => '${p.alias} (${p.ip})').join(', ');
   if (silent.length == i.peers.length) {
@@ -259,7 +293,8 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
               'other (multicast and broadcast). Transfers still work by IP.',
           fix: 'Use "Rescan network" or "Add by IP". To fix it for good, turn '
               'on multicast / turn off "AP isolation" in the router.',
-          technical: 'found only by scan/manual: $names',
+          technical: 'found only by scan/manual: $names'
+              '${i.mdnsStarted ? '; mDNS found nothing either' : ''}',
           action: hotspotWizardAction),
     ];
   }
@@ -406,6 +441,88 @@ List<Finding> ruleHotspotLikelyFix(DiagnosisInput i) {
   ];
 }
 
+
+// ------------------------------------------------------------------ mDNS rules
+
+bool _udpFound(PeerObservation p) => p.foundAutomatically;
+
+List<Finding> ruleMdnsOnly(DiagnosisInput i) {
+  final only = i.peers.where((p) => p.foundByMdns && !_udpFound(p)).toList();
+  if (only.isEmpty) return const [];
+  return [
+    Finding(Severity.info, 'mdns-only', 'Standard device discovery works',
+        "LanDrop's own announcements are blocked on this network, but "
+            'standard device discovery (mDNS / Bonjour) works. Transfers '
+            'will work.',
+        technical: 'found via mDNS but never via LanDrop announce: '
+            '${only.map((p) => '${p.alias} (${p.ip})').join(', ')}'),
+  ];
+}
+
+List<Finding> ruleMdnsVisibleUnreachable(DiagnosisInput i) {
+  final known = {for (final p in i.peers) p.ip};
+  final bad = [
+    for (final m in i.mdnsPeers)
+      if (m.failure != null && !known.contains(m.ip)) m
+  ];
+  if (bad.isEmpty) return const [];
+  final m = bad.first;
+  final why = switch (m.failure) {
+    'timeout' => 'Nothing answered on LanDrop\'s port (timeout), which '
+        'usually means a firewall is dropping it.',
+    'refused' => 'The port refused the connection, which usually means '
+        'LanDrop is closing or not running there.',
+    'fingerprint-mismatch' => 'Something answered, but with a different '
+        'security key than the device announced.',
+    _ => 'The connection or the check of its identity failed.',
+  };
+  return [
+    Finding(Severity.problem, 'mdns-visible-unreachable',
+        'The device is on your network, but LanDrop cannot reach it',
+        'The device is on your network and announces itself, but '
+        "LanDrop's port cannot be reached: a firewall on that device or "
+        'this one, or the app is closing. $why',
+        fix: 'Allow LanDrop in the firewall on both devices, keep LanDrop '
+            'open on the other device, then use "Rescan network".',
+        technical: bad
+            .map((m) => '${m.alias} ${m.ip}:${m.port} ${m.failure}')
+            .join('; '),
+        action: hotspotWizardAction),
+  ];
+}
+
+List<Finding> ruleUdpOnlyNoMdns(DiagnosisInput i) {
+  if (!i.mdnsStarted || i.mdnsPeers.isNotEmpty) return const [];
+  final udp = i.peers.where((p) => _udpFound(p) && !p.foundByMdns).toList();
+  if (udp.isEmpty) return const [];
+  return [
+    Finding(Severity.info, 'udp-only-no-mdns',
+        'Standard discovery (mDNS) is blocked',
+        'Devices were found with LanDrop\'s own announcements, but not '
+            'through standard discovery (mDNS / Bonjour). This is not a '
+            'problem for LanDrop.',
+        technical: 'found by UDP, none by mDNS: '
+            '${udp.map((p) => '${p.alias} (${p.ip})').join(', ')}'),
+  ];
+}
+
+List<Finding> ruleMdnsUnavailable(DiagnosisInput i) {
+  if (!i.mdnsEnabled || i.mdnsError == null) return const [];
+  final both = i.discoveryError != null;
+  return [
+    Finding(both ? Severity.warn : Severity.info, 'mdns-unavailable',
+        'Standard device discovery could not start',
+        'LanDrop could not start mDNS / Bonjour on this device, so it '
+            'relies on its own announcements. '
+            '${both ? 'Those failed too, so devices will not appear on their own. ' : ''}'
+            'Sending by IP still works.',
+        fix: both
+            ? 'Use "Rescan network" or "Add by IP".'
+            : '',
+        technical: i.mdnsError),
+  ];
+}
+
 /// All rules, in display order within a severity.
 const List<DiagnosisRule> diagnosisRules = [
   ruleServerNotListening,
@@ -420,6 +537,10 @@ const List<DiagnosisRule> diagnosisRules = [
   ruleProbeNotLanDrop,
   ruleDifferentSubnet,
   ruleAnnounceBlocked,
+  ruleMdnsVisibleUnreachable,
+  ruleMdnsUnavailable,
+  ruleMdnsOnly,
+  ruleUdpOnlyNoMdns,
   ruleHotspotLikelyFix,
   ruleProbeOk,
 ];
@@ -459,6 +580,9 @@ Finding networkSummary(DiagnosisInput i) {
         ? 'LanDrop listening on port ${i.serverPort ?? '?'}'
         : 'LanDrop not listening',
     'automatic discovery: ${!i.discoveryEnabled ? 'disabled' : i.discoveryError == null ? 'on' : 'failed'}',
+    if (i.mdnsEnabled)
+      'mDNS: ${i.mdnsError != null ? 'failed' : i.mdnsStarted ? 'on' : 'off'}'
+          ', seen ${i.mdnsPeers.length}',
     'devices found: ${i.peers.length}',
     for (final p in i.peers)
       '  ${p.alias} ${p.ip} via ${(p.foundVia.toList()..sort()).join('+')}',

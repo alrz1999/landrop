@@ -8,12 +8,14 @@ import 'dart:typed_data';
 import 'api.dart';
 import 'diagnosis.dart';
 import 'discovery.dart';
+import 'mdns.dart';
 import 'identity.dart';
 import 'transport.dart';
 import 'util.dart';
 import 'web_server.dart';
 
 export 'discovery.dart' show DiscoveryTransport, MulticastDiscoveryTransport;
+export 'mdns.dart' show MdnsSocket, RawMdnsSocket;
 export 'identity.dart' show TlsIdentity, fingerprintOfDer;
 // `Link` is not re-exported (it would clash with dart:io's Link); import
 // transport.dart for it.
@@ -44,6 +46,16 @@ class LanDropCoreOptions {
 
   /// Custom discovery transport (e.g. in-memory for tests).
   final DiscoveryTransport? discoveryTransport;
+
+  /// Also discover and advertise through mDNS / Bonjour (`_landrop._tcp`,
+  /// DESIGN.md 2.4a). Off by default; the app turns it on.
+  final bool mdnsEnabled;
+
+  /// Test seam: how the mDNS socket is made (default [RawMdnsSocket]).
+  final MdnsSocket Function()? mdnsSocketFactory;
+
+  /// Test seam: accept 127.x.x.x addresses found through mDNS.
+  final bool mdnsAllowLoopback;
 
   /// Where cert.pem/key.pem are kept. Null: `<saveDir>/.landrop`.
   final String? identityDir;
@@ -124,6 +136,9 @@ class LanDropCoreOptions {
     this.multicastEnabled = true,
     this.multicastPort = 53317,
     this.discoveryTransport,
+    this.mdnsEnabled = false,
+    this.mdnsSocketFactory,
+    this.mdnsAllowLoopback = false,
     this.identityDir,
     this.persistIdentity = true,
     this.deviceType = 'desktop',
@@ -255,6 +270,12 @@ class LanDropCoreImpl implements LanDropCore {
   bool _pendingDecision = false;
   _InSession? _session;
   String? _discoveryError;
+
+  MdnsService? _mdns;
+  StreamSubscription<MdnsCandidate>? _mdnsSub;
+
+  /// Devices mDNS reported, by fingerprint (for the diagnosis).
+  final Map<String, MdnsPeerObservation> _mdnsSeen = {};
 
   /// Addresses advertised in the capability record (set on start).
   List<String> _capAddrs = const [];
@@ -403,6 +424,7 @@ class LanDropCoreImpl implements LanDropCore {
     server.listen(_handle, onError: (_) {});
     await _web.start();
     await _startDiscovery();
+    await _startMdns();
     _pruneTimer = Timer.periodic(
         Duration(
             milliseconds:
@@ -445,6 +467,92 @@ class LanDropCoreImpl implements LanDropCore {
     }
   }
 
+  /// Starts mDNS (advertise + browse). Failure only sets the error that the
+  /// diagnosis shows; it never breaks the app.
+  Future<void> _startMdns() async {
+    if (!options.mdnsEnabled || !_running) return;
+    final svc = MdnsService(
+      socket: options.mdnsSocketFactory?.call() ?? RawMdnsSocket(),
+      fingerprint: self.fingerprint,
+      alias: self.alias,
+      deviceType: self.deviceType,
+      port: self.port,
+      addresses: () async => {
+        for (final a in await localIPv4Addresses()) a.address,
+        ?options.advertiseIp,
+      }.toList(),
+      allowLoopback: options.mdnsAllowLoopback,
+    );
+    try {
+      await svc.start();
+    } catch (e) {
+      svc.error = '$e';
+    }
+    if (!_running) {
+      await svc.stop();
+      return;
+    }
+    _mdns = svc;
+    if (svc.started) _mdnsSub = svc.onFound.listen(_onMdnsCandidate);
+  }
+
+  Future<void> _stopMdns() async {
+    final sub = _mdnsSub;
+    final svc = _mdns;
+    _mdnsSub = null;
+    _mdns = null;
+    await sub?.cancel();
+    try {
+      await svc?.stop();
+    } catch (_) {}
+  }
+
+  /// A device showed up in mDNS: only a hint. Verify it over HTTPS against
+  /// the fingerprint it claims, exactly like a UDP announce.
+  void _onMdnsCandidate(MdnsCandidate c) {
+    if (!_running || c.fingerprint == _self?.fingerprint) return;
+    for (final ip in c.addresses) {
+      final known = _peers[c.fingerprint];
+      if (known != null &&
+          known.addrs.containsKey(ip) &&
+          known.info.port == c.port) {
+        _seenAt(known, ip, 'mdns');
+        _mdnsSeen[c.fingerprint] =
+            MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port);
+        continue;
+      }
+      unawaited(_verifyMdns(c, ip));
+    }
+  }
+
+  Future<void> _verifyMdns(MdnsCandidate c, String ip) async {
+    final info = await _fetchInfo(ip, c.port,
+        expectFp: c.fingerprint, timeout: options.probeTimeout);
+    if (!_running) return;
+    if (info != null) {
+      _mdnsSeen[c.fingerprint] =
+          MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port);
+      _upsertPeer(info, via: 'mdns');
+      return;
+    }
+    // Find out why, for the diagnosis.
+    final p = await _probe(ip, c.port, pinned: c.fingerprint);
+    if (!_running) return;
+    final failure = p.fingerprintMismatch
+        ? 'fingerprint-mismatch'
+        : switch (p.tcp) {
+            TcpOutcome.refused => 'refused',
+            TcpOutcome.timeout => 'timeout',
+            _ => 'other',
+          };
+    // Another address may have verified it meanwhile: keep that.
+    if (!_peers.containsKey(c.fingerprint)) {
+      _mdnsSeen[c.fingerprint] = MdnsPeerObservation(
+          c.alias, c.fingerprint, ip, c.port,
+          failure: failure);
+    }
+  }
+
   /// Re-reads the local addresses: the capability record, and [self.ip]
   /// unless it is fixed by [LanDropCoreOptions.advertiseIp] or still valid.
   Future<void> _refreshAddresses() async {
@@ -479,6 +587,8 @@ class LanDropCoreImpl implements LanDropCore {
     } catch (_) {}
     if (!_running) return;
     await _startDiscovery();
+    await _stopMdns();
+    await _startMdns();
   }
 
   @override
@@ -533,6 +643,7 @@ class LanDropCoreImpl implements LanDropCore {
     _announceTimer = _pruneTimer = null;
     await _discovery?.close();
     _discovery = null;
+    await _stopMdns();
     await _server?.close(force: true);
     _server = null;
     await _web.stop();
@@ -541,6 +652,7 @@ class LanDropCoreImpl implements LanDropCore {
     _pendingDecision = false;
     if (_peers.isNotEmpty) {
       _peers.clear();
+      _mdnsSeen.clear();
       _emitPeers();
     }
   }
@@ -776,6 +888,10 @@ class LanDropCoreImpl implements LanDropCore {
           PeerObservation(p.info.alias, p.info.ip, {...p.via})
       ],
       probe: probe,
+      mdnsEnabled: options.mdnsEnabled,
+      mdnsStarted: _mdns?.started ?? false,
+      mdnsError: _mdns?.error,
+      mdnsPeers: _mdnsSeen.values.toList(),
     );
   }
 

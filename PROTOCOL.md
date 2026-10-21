@@ -13,7 +13,14 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
    255.255.255.255) and tags each copy with `"landropVia": "multicast" | "broadcast"` (extra field),
    so the receiver knows which path got through. Untagged datagrams count as `announce`.
    Receivers reply via HTTP: POST /api/localsend/v2/register with own device info.
-2. Fallback: scan the local /24 with GET /api/localsend/v2/info, manual IP entry.
+2. mDNS / DNS-SD (LanDrop extension, ignored by LocalSend): service type `_landrop._tcp.local` on
+   224.0.0.251:5353. Instance `LanDrop-<first 8 hex of fingerprint>`, host `<instance>.local`, SRV port =
+   HTTPS port, A records = IPv4 addresses, TTL 120 s, re-announced every 60 s, goodbye = TTL 0.
+   TXT keys: `fp` (sha256 hex, 64 chars), `v` (=1), `alias`, `type` (deviceType), `port`.
+   Trust rule: mDNS data is only a hint. A peer is added only after HTTPS GET /info presents the
+   certificate whose fingerprint equals the claimed `fp`; the fingerprint in /info decides, never the TXT.
+   The peer is then marked `foundVia: mdns`.
+3. Fallback: scan the local /24 with GET /api/localsend/v2/info, manual IP entry.
 
 ## Endpoints (all HTTPS, self-signed cert)
 - GET  /api/localsend/v2/info -> device info

@@ -10,6 +10,7 @@ import 'diagnosis_dialog.dart' show FindingTile;
 import 'format.dart';
 import 'hotspot_service.dart';
 import 'widgets.dart';
+import 'wifi_join_page.dart' show openWifiJoin;
 
 enum HotspotPlatform { android, ios, macos, windows, linux, other }
 
@@ -187,6 +188,16 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
                   _role == HotspotRole.share &&
                   c.hotspotService.supported)
                 const HotspotCard(),
+              if (p == HotspotPlatform.android && _role == HotspotRole.join)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: FilledButton.icon(
+                    key: const Key('scanHotspotQr'),
+                    onPressed: () => openWifiJoin(context),
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan the hotspot QR code'),
+                  ),
+                ),
               const SizedBox(height: 8),
               Card(
                 child: ExpansionTile(
@@ -360,6 +371,7 @@ class FindDevicePanel extends StatefulWidget {
     required this.label,
     this.localAddresses,
     this.extraGateways = const [],
+    this.autoStart = false,
     this.phaseProbe = 'Checking the usual hotspot addresses…',
     this.nothingFoundHint =
         'Check that both devices are on the same hotspot and LanDrop is open '
@@ -372,6 +384,9 @@ class FindDevicePanel extends StatefulWidget {
   /// Test seam: this device's LAN addresses; default [localIPv4Addresses].
   final Future<List<String>> Function()? localAddresses;
   final List<String> extraGateways;
+
+  /// Start searching as soon as the panel appears.
+  final bool autoStart;
   final String phaseProbe;
   final String nothingFoundHint;
 
@@ -391,6 +406,16 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
 
   static Future<List<String>> _defaultAddresses() async =>
       [for (final a in await localIPv4Addresses()) a.address];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _find();
+      });
+    }
+  }
 
   Future<void> _find() async {
     final c = AppScope.read(context);

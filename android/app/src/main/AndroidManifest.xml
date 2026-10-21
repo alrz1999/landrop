@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation"/>
     <!-- Wi-Fi Direct assist (WifiDirectManager.kt); same permissions as the hotspot. -->
     <uses-feature android:name="android.hardware.wifi.direct" android:required="false"/>
+    <!-- Join a Wi-Fi network from a scanned QR code (WifiJoinManager.kt, mobile_scanner). -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="landrop"
         android:name="${applicationName}"

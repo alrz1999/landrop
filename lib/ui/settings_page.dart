@@ -10,6 +10,7 @@ import 'format.dart';
 import 'cable_wizard.dart';
 import 'hotspot_wizard.dart';
 import 'wifi_direct_page.dart';
+import 'wifi_join_page.dart';
 import 'shares.dart';
 import 'widgets.dart';
 
@@ -172,6 +173,15 @@ class SettingsPage extends StatelessWidget {
                   subtitle: const Text(
                       'Phone to phone without a router (Android)'),
                   onTap: () => openWifiDirect(context),
+                ),
+              if (isAndroid ?? Platform.isAndroid)
+                ListTile(
+                  key: const Key('wifiJoinSettings'),
+                  leading: const Icon(Icons.qr_code_scanner),
+                  title: const Text('Join a hotspot by QR'),
+                  subtitle: const Text(
+                      'Scan the QR code of another phone\'s LanDrop hotspot'),
+                  onTap: () => openWifiJoin(context),
                 ),
               ListTile(
                 leading: const Icon(Icons.restart_alt),

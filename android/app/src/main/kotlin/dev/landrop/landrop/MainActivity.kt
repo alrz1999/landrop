@@ -14,6 +14,11 @@ class MainActivity : FlutterActivity() {
     private var hotspot: HotspotManager? = null
     private var wifiDirect: WifiDirectManager? = null
 
+    private var wifiJoin: WifiJoinManager? = null
+
+    private fun wifiJoinManager(): WifiJoinManager =
+        wifiJoin ?: WifiJoinManager(this).also { wifiJoin = it }
+
     private fun wifiDirectManager(): WifiDirectManager =
         wifiDirect ?: WifiDirectManager(this).also { wifiDirect = it }
 
@@ -122,9 +127,47 @@ class MainActivity : FlutterActivity() {
                     wifiDirect?.sink = null
                 }
             })
+        // Join a Wi-Fi network from a scanned QR code (wifi_join_service.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/wifijoin")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    "join" -> {
+                        val ssid = call.argument<String>("ssid")
+                        if (ssid.isNullOrEmpty()) {
+                            result.error("failed", "ssid missing", null)
+                        } else {
+                            wifiJoinManager().join(
+                                ssid,
+                                call.argument<String>("password") ?: "",
+                                call.argument<String>("security") ?: "wpa",
+                                call.argument<Boolean>("hidden") ?: false,
+                                result
+                            )
+                        }
+                    }
+                    "leave" -> {
+                        wifiJoin?.leave()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/wifijoin/events")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    wifiJoinManager().sink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    wifiJoin?.sink = null
+                }
+            })
     }
 
     override fun onDestroy() {
+        wifiJoin?.destroy()
+        wifiJoin = null
         wifiDirect?.destroy()
         wifiDirect = null
         multicastLock?.takeIf { it.isHeld }?.release()

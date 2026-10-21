@@ -15,4 +15,5 @@ LanDropCore createCore({String? sharesStorePath}) => useFake
     : LanDropCoreImpl(LanDropCoreOptions(
         deviceType:
             Platform.isAndroid || Platform.isIOS ? 'mobile' : 'desktop',
-        sharesStorePath: sharesStorePath));
+        sharesStorePath: sharesStorePath,
+        mdnsEnabled: true));
