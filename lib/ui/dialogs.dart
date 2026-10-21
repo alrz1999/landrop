@@ -158,6 +158,30 @@ class _AddByIpDialogState extends State<_AddByIpDialog> {
   }
 }
 
+/// Shown when Add by IP found nothing. Returns true for "Diagnose this IP".
+Future<bool> showAddFailedDialog(BuildContext context, String message) async {
+  final res = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      key: const Key('addFailedDialog'),
+      icon: const Icon(Icons.link_off),
+      title: const Text('Device not found'),
+      content: Text(message),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Close')),
+        FilledButton(
+          key: const Key('diagnoseIp'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Diagnose this IP'),
+        ),
+      ],
+    ),
+  );
+  return res ?? false;
+}
+
 /// Lets the user choose a peer. Returns null when cancelled.
 Future<DeviceInfo?> showPeerPicker(
     BuildContext context, List<DeviceInfo> peers, int fileCount,

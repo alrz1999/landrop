@@ -717,4 +717,176 @@ void main() {
       await c.dispose();
     }
   });
+
+  // ---------------------------------------------- capabilities + diagnosis
+
+  test('capability record in info and at /api/landrop/v1/capabilities',
+      () async {
+    final (status, info) = await _raw('GET', a.self, '/info');
+    expect(status, 200);
+    final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
+    Map<String, dynamic> caps;
+    try {
+      final req = await c.getUrl(Uri.https(
+          '${a.self.ip}:${a.self.port}', '/api/landrop/v1/capabilities'));
+      final res = await req.close();
+      expect(res.statusCode, 200);
+      caps = jsonDecode(await res.transform(utf8.decoder).join())
+          as Map<String, dynamic>;
+    } finally {
+      c.close(force: true);
+    }
+    expect(caps, info!['landrop']);
+    expect(caps['v'], 1);
+    expect(caps['features'], containsAll(['resume', 'folders']));
+    final t = (caps['transports'] as List).single as Map<String, dynamic>;
+    expect(t['id'], 'lan-https');
+    expect(t['port'], a.self.port);
+    expect(t['addrs'], contains('127.0.0.1'));
+    // The plain LocalSend fields are untouched.
+    expect(info['fingerprint'], a.self.fingerprint);
+  });
+
+  test('capabilities parsed into the peer; manual recorded in foundVia',
+      () async {
+    final info = await a.addPeerByIp('127.0.0.1', port: b.self.port);
+    expect(info!.foundVia, {'manual'});
+    final caps = info.capabilities!;
+    expect(caps.version, 1);
+    expect(caps.features, containsAll({'resume', 'folders'}));
+    expect(caps.transports.single.id, 'lan-https');
+    expect(caps.transports.single.port, b.self.port);
+    final peer = a.currentPeers.single;
+    expect(peer.foundVia, {'manual'});
+    expect(peer.capabilities!.transports.single.addrs, contains('127.0.0.1'));
+    expect(PeerCapabilities.fromJson('junk'), isNull);
+    expect(PeerCapabilities.fromJson({'transports': [1, {}]})!.transports,
+        isEmpty);
+  });
+
+  test('scan recorded in foundVia (loopback scan)', () async {
+    final c = LanDropCoreImpl(LanDropCoreOptions(
+      port: a.self.port, // busy: c falls back, but scans a's port
+      bindAddress: InternetAddress.loopbackIPv4,
+      advertiseIp: '127.0.0.1',
+      multicastEnabled: false,
+      persistIdentity: false,
+      scanHosts: const ['127.0.0.1'],
+    ));
+    try {
+      await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+      await c.scanSubnet();
+      final found =
+          c.currentPeers.where((p) => p.fingerprint == a.self.fingerprint);
+      expect(found.single.foundVia, {'scan'});
+      // Adding the same peer by IP adds a second way.
+      await c.addPeerByIp('127.0.0.1', port: a.self.port);
+      expect(
+          c.currentPeers
+              .singleWhere((p) => p.fingerprint == a.self.fingerprint)
+              .foundVia,
+          {'scan', 'manual'});
+    } finally {
+      await c.dispose();
+    }
+  });
+
+  test('announce and register recorded in foundVia', () async {
+    final hub = _Hub();
+    final dir = await Directory('${tmp.path}/disc2').create();
+    final c = LanDropCoreImpl(_opts(0, transport: _HubTransport(hub)));
+    final d = LanDropCoreImpl(_opts(0, transport: _HubTransport(hub)));
+    try {
+      await c.start(alias: 'Carol', saveDir: '${dir.path}/c');
+      await d.start(alias: 'Dave', saveDir: '${dir.path}/d');
+      final l = await c.peers
+          .firstWhere((l) => l.isNotEmpty)
+          .timeout(const Duration(seconds: 5));
+      // The in-memory hub does not tag datagrams, so "announce" (or
+      // "register" when d answered first).
+      expect(l.single.foundVia, isNotEmpty);
+      expect({'announce', 'register'}.containsAll(l.single.foundVia), isTrue);
+      final f = await c.runDiagnosis();
+      expect(f.map((x) => x.code), isNot(contains('announce-blocked')));
+    } finally {
+      await c.dispose();
+      await d.dispose();
+    }
+  });
+
+  test('runDiagnosis against a live second core', () async {
+    await a.addPeerByIp('127.0.0.1', port: b.self.port);
+    final f = await a.runDiagnosis(targetIp: '127.0.0.1');
+    final codes = f.map((x) => x.code).toList();
+    expect(codes, contains('probe-ok'));
+    expect(codes, isNot(contains('server-down')));
+    expect(codes, isNot(contains('probe-fingerprint-mismatch')));
+    // Manual only, but discovery is disabled here: no router warning.
+    expect(codes, isNot(contains('announce-blocked')));
+    expect(codes.last, 'network');
+    expect(f.last.technical, contains('listening on port ${a.self.port}'));
+  });
+
+  test('runDiagnosis against a closed port reports refused', () async {
+    final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final closed = s.port;
+    await s.close();
+    final f = await a.runDiagnosis(targetIp: '127.0.0.1', targetPort: closed);
+    expect(f.first.code, 'probe-refused');
+    expect(f.first.severity, Severity.problem);
+  });
+
+  test('runDiagnosis reports a fingerprint mismatch after a reinstall',
+      () async {
+    await a.addPeerByIp('127.0.0.1', port: b.self.port);
+    final port = b.self.port;
+    await b.stop();
+    // A "reinstalled" device (new certificate) on the same address.
+    final e = LanDropCoreImpl(LanDropCoreOptions(
+      port: port,
+      portFallbackRange: 0,
+      bindAddress: InternetAddress.loopbackIPv4,
+      advertiseIp: '127.0.0.1',
+      multicastEnabled: false,
+      persistIdentity: false,
+    ));
+    try {
+      await e.start(alias: 'Bob', saveDir: '${tmp.path}/e');
+      expect(e.self.port, port);
+      final f = await a.runDiagnosis(targetIp: '127.0.0.1', targetPort: port);
+      final m = f.firstWhere((x) => x.code == 'probe-fingerprint-mismatch');
+      expect(m.technical, isNot(contains(e.self.fingerprint)));
+      expect(m.technical,
+          contains(e.self.fingerprint.substring(0, 8).toUpperCase()));
+    } finally {
+      await e.dispose();
+    }
+  });
+
+  test('runDiagnosis against a blackhole address reports a timeout',
+      () async {
+    final c = LanDropCoreImpl(const LanDropCoreOptions(
+      port: 0,
+      multicastEnabled: false,
+      persistIdentity: false,
+      probeTimeout: Duration(milliseconds: 400),
+    ));
+    try {
+      await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+      final sw = Stopwatch()..start();
+      // 10.255.255.1: routable but nothing answers (TCP SYN is dropped).
+      final f = await c.runDiagnosis(targetIp: '10.255.255.1');
+      expect(sw.elapsed, lessThan(const Duration(seconds: 3)));
+      expect(f.map((x) => x.code), contains('probe-timeout'));
+      expect(f.map((x) => x.code), isNot(contains('server-down')));
+    } finally {
+      await c.dispose();
+    }
+  });
+
+  test('runDiagnosis on a stopped core reports the server down', () async {
+    await b.stop();
+    final f = await b.runDiagnosis();
+    expect(f.first.code, 'server-down');
+  });
 }

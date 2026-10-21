@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:landrop/core/api.dart';
 import 'package:landrop/ui/app.dart';
@@ -42,6 +43,92 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No nearby devices yet'), findsOneWidget);
     expect(find.textContaining('AP isolation'), findsOneWidget);
+  });
+
+  testWidgets('empty state offers diagnosis; dialog renders findings',
+      (tester) async {
+    final core = await pumpApp(tester);
+    expect(find.byKey(const Key('whyNoDevices')), findsNothing);
+    core.setPeers(const []);
+    await tester.pumpAndSettle();
+    expect(find.text("Why can't I see my device?"), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('whyNoDevices')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('whyNoDevices')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
+    expect(core.diagnosisCalls, [(null, null)]);
+    expect(find.text('Devices only show up after a scan'), findsOneWidget);
+    expect(find.byKey(const Key('finding-announce-blocked')), findsOneWidget);
+    expect(find.text('What to do: Use "Rescan network" or "Add by IP".'),
+        findsOneWidget);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(find.text('Your network'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('runAgain')));
+    await tester.pumpAndSettle();
+    expect(core.diagnosisCalls, hasLength(2));
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('diagnosisDialog')), findsNothing);
+  });
+
+  testWidgets('copy report puts every finding on the clipboard',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final core = FakeCore(simulateDelay: const Duration(milliseconds: 10))
+      ..diagnosisFindings = const [
+        Finding(Severity.problem, 'probe-refused',
+            'The device is there, but LanDrop is not answering',
+            'LanDrop is probably closed there.',
+            fix: 'Open LanDrop on the other device.',
+            technical: 'TCP connect to 192.168.1.20:53317 refused'),
+        Finding(Severity.info, 'network', 'Your network', 'For reference.',
+            technical: 'en0: 192.168.1.10'),
+      ];
+    await pumpApp(tester, core: core);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('diagnoseSettings')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    await tester.tap(find.byKey(const Key('copyReport')));
+    await tester.pumpAndSettle();
+    expect(copied, startsWith('LanDrop connection report'));
+    expect(copied, contains('[PROBLEM] The device is there, but LanDrop is '
+        'not answering'));
+    expect(copied, contains('Fix: Open LanDrop on the other device.'));
+    expect(copied, contains('Details: TCP connect to 192.168.1.20:53317'));
+    expect(copied, contains('[INFO] Your network'));
+    expect(copied, contains('en0: 192.168.1.10'));
+    expect(find.text('Report copied'), findsOneWidget);
+  });
+
+  testWidgets('failed add by IP offers "Diagnose this IP"', (tester) async {
+    final core = await pumpApp(tester);
+    await tester.tap(find.byKey(const Key('addByIp')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '10.0.0.8:5000');
+    core.addPeerFails = true;
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('addFailedDialog')), findsOneWidget);
+    expect(find.text('No LanDrop device answered at 10.0.0.8:5000.'),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('diagnoseIp')));
+    await tester.pumpAndSettle();
+    expect(core.diagnosisCalls, [('10.0.0.8', 5000)]);
+    expect(find.text('Checking 10.0.0.8:5000'), findsOneWidget);
+    expect(find.text('No answer from that address'), findsOneWidget);
   });
 
   testWidgets('wide layout renders peers and QR', (tester) async {

@@ -189,6 +189,14 @@ When no transport reaches a peer, run rules over what was observed and show the 
 
 This turns the troubleshooting list from the start of the project into code.
 
+### 3.8 Implemented (2026-10-21): capability record and guided diagnosis, LAN only
+
+- Capability record (3.3) is served in the info JSON (`landrop`) and at `GET /api/landrop/v1/capabilities`, with one transport (`lan-https`, local non-VPN IPv4 addresses, port) and the features `resume`, `folders`. Peers' records are parsed into `DeviceInfo.capabilities`. No transport selection yet (3.4-3.6 not started).
+- Each peer records how it was found in `DeviceInfo.foundVia`: `multicast` / `broadcast` (LanDrop tags its datagrams with `landropVia`; the receive API cannot see the destination), `announce` (untagged, e.g. LocalSend), `register`, `scan`, `manual`.
+- `lib/core/diagnosis.dart`: pure rules over a `DiagnosisInput` (discovery error, interfaces, own server listening, peers and how found, optional probe of a target IP: TCP connected / refused / timeout / unreachable, then TLS + info and fingerprint check). Rules: server down, discovery failed, no LAN address, VPN active, peers only by scan/manual (router blocks multicast and broadcast), probe refused, timeout, unreachable, fingerprint mismatch, not LanDrop, different /24, probe ok, all good; plus a network summary.
+- `LanDropCore.runDiagnosis({targetIp, targetPort})` gathers the observations and runs the rules. The UI shows it from the empty peer list ("Why can't I see my device?"), from Settings ("Diagnose connection") and after a failed Add by IP ("Diagnose this IP"), with "Run again" and "Copy report" (plain text, fingerprints shortened).
+- Not done: BLE and ping-based rules (no BLE, no ICMP from Dart without privileges); the subnet rule assumes /24 netmasks.
+
 ## 4. Next step B: browser access and local stream server
 
 ### 4.1 Idea

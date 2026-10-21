@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
+import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'format.dart';
 import 'widgets.dart';
@@ -95,6 +96,13 @@ class SettingsPage extends StatelessWidget {
                   onTap: c.quit,
                 ),
               ],
+              ListTile(
+                key: const Key('diagnoseSettings'),
+                leading: const Icon(Icons.troubleshoot),
+                title: const Text('Diagnose connection'),
+                subtitle: const Text('Find out why devices cannot connect'),
+                onTap: () => showDiagnosisDialog(context),
+              ),
               ListTile(
                 leading: const Icon(Icons.restart_alt),
                 title: const Text('Restart service'),

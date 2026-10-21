@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'settings_page.dart';
 import 'widgets.dart';
@@ -135,13 +136,22 @@ class _HomePageState extends State<HomePage> {
     final res = await showAddByIpDialog(context);
     if (res == null) return;
     final (ip, port) = res;
+    String? failure;
     try {
       final d = await c.addPeerByIp(ip, port: port);
-      _snack(d == null
-          ? 'No LanDrop device answered at $ip:$port'
-          : 'Added ${d.alias}', error: d == null);
+      if (d != null) {
+        _snack('Added ${d.alias}');
+      } else {
+        failure = 'No LanDrop device answered at $ip:$port.';
+      }
     } catch (e) {
-      _snack('Could not reach $ip:$port — $e', error: true);
+      failure = 'Could not reach $ip:$port — $e';
+    }
+    if (failure != null && mounted) {
+      final diagnose = await showAddFailedDialog(context, failure);
+      if (diagnose && mounted) {
+        await showDiagnosisDialog(context, targetIp: ip, targetPort: port);
+      }
     }
   }
 
@@ -207,7 +217,7 @@ class _HomePageState extends State<HomePage> {
         ]),
       ),
       if (c.peers.isEmpty)
-        const EmptyPeersHelp()
+        EmptyPeersHelp(onDiagnose: () => showDiagnosisDialog(context))
       else
         Card(
           child: Column(children: [

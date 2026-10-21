@@ -2,6 +2,61 @@
 // signatures without updating both sides.
 import 'dart:async';
 
+import 'diagnosis.dart';
+
+export 'diagnosis.dart' show Finding, Severity, formatDiagnosisReport;
+
+/// One way to reach a device, from its capability record (DESIGN.md 3.3).
+class TransportCapability {
+  final String id; // e.g. lan-https
+  final List<String> addrs;
+  final int? port;
+  const TransportCapability(this.id, {this.addrs = const [], this.port});
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'addrs': addrs, 'port': ?port};
+}
+
+/// The `landrop` field of a peer's info response (LanDrop peers only).
+class PeerCapabilities {
+  final int version;
+  final List<TransportCapability> transports;
+  final Set<String> features;
+  const PeerCapabilities(
+      {this.version = 1, this.transports = const [], this.features = const {}});
+
+  Map<String, dynamic> toJson() => {
+        'v': version,
+        'transports': [for (final t in transports) t.toJson()],
+        'features': features.toList(),
+      };
+
+  /// Tolerant parser: unknown or malformed parts are skipped. Null when [j]
+  /// is not a capability record.
+  static PeerCapabilities? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final v = j['v'];
+    final ts = <TransportCapability>[];
+    final rawTs = j['transports'];
+    if (rawTs is List) {
+      for (final t in rawTs) {
+        if (t is! Map || t['id'] is! String) continue;
+        final addrs = t['addrs'];
+        final port = t['port'];
+        ts.add(TransportCapability(t['id'] as String,
+            addrs: addrs is List ? addrs.whereType<String>().toList() : const [],
+            port: port is int ? port : null));
+      }
+    }
+    final f = j['features'];
+    return PeerCapabilities(
+      version: v is int ? v : 1,
+      transports: ts,
+      features: f is List ? f.whereType<String>().toSet() : const {},
+    );
+  }
+}
+
 class DeviceInfo {
   final String alias;
   final String deviceType; // mobile|desktop|web|headless|server
@@ -9,6 +64,13 @@ class DeviceInfo {
   final String fingerprint; // sha256 hex of cert DER
   final String ip;
   final int port;
+
+  /// Capability record from the peer's info (null for non-LanDrop peers).
+  final PeerCapabilities? capabilities;
+
+  /// How this peer was found: multicast, broadcast, announce (UDP, kind
+  /// unknown), register, scan, manual. Empty for [LanDropCore.self].
+  final Set<String> foundVia;
   const DeviceInfo({
     required this.alias,
     required this.deviceType,
@@ -16,7 +78,22 @@ class DeviceInfo {
     required this.fingerprint,
     required this.ip,
     this.port = 53317,
+    this.capabilities,
+    this.foundVia = const {},
   });
+
+  DeviceInfo copyWith(
+          {PeerCapabilities? capabilities, Set<String>? foundVia}) =>
+      DeviceInfo(
+        alias: alias,
+        deviceType: deviceType,
+        deviceModel: deviceModel,
+        fingerprint: fingerprint,
+        ip: ip,
+        port: port,
+        capabilities: capabilities ?? this.capabilities,
+        foundVia: foundVia ?? this.foundVia,
+      );
 }
 
 class FileOffer {
@@ -107,4 +184,9 @@ abstract class LanDropCore {
   /// emitted, so callers can attribute [progress] events by session id.
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
       {void Function(String sessionId)? onSession});
+
+  /// Guided diagnosis (DESIGN.md 3.7): gathers what this device observes
+  /// and, when [targetIp] is given, probes that address (TCP, then TLS +
+  /// info). [targetPort] defaults to the known peer's port, else 53317.
+  Future<List<Finding>> runDiagnosis({String? targetIp, int? targetPort});
 }

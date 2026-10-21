@@ -334,6 +334,9 @@ class AppController extends ChangeNotifier {
   Future<DeviceInfo?> addPeerByIp(String ip, {int port = 53317}) =>
       core.addPeerByIp(ip, port: port);
 
+  Future<List<Finding>> runDiagnosis({String? targetIp, int? targetPort}) =>
+      core.runDiagnosis(targetIp: targetIp, targetPort: targetPort);
+
   Future<void> rescan() async {
     if (scanning) return;
     scanning = true;

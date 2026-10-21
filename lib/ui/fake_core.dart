@@ -135,8 +135,12 @@ class FakeCore implements LanDropCore {
     return req;
   }
 
+  /// Test hook: [addPeerByIp] finds nothing (as if no device answered).
+  bool addPeerFails = false;
+
   @override
   Future<DeviceInfo?> addPeerByIp(String ip, {int port = 53317}) async {
+    if (addPeerFails) return null;
     if (!RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(ip)) return null;
     final d = DeviceInfo(
       alias: 'Device at $ip',
@@ -203,6 +207,33 @@ class FakeCore implements LanDropCore {
     onSession?.call(sid);
     await _simulate(sid, files);
     return SendResult(ok: true, sessionId: sid);
+  }
+
+  /// Test hook: findings returned by [runDiagnosis] (canned when null).
+  List<Finding>? diagnosisFindings;
+
+  /// Every [runDiagnosis] call as (targetIp, targetPort), for tests.
+  final List<(String?, int?)> diagnosisCalls = [];
+
+  @override
+  Future<List<Finding>> runDiagnosis({String? targetIp, int? targetPort}) async {
+    diagnosisCalls.add((targetIp, targetPort));
+    await Future<void>.delayed(simulateDelay);
+    return diagnosisFindings ??
+        [
+          if (targetIp != null)
+            Finding(Severity.problem, 'probe-timeout',
+                'No answer from that address',
+                'Nothing came back from $targetIp.',
+                fix: 'Check both devices are on the same Wi-Fi.'),
+          const Finding(Severity.warn, 'announce-blocked',
+              'Devices only show up after a scan',
+              'Your router seems to block discovery messages.',
+              fix: 'Use "Rescan network" or "Add by IP".'),
+          const Finding(Severity.info, 'network', 'Your network',
+              'Addresses this device has, for reference.',
+              technical: 'en0: 192.168.1.10\nLanDrop listening on port 53317'),
+        ];
   }
 
   Future<void> _simulate(

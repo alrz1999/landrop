@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'api.dart';
+import 'diagnosis.dart';
 import 'discovery.dart';
 import 'identity.dart';
 import 'util.dart';
@@ -58,6 +59,10 @@ class LanDropCoreOptions {
   final Duration scanTimeout;
   final int scanConcurrency;
 
+  /// Hosts [LanDropCore.scanSubnet] probes instead of the local /24s
+  /// (test seam). Null: scan every local /24.
+  final List<String>? scanHosts;
+
   /// Sender: an upload with no bytes moving for this long is aborted and
   /// resumed (see [uploadRetries]).
   final Duration stallTimeout;
@@ -94,6 +99,7 @@ class LanDropCoreOptions {
     this.probeTimeout = const Duration(seconds: 3),
     this.scanTimeout = const Duration(milliseconds: 2500),
     this.scanConcurrency = 64,
+    this.scanHosts,
     this.stallTimeout = const Duration(seconds: 15),
     this.uploadRetries = 3,
     this.retryBackoff = const Duration(milliseconds: 500),
@@ -116,6 +122,9 @@ class _Peer {
   DeviceInfo info;
   DateTime lastSeen;
   bool probing = false;
+
+  /// How this peer was found (see [DeviceInfo.foundVia]).
+  final Set<String> via = {};
   _Peer(this.info) : lastSeen = DateTime.now();
 }
 
@@ -177,6 +186,9 @@ class LanDropCoreImpl implements LanDropCore {
   _InSession? _session;
   String? _discoveryError;
 
+  /// Addresses advertised in the capability record (set on start).
+  List<String> _capAddrs = const [];
+
   static const _progressStep = 256 * 1024;
 
   // ---------------------------------------------------------------- public
@@ -200,8 +212,8 @@ class LanDropCoreImpl implements LanDropCore {
         c.onCancel = sub.cancel;
       }, isBroadcast: true);
 
-  List<DeviceInfo> get currentPeers =>
-      List.unmodifiable(_peers.values.map((p) => p.info));
+  List<DeviceInfo> get currentPeers => List.unmodifiable(_peers.values
+      .map((p) => p.info.copyWith(foundVia: Set.unmodifiable(p.via))));
 
   @override
   Stream<IncomingRequest> get incoming => _incomingCtrl.stream;
@@ -228,9 +240,9 @@ class LanDropCoreImpl implements LanDropCore {
     _stopped = Completer<void>();
     _running = true;
 
-    final ip = options.advertiseIp ??
-        (await localIPv4Addresses()).map((a) => a.address).firstOrNull ??
-        '127.0.0.1';
+    final lanAddrs = (await localIPv4Addresses()).map((a) => a.address);
+    final ip = options.advertiseIp ?? lanAddrs.firstOrNull ?? '127.0.0.1';
+    _capAddrs = {ip, ...lanAddrs}.toList();
     _self = DeviceInfo(
         alias: alias,
         deviceType: options.deviceType,
@@ -308,8 +320,8 @@ class LanDropCoreImpl implements LanDropCore {
     final info =
         await _fetchInfo(ip.trim(), port, timeout: options.probeTimeout);
     if (info == null || info.fingerprint == _self?.fingerprint) return null;
-    _upsertPeer(info);
-    return info;
+    _upsertPeer(info, via: 'manual');
+    return info.copyWith(foundVia: {...?_peers[info.fingerprint]?.via});
   }
 
   @override
@@ -319,10 +331,12 @@ class LanDropCoreImpl implements LanDropCore {
     for (final a in await localIPv4Addresses()) {
       own.add(a.address);
       final b = a.rawAddress;
+      if (options.scanHosts != null) continue;
       for (var i = 1; i < 255; i++) {
         targets.add('${b[0]}.${b[1]}.${b[2]}.$i');
       }
     }
+    targets.addAll(options.scanHosts ?? const []);
     final ports = <int>{options.port, 53317};
     final jobs = <(String, int)>[
       for (final t in targets)
@@ -335,7 +349,7 @@ class LanDropCoreImpl implements LanDropCore {
         final (ip, port) = jobs[next++];
         final info = await _fetchInfo(ip, port, timeout: options.scanTimeout);
         if (info != null && info.fingerprint != _self?.fingerprint) {
-          _upsertPeer(info);
+          _upsertPeer(info, via: 'scan');
         }
       }
     }
@@ -433,6 +447,140 @@ class LanDropCoreImpl implements LanDropCore {
     } finally {
       client.close(force: true);
     }
+  }
+
+  // ------------------------------------------------------------ diagnosis
+
+  @override
+  Future<List<Finding>> runDiagnosis(
+          {String? targetIp, int? targetPort}) async =>
+      diagnose(await observe(targetIp: targetIp, targetPort: targetPort));
+
+  /// What [runDiagnosis] feeds into [diagnose]. Probes [targetIp] (TCP
+  /// connect, then TLS + GET /info) within [LanDropCoreOptions.probeTimeout].
+  Future<DiagnosisInput> observe({String? targetIp, int? targetPort}) async {
+    final ifaces = <InterfaceObservation>[];
+    try {
+      for (final i in await NetworkInterface.list(
+          type: InternetAddressType.IPv4, includeLoopback: false)) {
+        ifaces.add(InterfaceObservation(
+            i.name, [for (final a in i.addresses) a.address]));
+      }
+    } catch (_) {}
+    final server = _server;
+    final listening =
+        _running && server != null && await _selfReachable(server.port);
+    ProbeObservation? probe;
+    final ip = targetIp?.trim();
+    if (ip != null && ip.isNotEmpty) {
+      final known = _peers.values
+          .where((p) =>
+              p.info.ip == ip &&
+              (targetPort == null || p.info.port == targetPort))
+          .firstOrNull;
+      probe = await _probe(ip, targetPort ?? known?.info.port ?? 53317,
+          pinned: known?.info.fingerprint);
+    }
+    return DiagnosisInput(
+      discoveryError: _discoveryError,
+      discoveryEnabled:
+          options.discoveryTransport != null || options.multicastEnabled,
+      interfaces: ifaces,
+      serverListening: listening,
+      serverPort: server?.port,
+      peers: [
+        for (final p in _peers.values)
+          PeerObservation(p.info.alias, p.info.ip, {...p.via})
+      ],
+      probe: probe,
+    );
+  }
+
+  /// Own HTTPS port accepts TCP connections (via loopback when bound to all
+  /// interfaces).
+  Future<bool> _selfReachable(int port) async {
+    final b = options.bindAddress;
+    final host = b == null || b.isLoopback || b == InternetAddress.anyIPv4
+        ? InternetAddress.loopbackIPv4
+        : b;
+    try {
+      final s = await Socket.connect(host, port, timeout: options.probeTimeout);
+      s.destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static TcpOutcome _classify(SocketException e) {
+    final code = e.osError?.errorCode;
+    final msg = '${e.message} ${e.osError?.message ?? ''}'.toLowerCase();
+    // errno: ETIMEDOUT macOS 60 / Linux 110 / Windows 10060 (Dart's own
+    // connect timeout reports 110); ECONNREFUSED 61 / 111 / 10061.
+    if (const {60, 110, 10060}.contains(code) || msg.contains('timed out')) {
+      return TcpOutcome.timeout;
+    }
+    if (const {61, 111, 10061}.contains(code) || msg.contains('refused')) {
+      return TcpOutcome.refused;
+    }
+    return TcpOutcome.unreachable;
+  }
+
+  Future<ProbeObservation> _probe(String ip, int port, {String? pinned}) async {
+    final t = options.probeTimeout;
+    try {
+      final s = await Socket.connect(ip, port, timeout: t)
+          .timeout(t + const Duration(seconds: 1));
+      s.destroy();
+    } on TimeoutException {
+      return ProbeObservation(ip: ip, port: port, tcp: TcpOutcome.timeout);
+    } on SocketException catch (e) {
+      return ProbeObservation(
+          ip: ip,
+          port: port,
+          tcp: _classify(e),
+          error: e.osError?.message ?? e.message);
+    } catch (e) {
+      return ProbeObservation(
+          ip: ip, port: port, tcp: TcpOutcome.unreachable, error: '$e');
+    }
+    // TCP works: try TLS + /info, accepting any certificate so a different
+    // one can be reported instead of just failing.
+    String? presented;
+    DeviceInfo? info;
+    String? err;
+    final client = _newClient(connectTimeout: t);
+    try {
+      final req = await client.getUrl(_uri(ip, port, '/info')).timeout(t);
+      final res = await req.close().timeout(t);
+      presented = _checkPeerCert(res, null);
+      if (res.statusCode == 200) {
+        info = _infoFromJson(await _readJsonStream(res).timeout(t), ip, port);
+        if (info == null) err = 'invalid info response';
+      } else {
+        await res.drain<void>();
+        err = 'HTTP ${res.statusCode}';
+      }
+    } catch (e) {
+      err = e is HandshakeException ? 'TLS: ${e.message}' : '$e';
+    } finally {
+      client.close(force: true);
+    }
+    final claimed = info?.fingerprint;
+    final mismatch = presented != null &&
+        ((pinned != null && pinned != presented) ||
+            (claimed != null && claimed != presented));
+    return ProbeObservation(
+      ip: ip,
+      port: port,
+      tcp: TcpOutcome.connected,
+      infoOk: info != null,
+      fingerprintMismatch: mismatch,
+      expectedFingerprint: pinned ?? claimed,
+      presentedFingerprint: presented,
+      alias: info?.alias,
+      error: err,
+    );
   }
 
   // ------------------------------------------------------------ sending
@@ -754,8 +902,17 @@ class LanDropCoreImpl implements LanDropCore {
       'port': s.port,
       'protocol': 'https',
       'download': false,
+      'landrop': _capabilities().toJson(),
     };
   }
+
+  /// This device's capability record (DESIGN.md 3.3). LAN only for now.
+  PeerCapabilities _capabilities() => PeerCapabilities(
+        transports: [
+          TransportCapability('lan-https', addrs: _capAddrs, port: self.port),
+        ],
+        features: const {'resume', 'folders'},
+      );
 
   DeviceInfo? _infoFromJson(Map<String, dynamic> j, String ip, int port) {
     final fp = j['fingerprint'];
@@ -770,29 +927,41 @@ class LanDropCoreImpl implements LanDropCore {
       fingerprint: fp.toLowerCase(),
       ip: ip,
       port: port,
+      capabilities: PeerCapabilities.fromJson(j['landrop']),
     );
   }
 
   // ------------------------------------------------------------ peers
 
-  void _upsertPeer(DeviceInfo info) {
+  /// Adds or refreshes a peer; [via] records how it was found.
+  void _upsertPeer(DeviceInfo info, {String? via}) {
     if (!_running || info.fingerprint == _self?.fingerprint) return;
     final existing = _peers[info.fingerprint];
     if (existing == null) {
-      _peers[info.fingerprint] = _Peer(info);
+      _peers[info.fingerprint] = _Peer(info)..via.addAll([?via]);
       _emitPeers();
       return;
     }
     existing.lastSeen = DateTime.now();
+    final newVia = via != null && existing.via.add(via);
     final o = existing.info;
     if (o.ip != info.ip ||
         o.port != info.port ||
         o.alias != info.alias ||
         o.deviceType != info.deviceType ||
-        o.deviceModel != info.deviceModel) {
+        o.deviceModel != info.deviceModel ||
+        jsonEncode(o.capabilities?.toJson()) !=
+            jsonEncode(info.capabilities?.toJson())) {
       existing.info = info;
       _emitPeers();
+    } else if (newVia) {
+      _emitPeers();
     }
+  }
+
+  /// Records [via] for an already known peer (refresh without re-probing).
+  void _noteVia(_Peer p, String via) {
+    if (p.via.add(via)) _emitPeers();
   }
 
   void _emitPeers() {
@@ -839,11 +1008,16 @@ class LanDropCoreImpl implements LanDropCore {
     final port = msg['port'] is int ? msg['port'] as int : 53317;
     final ip = from.address;
     final announce = msg['announce'] == true || msg['announcement'] == true;
+    // LanDrop senders tag each datagram with how it was sent; others don't.
+    final tag = msg['landropVia'];
+    final via = tag == 'multicast' || tag == 'broadcast' ? tag as String
+        : 'announce';
 
     final known = _peers[fp];
     if (known != null && known.info.ip == ip && known.info.port == port) {
       // Already verified at this address; refresh without reconnecting.
       known.lastSeen = DateTime.now();
+      _noteVia(known, via);
       if (announce) unawaited(_register(ip, port, fp));
       return;
     }
@@ -856,7 +1030,7 @@ class LanDropCoreImpl implements LanDropCore {
         // HTTP reply failed: answer over UDP so the announcer can probe us.
         await _discovery?.broadcast({..._selfJson(), 'announce': false});
       }
-      if (info != null) _upsertPeer(info);
+      if (info != null) _upsertPeer(info, via: via);
     });
   }
 
@@ -899,6 +1073,9 @@ class LanDropCoreImpl implements LanDropCore {
         await _handleUpload(req);
       } else if (path == '$_landropBase/upload-status' && m == 'GET') {
         await _handleUploadStatus(req);
+      } else if (path == '$_landropBase/capabilities' && m == 'GET') {
+        await req.drain<void>();
+        _json(res, 200, _capabilities().toJson());
       } else if (path == '$_apiBase/cancel' && m == 'POST') {
         await req.drain<void>();
         _handleCancel(req);
@@ -939,11 +1116,12 @@ class LanDropCoreImpl implements LanDropCore {
     final known = _peers[fp];
     if (known != null && known.info.ip == ip && known.info.port == port) {
       known.lastSeen = DateTime.now();
+      _noteVia(known, 'register');
       return;
     }
     unawaited(_fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout)
         .then((info) {
-      if (info != null) _upsertPeer(info);
+      if (info != null) _upsertPeer(info, via: 'register');
     }));
   }
 

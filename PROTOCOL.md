@@ -4,10 +4,14 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 
 ## Device info (JSON)
 { "alias": str, "version": "2.1", "deviceModel": str?, "deviceType": "mobile|desktop|web|headless|server",
-  "fingerprint": str (sha256 hex of device cert), "port": 53317, "protocol": "https", "download": false }
+  "fingerprint": str (sha256 hex of device cert), "port": 53317, "protocol": "https", "download": false,
+  "landrop": { capability record, see below; LanDrop extra field, ignored by LocalSend } }
 
 ## Discovery
 1. UDP multicast: send device info + `"announce": true` to 224.0.0.167:53317 on start and every 5 s.
+   LanDrop also sends the same datagram as UDP broadcast (`x.x.x.255` per interface and
+   255.255.255.255) and tags each copy with `"landropVia": "multicast" | "broadcast"` (extra field),
+   so the receiver knows which path got through. Untagged datagrams count as `announce`.
    Receivers reply via HTTP: POST /api/localsend/v2/register with own device info.
 2. Fallback: scan the local /24 with GET /api/localsend/v2/info, manual IP entry.
 
@@ -29,6 +33,12 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
     the receiver then drops the session after its idle timeout.)
 
 ## LanDrop extensions (ignored by LocalSend clients)
+- Capability record, in the info JSON as `landrop` and at GET /api/landrop/v1/capabilities:
+    { "v": 1,
+      "transports": [ { "id": "lan-https", "addrs": ["192.168.1.103"], "port": 53317 } ],
+      "features": ["resume", "folders"] }
+    `addrs` = the advertised IP plus the non-VPN, non-link-local local IPv4 addresses. Parsers must
+    ignore unknown transports, fields and features; a missing record means a plain LocalSend peer.
 - GET /api/landrop/v1/upload-status?sessionId=&fileId=&token=
     -> 200 { received, size, active, done } | 403 bad session/token
     `received` = bytes held in the temporary file; `active` = an upload connection for this file is

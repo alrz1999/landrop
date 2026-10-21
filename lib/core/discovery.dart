@@ -80,7 +80,11 @@ class MulticastDiscoveryTransport implements DiscoveryTransport {
   Future<void> broadcast(Map<String, dynamic> message) async {
     final s = _socket;
     if (s == null) return;
-    final data = utf8.encode(jsonEncode(message));
+    // Each copy says how it was sent, so receivers can tell whether multicast
+    // or broadcast got through (`landropVia`, ignored by LocalSend).
+    final data = utf8.encode(jsonEncode({...message, 'landropVia': 'multicast'}));
+    final bdata =
+        utf8.encode(jsonEncode({...message, 'landropVia': 'broadcast'}));
     try {
       s.broadcastEnabled = true;
     } catch (_) {}
@@ -101,7 +105,7 @@ class MulticastDiscoveryTransport implements DiscoveryTransport {
           } catch (_) {}
           try {
             // Assumes a /24, which is what home networks use.
-            s.send(data, InternetAddress('${r[0]}.${r[1]}.${r[2]}.255'), port);
+            s.send(bdata, InternetAddress('${r[0]}.${r[1]}.${r[2]}.255'), port);
           } catch (_) {}
         }
       }
@@ -112,7 +116,7 @@ class MulticastDiscoveryTransport implements DiscoveryTransport {
       } catch (_) {}
     }
     try {
-      s.send(data, InternetAddress('255.255.255.255'), port);
+      s.send(bdata, InternetAddress('255.255.255.255'), port);
     } catch (_) {}
   }
 

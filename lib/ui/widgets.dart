@@ -140,7 +140,10 @@ class PeerTile extends StatelessWidget {
 }
 
 class EmptyPeersHelp extends StatelessWidget {
-  const EmptyPeersHelp({super.key});
+  const EmptyPeersHelp({super.key, this.onDiagnose});
+
+  /// Shows a "Why can't I see my device?" button when set.
+  final VoidCallback? onDiagnose;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +166,15 @@ class EmptyPeersHelp extends StatelessWidget {
             '• Still nothing? Use "Rescan network", "Add by IP", or scan the QR code below.',
             style: t.bodyMedium,
           ),
+          if (onDiagnose != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('whyNoDevices'),
+              onPressed: onDiagnose,
+              icon: const Icon(Icons.troubleshoot),
+              label: const Text("Why can't I see my device?"),
+            ),
+          ],
         ],
       ),
     );
