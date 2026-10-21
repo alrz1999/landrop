@@ -236,6 +236,120 @@ class FakeCore implements LanDropCore {
         ];
   }
 
+  // ------------------------------------------------------ browser access
+
+  final _pairingCtrl = StreamController<WebPairingRequest>.broadcast();
+  final _sharesCtrl = StreamController<List<Share>>.broadcast();
+  final List<Share> _shares = [];
+  int _shareSeq = 0;
+  int _pairSeq = 0;
+  bool _webHttp = false;
+
+  /// Every [createShare] call as (paths, ttl, maxDownloads), for tests.
+  final List<(List<String>, Duration?, int?)> shareCalls = [];
+
+  /// Test hook: a browser asks to pair.
+  WebPairingRequest simulatePairing(
+      {String code = '4821',
+      String userAgent = 'Safari on iPhone',
+      String ip = '192.168.1.77'}) {
+    final r = WebPairingRequest('pair-${++_pairSeq}', code, userAgent, ip);
+    _pairingCtrl.add(r);
+    return r;
+  }
+
+  /// Test hook: a browser downloaded from share [id] once.
+  void simulateDownload(String id) {
+    final i = _shares.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    final s = _shares[i];
+    if (s.downloadsLeft == null) return;
+    _shares[i] = _copyShare(s, downloadsLeft: s.downloadsLeft! - 1);
+    _sharesCtrl.add(shares);
+  }
+
+  Share _copyShare(Share s, {int? downloadsLeft}) => Share(
+        id: s.id,
+        token: s.token,
+        files: s.files,
+        url: _shareUrl(s.token),
+        httpUrl: _webHttp ? _shareUrl(s.token, http: true) : null,
+        createdAt: s.createdAt,
+        expiresAt: s.expiresAt,
+        maxDownloads: s.maxDownloads,
+        downloadsLeft: downloadsLeft ?? s.downloadsLeft,
+      );
+
+  String _shareUrl(String token, {bool http = false}) => http
+      ? 'http://${_self.ip}:53320/#s=$token'
+      : 'https://${_self.ip}:${_self.port}/#s=$token';
+
+  @override
+  Stream<WebPairingRequest> get webPairing => _pairingCtrl.stream;
+
+  @override
+  List<Share> get shares => List.unmodifiable(_shares.where((s) => !s.expired));
+
+  @override
+  Stream<List<Share>> get sharesChanged => _sharesCtrl.stream;
+
+  @override
+  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) {
+    shareCalls.add((paths, ttl, maxDownloads));
+    if (paths.isEmpty) throw ArgumentError('nothing to share');
+    final token = 'tok${++_shareSeq}abcdefghijklmnop';
+    final s = Share(
+      id: 'share-$_shareSeq',
+      token: token,
+      files: [
+        for (final (i, p) in paths.indexed)
+          SharedFile(
+              'f$i',
+              p.split(RegExp(r'[\\/]')).lastWhere((x) => x.isNotEmpty,
+                  orElse: () => 'file'),
+              1000000,
+              'application/octet-stream'),
+      ],
+      url: _shareUrl(token),
+      httpUrl: _webHttp ? _shareUrl(token, http: true) : null,
+      createdAt: DateTime.now(),
+      expiresAt: ttl == null ? null : DateTime.now().add(ttl),
+      maxDownloads: maxDownloads,
+      downloadsLeft: maxDownloads,
+    );
+    _shares.add(s);
+    _sharesCtrl.add(shares);
+    return s;
+  }
+
+  @override
+  void revokeShare(String id) {
+    _shares.removeWhere((s) => s.id == id);
+    _sharesCtrl.add(shares);
+  }
+
+  @override
+  String? get webUrl => started ? 'https://${_self.ip}:${_self.port}/' : null;
+
+  @override
+  bool get webHttpEnabled => _webHttp;
+
+  @override
+  Future<void> setWebHttpEnabled(bool enabled) async {
+    _webHttp = enabled;
+    for (var i = 0; i < _shares.length; i++) {
+      _shares[i] = _copyShare(_shares[i]);
+    }
+    _sharesCtrl.add(shares);
+  }
+
+  @override
+  int? get webHttpPort => _webHttp && started ? 53320 : null;
+
+  @override
+  String? get webHttpUrl =>
+      _webHttp && started ? 'http://${_self.ip}:53320/' : null;
+
   Future<void> _simulate(
       String sid, Iterable<(String, int, String?)> files) async {
     for (final (id, size, name) in files) {

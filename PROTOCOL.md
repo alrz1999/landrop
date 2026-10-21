@@ -36,7 +36,7 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 - Capability record, in the info JSON as `landrop` and at GET /api/landrop/v1/capabilities:
     { "v": 1,
       "transports": [ { "id": "lan-https", "addrs": ["192.168.1.103"], "port": 53317 } ],
-      "features": ["resume", "folders"] }
+      "features": ["resume", "folders", "browser-ui"] }
     `addrs` = the advertised IP plus the non-VPN, non-link-local local IPv4 addresses. Parsers must
     ignore unknown transports, fields and features; a missing record means a plain LocalSend peer.
 - GET /api/landrop/v1/upload-status?sessionId=&fileId=&token=
@@ -58,3 +58,66 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 
 ## Trust
 Cert fingerprint pinned on first contact (TOFU) and shown in UI; receiver must accept each incoming request.
+
+## Browser access (LanDrop only; DESIGN.md section 4)
+Served on the HTTPS port and, when the owner turns it on, on a separate plain HTTP port
+(default 53320, else a free port, same bind address). The HTTP listener serves only the paths
+below; every other path, including all of `/api/localsend/v2/*`, `capabilities` and
+`upload-status`, is 404 there. The info `landrop.features` list contains `browser-ui`.
+
+Headers on every web response (page, JSON, file bytes, errors):
+`Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'`,
+`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Cache-Control: no-store`. JSON errors are `{ "message": ... }`.
+
+- GET|HEAD /  (also /index.html) -> the self-contained page (inline CSS/JS, no external requests)
+- GET  /api/landrop/v1/web/info -> { alias }
+- GET  /api/landrop/v1/web/session -> 200 { paired: true, expiresIn } | 401
+- POST /api/landrop/v1/web/pair -> 200 { id, code (4 digits), expiresIn } | 409 a pairing from this IP
+    is already waiting | 429 rate limited or 5 pairings already waiting | 403 nobody to ask
+    The app shows the same code with the browser summary ("Chrome on Android") and IP; the owner
+    approves or declines. Unanswered pairings expire after 60 s.
+- GET  /api/landrop/v1/web/pair/{id}  (long poll, up to 20 s; only from the IP that asked)
+    -> 200 { status: "pending" } | 200 { status: "approved", token, expiresIn } + Set-Cookie
+       | 403 { status: "declined" | "expired" } | 404 unknown id. The token is handed out once.
+    Cookie: `landrop_session=<token>; Max-Age=3600; Path=/; HttpOnly; SameSite=Strict` plus `; Secure`
+    on HTTPS only. The token (256-bit random) also works as `Authorization: Bearer <token>`. A
+    session is valid for 1 h and only from the IP that paired.
+- POST /api/landrop/v1/web/upload-prepare  (session required, else 401)
+    body { files: [ { id, fileName, size, fileType? } ] } -> exactly the prepare-upload answer:
+    200 { sessionId, files: { id: token }, cancelSecret } | 403 declined | 409 busy.
+    Runs the same code as prepare-upload (Accept dialog with sender "Browser <ip>", device type
+    `web`; names sanitised; folders get unique names). The receive session is bound to the browser
+    session.
+- POST /api/landrop/v1/web/upload?sessionId=&fileId=&token=[&offset=]  (session required, else 401)
+    body = raw bytes; same handler and answers as /api/localsend/v2/upload (`.part` file, size check,
+    unique final name), plus 403 when the receive session belongs to another browser session.
+- GET  /api/landrop/v1/shares/{token} -> 200 { alias, files: [ { id, name, size, mime } ],
+    expiresAt, expiresIn, maxDownloads, downloadsLeft } (null = no expiry / unlimited)
+- GET|HEAD /api/landrop/v1/shares/{token}/files/{fileId}[?inline=1] -> the bytes, streamed from disk.
+  Shares need no browser session: the token (128-bit random, base64url, 22 chars) is the credential.
+  Unknown, expired, revoked and exhausted tokens, unknown file ids and files that changed size or
+  disappeared since sharing all get the same 404 `{ "message": "not found" }`. File ids are random
+  (16 hex), never paths. Share links are `https://<ip>:<port>/#s=<token>`: the token is in the
+  fragment, so it is not sent in a request line, and `no-referrer` keeps it out of Referer.
+  Range: `Accept-Ranges: bytes`; one range per request: `bytes=a-b` (end clamped), `bytes=a-`,
+  `bytes=-n` -> 206 with `Content-Range: bytes a-b/size` and `Content-Length`; malformed, `b < a`,
+  start >= size, `bytes=-0` -> 416 with `Content-Range: bytes */size`; several ranges
+  (`bytes=0-1,5-6`) or a unit other than bytes -> the Range header is ignored and the whole file is
+  sent with 200. `Content-Type` from the file extension (text types get `; charset=utf-8`).
+  `Content-Disposition: attachment; filename="<ascii>"; filename*=UTF-8''<pct-encoded>`, or
+  `inline` with `?inline=1` for video/*, audio/*, PNG/JPEG/GIF/WebP/AVIF/BMP, PDF and plain text/CSV/
+  Markdown only (HTML, SVG, XML and other types are always attachments).
+- Download counting (shares with a limit). A download is one client IP reading one file:
+  1. A request from an IP with an open range sequence for that file (its last request less than
+     30 min ago) is served free and keeps the sequence open (a `<video>` seeking).
+  2. Otherwise, when no download is left (charged + full reads in flight >= limit): the 404 above.
+  3. A partial range (anything but byte 0 to the last byte) starts a sequence and is charged at once.
+     So rebuilding a file from ranges always costs a download.
+  4. A full read (no Range, or a Range from 0 to the last byte) holds a slot while it runs and is
+     charged only after every byte was written to the socket; an aborted full read is not charged.
+  HEAD is never charged. The listing returns 404 once no download is left.
+- Rate limit, per remote IP: pairing requests, declined or expired pairings, unknown pairing ids,
+  401s on upload endpoints, unknown/expired/exhausted share tokens or file ids count as attempts;
+  at 10 within 1 minute every web API request from that IP gets 429 (the page itself still loads).
+- Requests other than GET/HEAD with an `Origin` header whose host:port differs from `Host` get 403.

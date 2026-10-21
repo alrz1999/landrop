@@ -1,4 +1,5 @@
 // Small pure helpers used by the core.
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -10,6 +11,25 @@ String randomHex([int bytes = 16]) {
     sb.write(_rng.nextInt(256).toRadixString(16).padLeft(2, '0'));
   }
   return sb.toString();
+}
+
+/// [bytes] random bytes (default 128 bit) as URL-safe base64 without padding.
+String randomToken([int bytes = 16]) => base64Url
+    .encode(List<int>.generate(bytes, (_) => _rng.nextInt(256)))
+    .replaceAll('=', '');
+
+/// Uniformly random decimal code with [digits] digits (leading zeros kept).
+String randomDigits(int digits) =>
+    List.generate(digits, (_) => _rng.nextInt(10)).join();
+
+/// An HTTP error answered as `{ "message": ..., ...extra }` with [status].
+class HttpStatusError implements Exception {
+  final int status;
+  final String message;
+  final Map<String, dynamic>? extra; // merged into the JSON error body
+  HttpStatusError(this.status, this.message, [this.extra]);
+  @override
+  String toString() => 'HTTP $status: $message';
 }
 
 /// Reduce an untrusted, sender-supplied file name to a safe single path
@@ -123,21 +143,31 @@ const _mime = <String, String>{
   'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'pptx':
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'md': 'text/markdown',
+  'log': 'text/plain',
   'png': 'image/png',
   'jpg': 'image/jpeg',
   'jpeg': 'image/jpeg',
   'gif': 'image/gif',
   'webp': 'image/webp',
+  'avif': 'image/avif',
+  'bmp': 'image/bmp',
   'heic': 'image/heic',
   'svg': 'image/svg+xml',
   'mp3': 'audio/mpeg',
   'wav': 'audio/wav',
   'ogg': 'audio/ogg',
+  'oga': 'audio/ogg',
+  'opus': 'audio/ogg',
+  'flac': 'audio/flac',
+  'aac': 'audio/aac',
   'm4a': 'audio/mp4',
   'mp4': 'video/mp4',
+  'm4v': 'video/mp4',
   'mov': 'video/quicktime',
   'mkv': 'video/x-matroska',
   'webm': 'video/webm',
+  'ogv': 'video/ogg',
 };
 
 String guessMime(String fileName) {
@@ -146,6 +176,25 @@ String guessMime(String fileName) {
   return _mime[fileName.substring(dot + 1).toLowerCase()] ??
       'application/octet-stream';
 }
+
+/// Types a browser may display inline from a share without any risk of
+/// running script in the page's origin: audio, video, raster images, PDF and
+/// plain text. HTML, SVG, XML and everything else are always attachments.
+bool isInlineSafeMime(String mime) =>
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    const {
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/webp',
+      'image/avif',
+      'image/bmp',
+      'application/pdf',
+      'text/plain',
+      'text/csv',
+      'text/markdown',
+    }.contains(mime);
 
 bool _isPrivate(InternetAddress a) {
   final b = a.rawAddress;

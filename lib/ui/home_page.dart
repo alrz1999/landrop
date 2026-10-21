@@ -8,6 +8,7 @@ import '../core/api.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'settings_page.dart';
+import 'shares.dart';
 import 'widgets.dart';
 
 /// Picks files to send. Overridable for tests.
@@ -42,13 +43,21 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   StreamSubscription<IncomingRequest>? _sub;
-  final Queue<IncomingRequest> _pending = Queue();
+  StreamSubscription<WebPairingRequest>? _pairSub;
+
+  /// Incoming transfer requests and browser pairings, one dialog at a time.
+  final Queue<Object> _pending = Queue();
   bool _dialogOpen = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _sub ??= AppScope.read(context).incomingRequests.listen((r) {
+    final c = AppScope.read(context);
+    _sub ??= c.incomingRequests.listen((r) {
+      _pending.add(r);
+      _drainIncoming();
+    });
+    _pairSub ??= c.pairingRequests.listen((r) {
       _pending.add(r);
       _drainIncoming();
     });
@@ -58,7 +67,15 @@ class _HomePageState extends State<HomePage> {
     if (_dialogOpen) return;
     _dialogOpen = true;
     while (_pending.isNotEmpty && mounted) {
-      final req = _pending.removeFirst();
+      final next = _pending.removeFirst();
+      if (next is WebPairingRequest) {
+        if (next.decision.isCompleted) continue; // timed out by core
+        final ok = await showWebPairingDialog(context, next);
+        if (!mounted) break;
+        AppScope.read(context).respondPairing(next, ok);
+        continue;
+      }
+      final req = next as IncomingRequest;
       if (req.decision.isCompleted) continue; // e.g. timed out by core
       final ok = await showIncomingDialog(context, req);
       if (!mounted) break;
@@ -73,6 +90,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _sub?.cancel();
+    _pairSub?.cancel();
     super.dispose();
   }
 
@@ -234,11 +252,24 @@ class _HomePageState extends State<HomePage> {
         for (final s in c.sessions) TransferSessionCard(session: s),
       ],
     ];
+    final sharesSection = SharesSection(
+        pickFiles: widget.pickFiles, pickFolder: widget.pickFolder);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('LanDrop'),
         actions: [
+          IconButton(
+            key: const Key('sharesAction'),
+            tooltip: 'Shares',
+            icon: const Icon(Icons.ios_share),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => SharesPage(
+                        pickFiles: widget.pickFiles,
+                        pickFolder: widget.pickFolder))),
+          ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings_outlined),
@@ -277,6 +308,9 @@ class _HomePageState extends State<HomePage> {
               SelfCard(onEditAlias: _editAlias),
               ...peersSection,
               ...transfersSection,
+              sharesSection,
+              const SectionHeader('Use from a browser'),
+              const WebAccessCard(),
               const SectionHeader('Connect manually'),
               const QrCard(),
             ],
@@ -288,7 +322,11 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 8, 96),
-                children: [...peersSection, ...transfersSection],
+                children: [
+                  ...peersSection,
+                  ...transfersSection,
+                  sharesSection,
+                ],
               ),
             ),
             SizedBox(
@@ -299,6 +337,8 @@ class _HomePageState extends State<HomePage> {
                   SelfCard(onEditAlias: _editAlias),
                   const SectionHeader('Connect manually'),
                   const QrCard(),
+                  const SectionHeader('Use from a browser'),
+                  const WebAccessCard(),
                 ],
               ),
             ),

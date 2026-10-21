@@ -114,6 +114,7 @@ class AppController extends ChangeNotifier {
   String _saveDir;
   bool _background = true; // Android foreground service on/off
   bool _customDir = false; // user picked a folder; only then is it persisted
+  bool _webHttp = false; // plain HTTP listener for browsers (opt-in)
   CoreStatus status = CoreStatus.stopped;
   String? lastError;
   List<DeviceInfo> peers = const [];
@@ -123,6 +124,10 @@ class AppController extends ChangeNotifier {
   bool _disposed = false;
 
   final _incomingCtrl = StreamController<IncomingRequest>.broadcast();
+  final _pairingCtrl = StreamController<WebPairingRequest>.broadcast();
+
+  /// Active shares (DESIGN.md 4.2 mode 2), newest last.
+  List<Share> shares = const [];
   final List<StreamSubscription<dynamic>> _subs = [];
 
   /// Progress for sessions not (yet) known here, latest event per file.
@@ -134,6 +139,9 @@ class AppController extends ChangeNotifier {
   String get saveDir => _saveDir;
   bool get background => _background;
   Stream<IncomingRequest> get incomingRequests => _incomingCtrl.stream;
+
+  /// Browsers asking to be paired, to approve or decline in the UI.
+  Stream<WebPairingRequest> get pairingRequests => _pairingCtrl.stream;
 
   DeviceInfo? get self {
     if (status != CoreStatus.running) return null;
@@ -169,6 +177,24 @@ class AppController extends ChangeNotifier {
   }
 
   String? get selfUrl => selfIp == null ? null : 'https://$selfIp:$selfPort';
+
+  /// Address of the web page (`https://ip:port/`), when running.
+  String? get webUrl => _guard(() => core.webUrl);
+
+  /// Plain HTTP address of the web page, while that listener runs.
+  String? get webHttpUrl => _guard(() => core.webHttpUrl);
+
+  /// The user's choice for the plain HTTP listener (persisted).
+  bool get webHttpEnabled => _webHttp;
+
+  String? _guard(String? Function() f) {
+    if (status != CoreStatus.running) return null;
+    try {
+      return f();
+    } catch (_) {
+      return null;
+    }
+  }
 
   static String _defaultAlias() {
     try {
@@ -208,12 +234,18 @@ class AppController extends ChangeNotifier {
     }));
     _subs.add(core.incoming.listen(_incomingCtrl.add));
     _subs.add(core.progress.listen(_onProgress));
+    _subs.add(core.webPairing.listen(_pairingCtrl.add));
+    _subs.add(core.sharesChanged.listen((s) {
+      shares = s;
+      _notify();
+    }));
 
     final s = await _store.load();
     if (s['alias'] is String && (s['alias'] as String).trim().isNotEmpty) {
       _alias = s['alias'] as String;
     }
     if (s['background'] is bool) _background = s['background'] as bool;
+    if (s['webHttp'] is bool) _webHttp = s['webHttp'] as bool;
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
       _customDir = true;
@@ -238,6 +270,14 @@ class AppController extends ChangeNotifier {
       if (_background) await BackgroundService.start();
       await core.start(alias: _alias, saveDir: _saveDir);
       status = CoreStatus.running;
+      shares = core.shares;
+      if (_webHttp && !core.webHttpEnabled) {
+        try {
+          await core.setWebHttpEnabled(true);
+        } catch (e) {
+          lastError = 'Plain HTTP for browsers could not start: $e';
+        }
+      }
     } catch (e) {
       status = CoreStatus.error;
       lastError = '$e';
@@ -307,9 +347,37 @@ class AppController extends ChangeNotifier {
     SystemNavigator.pop();
   }
 
+  /// Turns the plain HTTP listener for browsers on or off (persisted).
+  Future<void> setWebHttp(bool on) async {
+    if (status == CoreStatus.running) await core.setWebHttpEnabled(on);
+    _webHttp = on;
+    await _persist();
+    _notify();
+  }
+
+  /// Shares files/folders with browsers. Throws when nothing can be shared.
+  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) {
+    final s = core.createShare(paths, ttl: ttl, maxDownloads: maxDownloads);
+    shares = core.shares;
+    _notify();
+    return s;
+  }
+
+  void revokeShare(String id) {
+    core.revokeShare(id);
+    shares = core.shares;
+    _notify();
+  }
+
+  /// Approve or decline a browser pairing.
+  void respondPairing(WebPairingRequest req, bool approve) {
+    if (!req.decision.isCompleted) req.decision.complete(approve);
+  }
+
   Future<void> _persist() => _store.save({
         'alias': _alias,
         'background': _background,
+        'webHttp': _webHttp,
         if (_customDir) 'saveDir': _saveDir,
       });
 
@@ -434,6 +502,7 @@ class AppController extends ChangeNotifier {
       s.cancel();
     }
     _incomingCtrl.close();
+    _pairingCtrl.close();
     core.stop().catchError((_) {});
     MulticastLock.release();
     BackgroundService.stop();

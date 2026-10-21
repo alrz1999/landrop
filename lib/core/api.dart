@@ -149,6 +149,70 @@ class SendResult {
   const SendResult({required this.ok, this.sessionId, this.error});
 }
 
+/// A browser asking to be allowed to send files (DESIGN.md 4.5). The page
+/// shows the same [code]; the owner completes [decision] with true (approve)
+/// or false (decline). The core completes it with false on timeout.
+class WebPairingRequest {
+  final String id;
+  final String code; // 4 digits
+  final String userAgent; // short summary, e.g. "Chrome on Android"
+  final String remoteIp;
+  final Completer<bool> decision = Completer<bool>();
+  WebPairingRequest(this.id, this.code, this.userAgent, this.remoteIp);
+}
+
+/// One file of a [Share]. [id] is opaque (never a path).
+class SharedFile {
+  final String id;
+
+  /// Base name, or a relative path with '/' for files from a shared folder.
+  final String name;
+  final int size;
+  final String mime;
+  const SharedFile(this.id, this.name, this.size, this.mime);
+}
+
+/// Files the owner offers to browsers through an unguessable link.
+class Share {
+  final String id;
+
+  /// 128-bit random, URL-safe. The only credential for the share.
+  final String token;
+  final List<SharedFile> files;
+
+  /// Null: until the owner stops it.
+  final DateTime? expiresAt;
+
+  /// Null: unlimited.
+  final int? maxDownloads;
+  final int? downloadsLeft;
+
+  /// `https://<ip>:<port>/#s=<token>` (token in the fragment, so it is never
+  /// sent in a request line or a Referer).
+  final String url;
+
+  /// Same link on the plain HTTP listener, when that is on.
+  final String? httpUrl;
+  final DateTime createdAt;
+
+  const Share({
+    required this.id,
+    required this.token,
+    required this.files,
+    required this.url,
+    required this.createdAt,
+    this.expiresAt,
+    this.maxDownloads,
+    this.downloadsLeft,
+    this.httpUrl,
+  });
+
+  int get totalBytes => files.fold(0, (a, f) => a + f.size);
+  bool get expired =>
+      expiresAt != null && !DateTime.now().isBefore(expiresAt!);
+  bool get exhausted => downloadsLeft != null && downloadsLeft! <= 0;
+}
+
 abstract class LanDropCore {
   /// Start HTTPS server, multicast discovery. Received files go to [saveDir].
   Future<void> start({required String alias, required String saveDir});
@@ -189,4 +253,34 @@ abstract class LanDropCore {
   /// and, when [targetIp] is given, probes that address (TCP, then TLS +
   /// info). [targetPort] defaults to the known peer's port, else 53317.
   Future<List<Finding>> runDiagnosis({String? targetIp, int? targetPort});
+
+  // ------------------------------------------------ browser access (DESIGN 4)
+
+  /// Browsers asking to be paired (allowed to send files).
+  Stream<WebPairingRequest> get webPairing;
+
+  /// Active shares (expired ones are left out).
+  List<Share> get shares;
+
+  /// Emits [shares] whenever a share is created, used, revoked or expires.
+  Stream<List<Share>> get sharesChanged;
+
+  /// Shares files and/or folders (folders recursively, keeping relative
+  /// paths). [ttl] null = until revoked; [maxDownloads] null = unlimited.
+  /// Throws [ArgumentError] when nothing can be shared.
+  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads});
+  void revokeShare(String id);
+
+  /// The web page on the HTTPS server, `https://<ip>:<port>/`. Null when the
+  /// core is not running.
+  String? get webUrl;
+
+  /// Optional plain HTTP listener for browsers only (no certificate warning,
+  /// no encryption). Off by default.
+  bool get webHttpEnabled;
+  Future<void> setWebHttpEnabled(bool enabled);
+  int? get webHttpPort;
+
+  /// `http://<ip>:<webHttpPort>/` while the HTTP listener runs, else null.
+  String? get webHttpUrl;
 }

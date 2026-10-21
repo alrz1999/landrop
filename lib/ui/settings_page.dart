@@ -31,6 +31,44 @@ class SettingsPage extends StatelessWidget {
     await c.resetSaveDir();
   }
 
+  Future<void> _setWebHttp(
+      BuildContext context, AppController c, bool on) async {
+    if (on) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: const Key('confirmWebHttp'),
+          icon: const Icon(Icons.warning_amber_rounded),
+          title: const Text('Turn on plain HTTP for browsers?'),
+          content: const Text(
+              'Browsers will open LanDrop without a certificate warning, but '
+              'nothing is encrypted: anyone on this Wi-Fi can read the files, '
+              'share links and pairing codes, and could pretend to be this '
+              'device. Use it only on a network you trust, such as your home '
+              'Wi-Fi, never on public or work networks.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                key: const Key('confirmWebHttpOn'),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Turn on')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      await c.setWebHttp(on);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not change plain HTTP: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
@@ -109,6 +147,26 @@ class SettingsPage extends StatelessWidget {
                 subtitle: Text(c.status.name),
                 onTap: c.restart,
               ),
+              const Divider(),
+              SwitchListTile(
+                key: const Key('webHttpSwitch'),
+                secondary: const Icon(Icons.no_encryption_gmailerrorred),
+                title: const Text(
+                    'Allow browsers without a certificate warning (plain HTTP)'),
+                subtitle: const Text(
+                    'Off is safer. When on, browser traffic is not encrypted: '
+                    'anyone on this network can see the files and pairing '
+                    'codes. Only for networks you trust.'),
+                value: c.webHttpEnabled,
+                onChanged: (v) => _setWebHttp(context, c, v),
+              ),
+              if (c.webHttpEnabled)
+                ListTile(
+                  key: const Key('webHttpUrlTile'),
+                  leading: const Icon(Icons.public),
+                  title: const Text('Browser address (plain HTTP)'),
+                  subtitle: SelectableText(c.webHttpUrl ?? 'Starting…'),
+                ),
             ],
           ),
         ),

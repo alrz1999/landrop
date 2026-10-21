@@ -9,10 +9,12 @@ import 'diagnosis.dart';
 import 'discovery.dart';
 import 'identity.dart';
 import 'util.dart';
+import 'web_server.dart';
 
 export 'discovery.dart' show DiscoveryTransport, MulticastDiscoveryTransport;
 export 'identity.dart' show TlsIdentity, fingerprintOfDer;
 export 'util.dart' show sanitizeFileName, sanitizeRelativePath;
+export 'web_server.dart' show parseRange, ByteRange, RangeNotSatisfiable;
 
 const _apiBase = '/api/localsend/v2';
 const _landropBase = '/api/landrop/v1';
@@ -80,6 +82,21 @@ class LanDropCoreOptions {
   final bool Function(String fileId, int sentBytes, int attempt)?
       debugKillUpload;
 
+  /// Plain HTTP listener for browsers (DESIGN.md 4.4 option 2). Null: off
+  /// at start (turn on with [LanDropCore.setWebHttpEnabled]; it then uses
+  /// port 53320 or a free one). 0: on, ephemeral port.
+  final int? httpPort;
+
+  /// Browser access: pairing timeout, pending pairing cap, failed attempts
+  /// per IP per [webRateWindow] before 429, browser session lifetime, and
+  /// how long a charged range sequence stays open (see [WebService]).
+  final Duration webPairingTimeout;
+  final int webMaxPendingPairings;
+  final int webRateLimit;
+  final Duration webRateWindow;
+  final Duration webSessionTtl;
+  final Duration webStreamWindow;
+
   const LanDropCoreOptions({
     this.port = 53317,
     this.portFallbackRange = 20,
@@ -104,17 +121,17 @@ class LanDropCoreOptions {
     this.uploadRetries = 3,
     this.retryBackoff = const Duration(milliseconds: 500),
     this.debugKillUpload,
+    this.httpPort,
+    this.webPairingTimeout = const Duration(seconds: 60),
+    this.webMaxPendingPairings = 5,
+    this.webRateLimit = 10,
+    this.webRateWindow = const Duration(minutes: 1),
+    this.webSessionTtl = const Duration(hours: 1),
+    this.webStreamWindow = const Duration(minutes: 30),
   });
 }
 
-class _HttpError implements Exception {
-  final int status;
-  final String message;
-  final Map<String, dynamic>? extra; // merged into the JSON error body
-  _HttpError(this.status, this.message, [this.extra]);
-  @override
-  String toString() => 'HTTP $status: $message';
-}
+typedef _HttpError = HttpStatusError;
 
 enum _Attempt { ok, retry, fatal }
 
@@ -157,7 +174,10 @@ class _InSession {
   final List<String> createdDirs = [];
   bool cancelled = false;
   Timer? idle;
-  _InSession(this.id, this.sender, this.files, this.cancelSecret);
+
+  /// Browser session that created it (browser uploads only).
+  final String? owner;
+  _InSession(this.id, this.sender, this.files, this.cancelSecret, {this.owner});
 
   bool get anyActive => files.values.any((f) => f.active);
   bool get allFinished => files.values.every((f) => f.finished);
@@ -189,7 +209,50 @@ class LanDropCoreImpl implements LanDropCore {
   /// Addresses advertised in the capability record (set on start).
   List<String> _capAddrs = const [];
 
+  /// Browser access (web page, pairing, shares, HTTP listener).
+  late final WebService _web = WebService(
+    config: WebConfig(
+      httpPort: options.httpPort,
+      bindAddress: options.bindAddress,
+      pairingTimeout: options.webPairingTimeout,
+      maxPendingPairings: options.webMaxPendingPairings,
+      rateLimit: options.webRateLimit,
+      rateWindow: options.webRateWindow,
+      sessionTtl: options.webSessionTtl,
+      streamWindow: options.webStreamWindow,
+    ),
+    selfInfo: () => self,
+    prepareUpload: (req, sender, files, owner) =>
+        _prepareIncoming(req, sender, files, owner: owner),
+    upload: (req, owner) => _handleUpload(req, owner: owner),
+  );
+
   static const _progressStep = 256 * 1024;
+
+  // ------------------------------------------------------- browser access
+
+  @override
+  Stream<WebPairingRequest> get webPairing => _web.pairing;
+  @override
+  List<Share> get shares => _web.shares;
+  @override
+  Stream<List<Share>> get sharesChanged => _web.sharesChanged;
+  @override
+  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) =>
+      _web.createShare(paths, ttl: ttl, maxDownloads: maxDownloads);
+  @override
+  void revokeShare(String id) => _web.revokeShare(id);
+  @override
+  String? get webUrl => _web.webUrl;
+  @override
+  bool get webHttpEnabled => _web.httpEnabled;
+  @override
+  Future<void> setWebHttpEnabled(bool enabled) =>
+      _web.setHttpEnabled(enabled);
+  @override
+  int? get webHttpPort => _web.httpPort;
+  @override
+  String? get webHttpUrl => _web.httpUrl;
 
   // ---------------------------------------------------------------- public
 
@@ -252,6 +315,7 @@ class LanDropCoreImpl implements LanDropCore {
         port: server.port);
 
     server.listen(_handle, onError: (_) {});
+    await _web.start();
     _discoveryError = null;
 
     final transport = options.discoveryTransport ??
@@ -298,6 +362,7 @@ class LanDropCoreImpl implements LanDropCore {
     _discovery = null;
     await _server?.close(force: true);
     _server = null;
+    await _web.stop();
     final s = _session;
     if (s != null) _endSession(s, reason: 'receiver stopped');
     _pendingDecision = false;
@@ -310,6 +375,7 @@ class LanDropCoreImpl implements LanDropCore {
   /// Stops and closes all streams. The instance cannot be reused afterwards.
   Future<void> dispose() async {
     await stop();
+    await _web.dispose();
     await _peerCtrl.close();
     await _incomingCtrl.close();
     await _progressCtrl.close();
@@ -911,7 +977,7 @@ class LanDropCoreImpl implements LanDropCore {
         transports: [
           TransportCapability('lan-https', addrs: _capAddrs, port: self.port),
         ],
-        features: const {'resume', 'folders'},
+        features: const {'resume', 'folders', 'browser-ui'},
       );
 
   DeviceInfo? _infoFromJson(Map<String, dynamic> j, String ip, int port) {
@@ -1059,6 +1125,7 @@ class LanDropCoreImpl implements LanDropCore {
 
   Future<void> _handle(HttpRequest req) async {
     final res = req.response;
+    if (_web.handles(req.uri.path)) return _web.handle(req, secure: true);
     try {
       final path = req.uri.path;
       final m = req.method;
@@ -1139,6 +1206,18 @@ class LanDropCoreImpl implements LanDropCore {
     final sender = _infoFromJson(infoJson, ip,
         infoJson['port'] is int ? infoJson['port'] as int : 53317);
     if (sender == null) throw _HttpError(400, 'invalid sender info');
+    await _prepareIncoming(req, sender, filesJson);
+  }
+
+  /// Validates and sanitises an offered file list, asks the UI (Accept
+  /// dialog), creates the receive session and answers [req]. Shared by
+  /// prepare-upload and browser uploads ([owner] = browser session id).
+  Future<void> _prepareIncoming(
+      HttpRequest req, DeviceInfo sender, Map<dynamic, dynamic> filesJson,
+      {String? owner}) async {
+    if (_pendingDecision || _session != null) {
+      throw _HttpError(409, 'busy');
+    }
     final offers = <String, FileOffer>{};
     final segments = <String, List<String>>{};
     for (final entry in filesJson.entries) {
@@ -1195,7 +1274,8 @@ class LanDropCoreImpl implements LanDropCore {
       }
       files[o.id] = _InFile(o, randomHex(16), dir, segs.last);
     }
-    final session = _InSession(sessionId, sender, files, randomHex(16));
+    final session =
+        _InSession(sessionId, sender, files, randomHex(16), owner: owner);
     _session = session;
     _touch(session);
     _json(req.response, 200, {
@@ -1256,7 +1336,8 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   /// Validates session id and file token for upload / upload-status.
-  (_InSession, _InFile) _authFile(HttpRequest req) {
+  /// With [owner] (browser uploads) the session must belong to that browser.
+  (_InSession, _InFile) _authFile(HttpRequest req, {String? owner}) {
     final q = req.uri.queryParameters;
     final sessionId = q['sessionId'];
     final fileId = q['fileId'];
@@ -1265,7 +1346,10 @@ class LanDropCoreImpl implements LanDropCore {
       throw _HttpError(400, 'missing parameters');
     }
     final s = _session;
-    if (s == null || s.id != sessionId || s.cancelled) {
+    if (s == null ||
+        s.id != sessionId ||
+        s.cancelled ||
+        (owner != null && s.owner != owner)) {
       throw _HttpError(403, 'invalid session');
     }
     final f = s.files[fileId];
@@ -1323,11 +1407,11 @@ class LanDropCoreImpl implements LanDropCore {
     return Directory(path);
   }
 
-  Future<void> _handleUpload(HttpRequest req) async {
+  Future<void> _handleUpload(HttpRequest req, {String? owner}) async {
     final _InSession s;
     final _InFile f;
     try {
-      (s, f) = _authFile(req);
+      (s, f) = _authFile(req, owner: owner);
     } catch (_) {
       await req.drain<void>();
       rethrow;

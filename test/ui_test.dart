@@ -287,4 +287,213 @@ void main() {
     expect(toLaptop.files.values.every((f) => f.done), isTrue);
     c.dispose();
   });
+
+  // ------------------------------------------------------ browser access
+
+  Future<void> scrollTo(WidgetTester tester, Finder f) async {
+    await tester.scrollUntilVisible(f, 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(f);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('pairing dialog shows the code; approve completes true',
+      (tester) async {
+    final core = await pumpApp(tester);
+    final r = core.simulatePairing();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pairingDialog')), findsOneWidget);
+    expect(find.text('Allow a browser to send you files?'), findsOneWidget);
+    expect(find.text('4821'), findsOneWidget);
+    expect(find.text('Safari on iPhone · 192.168.1.77'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('approvePairing')));
+    await tester.pumpAndSettle();
+    expect(await r.decision.future, isTrue);
+    expect(find.byKey(const Key('pairingDialog')), findsNothing);
+  });
+
+  testWidgets('pairing dialog decline completes false', (tester) async {
+    final core = await pumpApp(tester);
+    final r = core.simulatePairing(code: '0007');
+    await tester.pumpAndSettle();
+    expect(find.text('0007'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('declinePairing')));
+    await tester.pumpAndSettle();
+    expect(await r.decision.future, isFalse);
+    expect(find.byKey(const Key('pairingDialog')), findsNothing);
+  });
+
+  testWidgets('pairings queue behind incoming requests; timeout closes',
+      (tester) async {
+    final core = await pumpApp(tester);
+    final req = core.simulateIncoming(autoProgress: false);
+    final p1 = core.simulatePairing(code: '1111');
+    final p2 = core.simulatePairing(code: '2222');
+    await tester.pumpAndSettle();
+    expect(find.text('Pixel 9 wants to send you 2 files'), findsOneWidget);
+    expect(find.byKey(const Key('pairingDialog')), findsNothing);
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    expect(await req.decision.future, isTrue);
+    expect(find.text('1111'), findsOneWidget);
+    // The core times the first pairing out while it is on screen.
+    p1.decision.complete(false);
+    await tester.pumpAndSettle();
+    expect(find.text('1111'), findsNothing);
+    expect(find.text('2222'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('approvePairing')));
+    await tester.pumpAndSettle();
+    expect(await p2.decision.future, isTrue);
+    expect(find.byKey(const Key('pairingDialog')), findsNothing);
+  });
+
+  testWidgets('browser upload uses the normal incoming dialog and list',
+      (tester) async {
+    final core = await pumpApp(tester);
+    final req = core.simulateIncoming(
+        autoProgress: false,
+        from: const DeviceInfo(
+            alias: 'Browser 192.168.1.77',
+            deviceType: 'web',
+            deviceModel: 'Safari on iPhone',
+            fingerprint: '',
+            ip: '192.168.1.77',
+            port: 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Browser 192.168.1.77 wants to send you 2 files'),
+        findsOneWidget);
+    expect(find.text('Web browser at 192.168.1.77 · Safari on iPhone'),
+        findsOneWidget);
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    expect(await req.decision.future, isTrue);
+    expect(find.text('From Browser 192.168.1.77'), findsOneWidget);
+  });
+
+  testWidgets('share flow: pick, choose limits, card with copy and stop',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final core = await pumpApp(tester,
+        pick: () async => ['/x/movie.mp4', '/x/notes.txt']);
+    await scrollTo(tester, find.byKey(const Key('shareFiles')));
+    await tester.tap(find.byKey(const Key('shareFiles')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shareOptionsDialog')), findsOneWidget);
+    expect(find.text('Share 2 files'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ttl-15m')));
+    await tester.tap(find.byKey(const Key('max-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('confirmShare')));
+    await tester.pumpAndSettle();
+
+    final (paths, ttl, max) = core.shareCalls.single;
+    expect(paths, ['/x/movie.mp4', '/x/notes.txt']);
+    expect(ttl, const Duration(minutes: 15));
+    expect(max, 1);
+    final share = core.shares.single;
+    await scrollTo(tester, find.byKey(Key('stopShare-${share.id}')));
+    expect(find.text('movie.mp4 and 1 more'), findsOneWidget);
+    expect(find.text('1 of 1 downloads left'), findsOneWidget);
+    expect(find.textContaining('Ends in 1'), findsOneWidget);
+    expect(find.text(share.url), findsOneWidget);
+    expect(share.url, startsWith('https://192.168.1.10:53317/#s='));
+
+    core.simulateDownload(share.id);
+    await tester.pumpAndSettle();
+    expect(find.text('Download limit reached'), findsOneWidget);
+
+    await scrollTo(tester, find.byKey(Key('copyShare-${share.id}')));
+    await tester.tap(find.byKey(Key('copyShare-${share.id}')));
+    await tester.pumpAndSettle();
+    expect(copied, share.url);
+    // The "Sharing ..." snackbar from creating the share goes first.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Link copied'), findsOneWidget);
+
+    await tester.tap(find.byKey(Key('stopShare-${share.id}')));
+    await tester.pumpAndSettle();
+    expect(core.shares, isEmpty);
+    expect(find.byKey(Key('share-${share.id}')), findsNothing);
+  });
+
+  testWidgets('shares page from the app bar: folder share, browser card',
+      (tester) async {
+    final core = await pumpApp(tester,
+        pickFolder: () async => '/x/Holiday');
+    await tester.tap(find.byKey(const Key('sharesAction')));
+    await tester.pumpAndSettle();
+    expect(find.text('Shares'), findsOneWidget);
+    expect(find.textContaining('Nothing shared'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('shareFolder')));
+    await tester.pumpAndSettle();
+    expect(find.text('Share folder "Holiday"'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ttl-none')));
+    await tester.tap(find.byKey(const Key('confirmShare')));
+    await tester.pumpAndSettle();
+    final (paths, ttl, max) = core.shareCalls.single;
+    expect(paths, ['/x/Holiday']);
+    expect(ttl, isNull);
+    expect(max, isNull);
+    final id = core.shares.single.id;
+    expect(find.byKey(Key('share-$id')), findsOneWidget);
+    expect(find.text('Until you stop it'), findsOneWidget);
+    expect(find.text('Unlimited downloads'), findsOneWidget);
+    await scrollTo(tester, find.byKey(const Key('webUrl')));
+    expect(find.text('https://192.168.1.10:53317/'), findsOneWidget);
+    expect(find.textContaining('not private'), findsOneWidget);
+  });
+
+  testWidgets('home shows the browser card with the web URL', (tester) async {
+    await pumpApp(tester);
+    await scrollTo(tester, find.byKey(const Key('webUrl')));
+    expect(find.text('https://192.168.1.10:53317/'), findsOneWidget);
+    expect(find.textContaining('"Advanced" then "Proceed"'), findsOneWidget);
+    expect(find.byKey(const Key('webHttpUrl')), findsNothing);
+  });
+
+  testWidgets('settings: plain HTTP switch is off, asks before turning on',
+      (tester) async {
+    final core = await pumpApp(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    final sw = find.byKey(const Key('webHttpSwitch'));
+    await scrollTo(tester, sw);
+    expect(tester.widget<SwitchListTile>(sw).value, isFalse);
+    expect(find.textContaining('not encrypted'), findsOneWidget);
+
+    // Cancel keeps it off.
+    await tester.tap(sw);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confirmWebHttp')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(core.webHttpEnabled, isFalse);
+
+    await tester.tap(sw);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmWebHttpOn')));
+    await tester.pumpAndSettle();
+    expect(core.webHttpEnabled, isTrue);
+    expect(tester.widget<SwitchListTile>(sw).value, isTrue);
+    await scrollTo(tester, find.byKey(const Key('webHttpUrlTile')));
+    expect(find.text('http://192.168.1.10:53320/'), findsOneWidget);
+
+    // Turning it off needs no confirmation.
+    await scrollTo(tester, sw);
+    await tester.tap(sw);
+    await tester.pumpAndSettle();
+    expect(core.webHttpEnabled, isFalse);
+    expect(find.byKey(const Key('webHttpUrlTile')), findsNothing);
+  });
 }

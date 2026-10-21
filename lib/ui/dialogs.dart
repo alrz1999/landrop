@@ -46,7 +46,10 @@ Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req) async
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${req.sender.ip} · fingerprint ${shortFingerprint(req.sender.fingerprint)}',
+              req.sender.deviceType == 'web'
+                  ? 'Web browser at ${req.sender.ip}'
+                      '${req.sender.deviceModel == null ? '' : ' · ${req.sender.deviceModel}'}'
+                  : '${req.sender.ip} · fingerprint ${shortFingerprint(req.sender.fingerprint)}',
               style: Theme.of(ctx).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -93,6 +96,93 @@ Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req) async
     ),
   );
   return res ?? false;
+}
+
+/// Approve/Decline for a browser that wants to pair. Returns true on
+/// approve. Closes itself (false) when the core times the request out.
+Future<bool> showWebPairingDialog(
+    BuildContext context, WebPairingRequest req) async {
+  final res = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => _PairingDialog(req),
+  );
+  return res ?? false;
+}
+
+class _PairingDialog extends StatefulWidget {
+  const _PairingDialog(this.req);
+  final WebPairingRequest req;
+  @override
+  State<_PairingDialog> createState() => _PairingDialogState();
+}
+
+class _PairingDialogState extends State<_PairingDialog> {
+  bool _closed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Timed out (or answered elsewhere) while the dialog is open.
+    widget.req.decision.future.then((_) => _close(false));
+  }
+
+  void _close(bool approve) {
+    if (_closed || !mounted) return;
+    _closed = true;
+    Navigator.pop(context, approve);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final r = widget.req;
+    return AlertDialog(
+      key: const Key('pairingDialog'),
+      icon: const Icon(Icons.public),
+      title: const Text('Allow a browser to send you files?'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${r.userAgent} · ${r.remoteIp}', style: t.bodyMedium),
+            const SizedBox(height: 12),
+            Text('Code shown in the browser', style: t.labelMedium),
+            Semantics(
+              label: 'Pairing code ${r.code.split('').join(' ')}',
+              child: ExcludeSemantics(
+                child: Text(r.code,
+                    key: const Key('pairingCode'),
+                    style: t.displaySmall?.copyWith(
+                        letterSpacing: 8, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Approve only if the browser shows the same code. For the next '
+              'hour it can then offer you files; you still accept every '
+              'transfer.',
+              style: t.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('declinePairing'),
+          onPressed: () => _close(false),
+          child: const Text('Decline'),
+        ),
+        FilledButton(
+          key: const Key('approvePairing'),
+          onPressed: () => _close(true),
+          child: const Text('Approve'),
+        ),
+      ],
+    );
+  }
 }
 
 /// Asks for an IP (optionally ip:port). Returns (ip, port) or null.

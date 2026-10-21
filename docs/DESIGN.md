@@ -24,6 +24,7 @@ Non-goals for now: internet transfers through a relay, sync of folders, backgrou
 - `lib/core/discovery.dart`: pluggable discovery transport. The default is UDP multicast and broadcast. Tests inject an in-memory one.
 - `lib/core/identity.dart`: self-signed RSA-2048 certificate, generated in Dart, stored under `<saveDir>/.landrop/`.
 - `lib/core/util.dart`: file name sanitising, unique names, MIME guessing, local IPv4 lookup, VPN interface filter.
+- `lib/core/web_server.dart`, `lib/core/web_assets.dart`: browser access (section 4.8).
 - `lib/ui/`: Material 3 UI (home, settings, dialogs), `AppController` (a `ChangeNotifier`), a fake core for UI tests, and the Android helpers (`multicast_lock.dart`, `background_service.dart`, `storage_access.dart`).
 - `android/app/src/main/kotlin/.../MainActivity.kt` and `LanDropService.kt`: multicast lock, foreground service.
 - `PROTOCOL.md`: the wire protocol summary.
@@ -249,6 +250,19 @@ A browser cannot hold a pinned certificate fingerprint, so authorisation moves t
 
 The browser is just another client of the `lan-https` transport. It cannot use Wi-Fi Direct or BLE (browsers expose Web Bluetooth only partially, and not on iOS), so negotiation does not apply to it. The guided diagnosis from 3.7 still helps: if a browser cannot load the page, the same "AP isolation, VPN, firewall" explanation applies.
 
+### 4.8 Implemented (2026-10-21): web page, pairing, browser upload, shares, range streaming, plain HTTP opt-in
+
+Where it differs from 4.1-4.6 (wire details in PROTOCOL.md, "Browser access"):
+
+- `lib/core/web_server.dart` (`WebService`) and `lib/core/web_assets.dart` (the page as a Dart string). The core only routes web paths to it and lends it its receive pipeline: `prepare-upload` was split so `_prepareIncoming` (sanitising, Accept dialog, sessions) serves both LocalSend senders and browsers, and the upload handler takes an optional browser-session owner. No upload safety logic is duplicated.
+- Browser uploads do not call `prepare-upload`/`upload` directly (4.3) but `web/upload-prepare` and `web/upload`, which require a paired browser session and then run the same code. The owner still sees the normal Accept dialog ("Browser <ip>") and the transfer in the normal list.
+- Pairing (4.5): no token in the QR fragment. The browser asks (`web/pair`), both screens show a 4-digit code, the owner approves. Result: a 1-hour HttpOnly, SameSite=Strict cookie (also usable as a Bearer token), bound to the browser's IP. 60 s timeout, at most 5 pairings waiting, one per IP, and a per-IP limit of 10 failed attempts a minute (429).
+- Shares: `createShare` (files or folders, folders keep relative paths), expiry (15 min / 1 h / 24 h / until stopped) and a download limit (unlimited / 1 / 5) in the UI. Links are `https://ip:port/#s=<token>` with the token in the fragment. Range requests as in 4.2 mode 3, so `<video>`/`<audio>` previews seek. A limited share counts one download per client per file; ranges are charged at the first partial request, so they cannot be used to bypass the limit (rule in PROTOCOL.md and on `WebService`). Shares live in memory only and do not survive an app restart.
+- The plain HTTP listener (4.4 option 2) exists as an opt-in Settings switch with a confirmation dialog, off by default, on port 53320 (or a free one). It serves only the page, the web endpoints and shares, never the LocalSend device API, and its cookie is not `Secure`.
+- UI: "Share with a browser" section and a Shares screen (app bar) with link, QR, copy, remaining time and downloads, Stop sharing; a "Use from a browser" card with the address, QR and how to get past the certificate warning; the pairing dialog is queued with incoming requests.
+- Verified: `flutter test` (web_test.dart: ranges incl. 5 MB reassembly by sha256, identical 404s, traversal, limits, pairing, rate limit, timeout, HTTP listener, page static checks, a 30 MB two-core end-to-end run) and one manual run in a Chromium-based browser pane over the plain HTTP listener on loopback: page, audio preview, pairing and a 3 MB upload, byte-identical.
+- Not done: the Android notification does not mention active shares (4.6); no live streaming (mode 4); no logout endpoint (sessions just expire); not tried on real phones, Safari, Firefox, or over HTTPS with a real certificate warning; no scripted headless-browser test (section 7).
+
 ## 5. Protocol work needed for both steps
 
 - Resumable uploads: a way to ask "how many bytes do you have for this file" and continue from there. Needed for fallback during transfers and for large files over weak Wi-Fi.
@@ -281,7 +295,7 @@ Steps 3 and 4 are independent and can be built in parallel.
 
 ## 8. Open questions
 
-- Should plain HTTP for browsers exist at all, given the risk on shared networks?
+- Should plain HTTP for browsers exist at all, given the risk on shared networks? It is now implemented as an opt-in (4.8): off by default, a warning in Settings and a confirmation before it turns on, only the browser endpoints on that port, sessions bound to the browser's IP. Still open: anyone on the network can read the traffic, see share tokens and pairing codes, and pretend to be the device while it is on. Options to decide: keep it, limit it to a time window (turn off automatically after an hour), or drop it once option 1's warning proves acceptable to real users.
 - Is "All files access" on Android acceptable, or should received files use the system storage access framework and avoid the restricted permission (which would also allow a Google Play release)?
 - Is compatibility with official LocalSend clients a hard requirement, or only a convenience? If it is only a convenience, the protocol could move to its own authenticated session design sooner.
 - How much of this should a non-technical person ever see? The diagnosis messages in 3.7 are the main user-facing part and need wording review.
