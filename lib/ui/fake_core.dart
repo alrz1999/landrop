@@ -32,8 +32,16 @@ class FakeCore implements LanDropCore {
   String? saveDir;
   int _session = 0;
 
-  /// Every call to [send], recorded for tests.
+  /// Every call to [send] / [sendFiles], recorded for tests.
   final List<(DeviceInfo, List<String>)> sent = [];
+
+  /// Test hook: extra wait before a peer (by fingerprint) "accepts" a send,
+  /// so concurrent sends can get their session ids out of order.
+  final Map<String, Duration> acceptDelays = {};
+
+  /// Test hook: value of [discoveryError] (null = discovery is fine).
+  @override
+  String? discoveryError;
 
   static const List<DeviceInfo> defaultPeers = [
     DeviceInfo(
@@ -118,7 +126,10 @@ class FakeCore implements LanDropCore {
     _incomingCtrl.add(req);
     if (autoProgress) {
       req.decision.future.then((ok) {
-        if (ok) _simulate(req.sessionId, req.files.map((f) => (f.id, f.size)));
+        if (ok) {
+          _simulate(req.sessionId,
+              req.files.map((f) => (f.id, f.size, f.fileName)));
+        }
       });
     }
     return req;
@@ -155,23 +166,48 @@ class FakeCore implements LanDropCore {
   }
 
   @override
-  Future<bool> send(DeviceInfo to, List<String> paths) async {
-    sent.add((to, paths));
-    final files = <(String, int)>[];
-    for (var i = 0; i < paths.length; i++) {
+  Future<bool> send(DeviceInfo to, List<String> paths) async =>
+      (await sendFiles(to, [for (final p in paths) SendItem(p)])).ok;
+
+  @override
+  Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
+      {void Function(String sessionId)? onSession}) async {
+    sent.add((to, [for (final i in items) i.path]));
+    final files = <(String, int, String)>[];
+    for (final item in items) {
+      final base = item.name ??
+          item.path.split(RegExp(r'[\\/]')).lastWhere((s) => s.isNotEmpty,
+              orElse: () => 'file');
+      try {
+        final d = Directory(item.path);
+        if (d.existsSync()) {
+          for (final f in d.listSync(recursive: true).whereType<File>()) {
+            final rel = f.path
+                .substring(d.path.length)
+                .replaceAll('\\', '/')
+                .replaceAll(RegExp(r'^/+'), '');
+            files.add(('file${files.length}', f.lengthSync(), '$base/$rel'));
+          }
+          continue;
+        }
+      } catch (_) {}
       var size = 1000000;
       try {
-        final f = File(paths[i]);
+        final f = File(item.path);
         if (f.existsSync()) size = f.lengthSync();
       } catch (_) {}
-      files.add(('file$i', size));
+      files.add(('file${files.length}', size, base));
     }
-    await _simulate('out-${++_session}', files);
-    return true;
+    final sid = 'out-${++_session}';
+    await Future<void>.delayed(acceptDelays[to.fingerprint] ?? Duration.zero);
+    onSession?.call(sid);
+    await _simulate(sid, files);
+    return SendResult(ok: true, sessionId: sid);
   }
 
-  Future<void> _simulate(String sid, Iterable<(String, int)> files) async {
-    for (final (id, size) in files) {
+  Future<void> _simulate(
+      String sid, Iterable<(String, int, String?)> files) async {
+    for (final (id, size, name) in files) {
       for (var step = 1; step <= 4; step++) {
         await Future<void>.delayed(simulateDelay);
         _progressCtrl.add(TransferProgress(
@@ -180,6 +216,7 @@ class FakeCore implements LanDropCore {
           size * step ~/ 4,
           size,
           done: step == 4,
+          fileName: name,
         ));
       }
     }

@@ -11,9 +11,10 @@ import 'util.dart';
 
 export 'discovery.dart' show DiscoveryTransport, MulticastDiscoveryTransport;
 export 'identity.dart' show TlsIdentity, fingerprintOfDer;
-export 'util.dart' show sanitizeFileName;
+export 'util.dart' show sanitizeFileName, sanitizeRelativePath;
 
 const _apiBase = '/api/localsend/v2';
+const _landropBase = '/api/landrop/v1';
 const _protocolVersion = '2.1';
 
 class LanDropCoreOptions {
@@ -57,6 +58,23 @@ class LanDropCoreOptions {
   final Duration scanTimeout;
   final int scanConcurrency;
 
+  /// Sender: an upload with no bytes moving for this long is aborted and
+  /// resumed (see [uploadRetries]).
+  final Duration stallTimeout;
+
+  /// Sender: how many times a broken upload is resumed before giving up.
+  final int uploadRetries;
+
+  /// Sender: delay before the first resume; doubled for each further one.
+  final Duration retryBackoff;
+
+  /// Test seam: called on the sender for every chunk written to an upload
+  /// connection with the file id, bytes sent so far (including the resume
+  /// offset) and the attempt number (0 = first). Returning true kills that
+  /// connection, as if the network dropped.
+  final bool Function(String fileId, int sentBytes, int attempt)?
+      debugKillUpload;
+
   const LanDropCoreOptions({
     this.port = 53317,
     this.portFallbackRange = 20,
@@ -76,14 +94,23 @@ class LanDropCoreOptions {
     this.probeTimeout = const Duration(seconds: 3),
     this.scanTimeout = const Duration(milliseconds: 2500),
     this.scanConcurrency = 64,
+    this.stallTimeout = const Duration(seconds: 15),
+    this.uploadRetries = 3,
+    this.retryBackoff = const Duration(milliseconds: 500),
+    this.debugKillUpload,
   });
 }
 
 class _HttpError implements Exception {
   final int status;
   final String message;
-  _HttpError(this.status, this.message);
+  final Map<String, dynamic>? extra; // merged into the JSON error body
+  _HttpError(this.status, this.message, [this.extra]);
+  @override
+  String toString() => 'HTTP $status: $message';
 }
+
+enum _Attempt { ok, retry, fatal }
 
 class _Peer {
   DeviceInfo info;
@@ -92,16 +119,39 @@ class _Peer {
   _Peer(this.info) : lastSeen = DateTime.now();
 }
 
+/// One file of an accepted incoming session.
+class _InFile {
+  final FileOffer offer;
+  final String token;
+
+  /// Directory segments below saveDir (already sanitised, top-level folder
+  /// already made unique) and the sanitised file name.
+  final List<String> dirSegs;
+  final String name;
+
+  /// Temporary `.<name>.part` file; renamed to the final name when complete.
+  File? part;
+  bool active = false;
+  bool finished = false;
+  _InFile(this.offer, this.token, this.dirSegs, this.name);
+}
+
 class _InSession {
   final String id;
   final DeviceInfo sender;
-  final Map<String, FileOffer> files;
-  final Map<String, String> tokens;
-  final Set<String> finished = {};
-  final Set<String> active = {};
+  final Map<String, _InFile> files;
+
+  /// Given to the sender in prepare-upload; required by /cancel.
+  final String cancelSecret;
+
+  /// Directories this session created (deleted again if left empty).
+  final List<String> createdDirs = [];
   bool cancelled = false;
   Timer? idle;
-  _InSession(this.id, this.sender, this.files, this.tokens);
+  _InSession(this.id, this.sender, this.files, this.cancelSecret);
+
+  bool get anyActive => files.values.any((f) => f.active);
+  bool get allFinished => files.values.every((f) => f.finished);
 }
 
 class LanDropCoreImpl implements LanDropCore {
@@ -125,6 +175,7 @@ class LanDropCoreImpl implements LanDropCore {
 
   bool _pendingDecision = false;
   _InSession? _session;
+  String? _discoveryError;
 
   static const _progressStep = 256 * 1024;
 
@@ -154,6 +205,9 @@ class LanDropCoreImpl implements LanDropCore {
 
   @override
   Stream<IncomingRequest> get incoming => _incomingCtrl.stream;
+
+  @override
+  String? get discoveryError => _discoveryError;
 
   @override
   Stream<TransferProgress> get progress => _progressCtrl.stream;
@@ -186,6 +240,7 @@ class LanDropCoreImpl implements LanDropCore {
         port: server.port);
 
     server.listen(_handle, onError: (_) {});
+    _discoveryError = null;
 
     final transport = options.discoveryTransport ??
         (options.multicastEnabled
@@ -201,7 +256,15 @@ class LanDropCoreImpl implements LanDropCore {
       } catch (e) {
         // multicast unavailable; scanSubnet/addPeerByIp still work
         stderr.writeln('LanDrop: UDP discovery unavailable: $e');
+        _discoveryError = e is SocketException
+            ? (e.osError?.message.isNotEmpty == true
+                ? '${e.message}: ${e.osError!.message}'
+                : e.message)
+            : '$e';
         _discovery = null;
+        try {
+          await transport.close();
+        } catch (_) {}
       }
     }
     _pruneTimer = Timer.periodic(
@@ -223,8 +286,8 @@ class LanDropCoreImpl implements LanDropCore {
     _discovery = null;
     await _server?.close(force: true);
     _server = null;
-    _session?.idle?.cancel();
-    _session = null;
+    final s = _session;
+    if (s != null) _endSession(s, reason: 'receiver stopped');
     _pendingDecision = false;
     if (_peers.isNotEmpty) {
       _peers.clear();
@@ -282,22 +345,34 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   @override
-  Future<bool> send(DeviceInfo to, List<String> paths) async {
+  Future<bool> send(DeviceInfo to, List<String> paths) async =>
+      (await sendFiles(to, [for (final p in paths) SendItem(p)])).ok;
+
+  @override
+  Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
+      {void Function(String sessionId)? onSession}) async {
     if (!_running || _self == null) throw StateError('core not started');
-    if (to.fingerprint.isEmpty) return false;
+    if (to.fingerprint.isEmpty) {
+      return const SendResult(ok: false, error: 'peer has no fingerprint');
+    }
+    final List<(File, String, int)> expanded;
+    try {
+      expanded = await _expand(items);
+    } catch (e) {
+      return SendResult(ok: false, error: '$e');
+    }
+    if (expanded.isEmpty) {
+      return const SendResult(ok: false, error: 'nothing to send');
+    }
     final files = <String, (File, FileOffer)>{};
-    for (final p in paths) {
-      final f = File(p);
-      final size = await f.length();
-      final name = f.uri.pathSegments.lastWhere((s) => s.isNotEmpty,
-          orElse: () => 'file');
+    for (final (f, name, size) in expanded) {
       final id = randomHex(8);
       files[id] = (f, FileOffer(id, name, size, guessMime(name)));
     }
-    if (files.isEmpty) return false;
 
     final client = _newClient(expectFp: to.fingerprint);
     String? sessionId;
+    String? cancelSecret;
     try {
       // 1. prepare-upload (waits for the receiver's decision)
       final prep = await _postJson(
@@ -317,26 +392,44 @@ class LanDropCoreImpl implements LanDropCore {
           },
           expectFp: to.fingerprint,
           timeout: options.decisionTimeout + const Duration(seconds: 30));
-      if (prep.$1 != 200 || prep.$2 == null) return false;
-      sessionId = prep.$2!['sessionId'] as String?;
+      if (prep.$1 != 200 || prep.$2 == null) {
+        return SendResult(
+            ok: false,
+            error: switch (prep.$1) {
+              403 => 'declined',
+              409 => 'receiver is busy',
+              _ => 'HTTP ${prep.$1}',
+            });
+      }
+      final sid = prep.$2!['sessionId'];
       final tokens = prep.$2!['files'];
-      if (sessionId == null || tokens is! Map) return false;
+      if (sid is! String || tokens is! Map) {
+        return const SendResult(ok: false, error: 'invalid prepare response');
+      }
+      sessionId = sid;
+      final secret = prep.$2!['cancelSecret'];
+      cancelSecret = secret is String ? secret : null;
+      try {
+        onSession?.call(sid);
+      } catch (_) {}
 
-      // 2. upload each file
+      // 2. upload each file (resuming broken connections)
       for (final e in files.entries) {
         final token = tokens[e.key];
         if (token is! String) continue; // receiver skipped this file
-        final ok = await _uploadOne(client, to, sessionId, e.key, token,
-            e.value.$1, e.value.$2.size);
-        if (!ok) {
-          unawaited(_sendCancel(to, sessionId));
-          return false;
+        final err = await _uploadOne(client, to, sid, e.key, token,
+            e.value.$1, e.value.$2.size, e.value.$2.fileName);
+        if (err != null) {
+          unawaited(_sendCancel(to, sid, cancelSecret));
+          return SendResult(ok: false, sessionId: sid, error: err);
         }
       }
-      return true;
+      return SendResult(ok: true, sessionId: sid);
     } catch (e) {
-      if (sessionId != null) unawaited(_sendCancel(to, sessionId));
-      return false;
+      if (sessionId != null) {
+        unawaited(_sendCancel(to, sessionId, cancelSecret));
+      }
+      return SendResult(ok: false, sessionId: sessionId, error: '$e');
     } finally {
       client.close(force: true);
     }
@@ -344,52 +437,195 @@ class LanDropCoreImpl implements LanDropCore {
 
   // ------------------------------------------------------------ sending
 
-  Future<bool> _uploadOne(HttpClient client, DeviceInfo to, String sessionId,
-      String fileId, String token, File file, int size) async {
-    var sent = 0;
-    var lastEmit = 0;
-    _progressCtrl.add(TransferProgress(sessionId, fileId, 0, size));
+  static String _baseName(String path) => path
+      .split(RegExp(r'[\\/]'))
+      .lastWhere((s) => s.isNotEmpty, orElse: () => 'file');
+
+  /// Files to send as (file, name on the wire, size). Directories are listed
+  /// recursively; their files are named `<dir>/<relative path>` with '/'.
+  static Future<List<(File, String, int)>> _expand(List<SendItem> items) async {
+    final out = <(File, String, int)>[];
+    for (final it in items) {
+      final type = await FileSystemEntity.type(it.path);
+      if (type == FileSystemEntityType.directory) {
+        final root =
+            Directory(it.path).absolute.path.replaceAll(RegExp(r'[\\/]+$'), '');
+        final top = it.name ?? _baseName(root);
+        final entries = await Directory(root)
+            .list(recursive: true, followLinks: false)
+            .where((e) => e is File)
+            .cast<File>()
+            .toList();
+        entries.sort((a, b) => a.path.compareTo(b.path));
+        for (final f in entries) {
+          final rel = f.path.substring(root.length + 1).replaceAll('\\', '/');
+          out.add((f, '$top/$rel', await f.length()));
+        }
+      } else {
+        final f = File(it.path);
+        out.add((f, it.name ?? _baseName(it.path), await f.length()));
+      }
+    }
+    return out;
+  }
+
+  /// Uploads one file, resuming from the receiver's byte count when the
+  /// connection breaks or stalls. Returns null on success, else the error.
+  Future<String?> _uploadOne(HttpClient client, DeviceInfo to, String sessionId,
+      String fileId, String token, File file, int size, String name) async {
+    final q = {'sessionId': sessionId, 'fileId': fileId, 'token': token};
+    void emit(int sent, {bool done = false, String? error}) =>
+        _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size,
+            done: done, error: error, fileName: name));
+
+    emit(0);
+    var offset = 0;
+    String lastError = 'upload failed';
+    for (var attempt = 0; attempt <= options.uploadRetries; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
+        if (!_running) break;
+        try {
+          final st = await _uploadStatus(to, q);
+          if (st == null) continue; // receiver unreachable right now
+          if (st.done) {
+            emit(size, done: true);
+            return null;
+          }
+          offset = st.received;
+        } on _HttpError catch (e) {
+          lastError = e.message;
+          break; // session gone: not resumable
+        }
+      }
+      final (outcome, msg) =
+          await _uploadAttempt(client, to, q, fileId, file, offset, size,
+              attempt, emit);
+      if (outcome == _Attempt.ok) {
+        emit(size, done: true);
+        return null;
+      }
+      lastError = msg ?? lastError;
+      if (outcome == _Attempt.fatal) break;
+    }
+    emit(offset, done: true, error: lastError);
+    return lastError;
+  }
+
+  Future<(_Attempt, String?)> _uploadAttempt(
+      HttpClient client,
+      DeviceInfo to,
+      Map<String, String> q,
+      String fileId,
+      File file,
+      int offset,
+      int size,
+      int attempt,
+      void Function(int sent) emit) async {
+    var sent = offset;
+    var lastEmit = offset;
+    var lastActivity = DateTime.now();
+    var stalled = false;
+    Timer? watchdog;
     try {
       final req = await client
-          .postUrl(_uri(to.ip, to.port, '/upload', {
-            'sessionId': sessionId,
-            'fileId': fileId,
-            'token': token,
-          }))
+          .postUrl(_uri(to.ip, to.port, '/upload', {...q, 'offset': '$offset'}))
           .timeout(options.probeTimeout * 2);
-      req.contentLength = size;
+      req.contentLength = size - offset;
       req.headers.contentType = ContentType.binary;
-      await req.addStream(file.openRead().map((chunk) {
+      final tick = Duration(
+          milliseconds:
+              (options.stallTimeout.inMilliseconds ~/ 4).clamp(50, 1000));
+      watchdog = Timer.periodic(tick, (_) {
+        if (DateTime.now().difference(lastActivity) > options.stallTimeout) {
+          stalled = true;
+          watchdog?.cancel();
+          req.abort(TimeoutException('upload stalled'));
+        }
+      });
+      final kill = options.debugKillUpload;
+      var killed = false;
+      await req.addStream(file.openRead(offset).map((chunk) {
         sent += chunk.length;
+        lastActivity = DateTime.now();
         if (sent - lastEmit >= _progressStep) {
           lastEmit = sent;
-          _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size));
+          emit(sent);
+        }
+        if (!killed && kill != null && kill(fileId, sent, attempt)) {
+          killed = true;
+          req.abort(const SocketException('upload connection killed'));
         }
         return chunk;
       }));
       final res = await req.close();
+      lastActivity = DateTime.now();
       _checkPeerCert(res, to.fingerprint);
       await res.drain<void>();
-      if (res.statusCode != 200) {
-        _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size,
-            done: true, error: 'HTTP ${res.statusCode}'));
-        return false;
-      }
-      _progressCtrl.add(
-          TransferProgress(sessionId, fileId, sent, size, done: true));
-      return true;
+      return switch (res.statusCode) {
+        200 => (_Attempt.ok, null),
+        400 || 409 => (_Attempt.retry, 'HTTP ${res.statusCode}'),
+        _ => (_Attempt.fatal, 'HTTP ${res.statusCode}'),
+      };
+    } on HandshakeException catch (e) {
+      return (_Attempt.fatal, e.message);
     } catch (e) {
-      _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size,
-          done: true, error: e.toString()));
-      return false;
+      return (_Attempt.retry, stalled ? 'upload stalled' : '$e');
+    } finally {
+      watchdog?.cancel();
     }
   }
 
-  Future<void> _sendCancel(DeviceInfo to, String sessionId) async {
+  /// Asks the receiver how many bytes of a file it has. Waits (up to
+  /// [LanDropCoreOptions.stallTimeout]) while the receiver still sees the old
+  /// connection as active. Null when unreachable; throws [_HttpError] when the
+  /// session or token is no longer valid.
+  Future<({int received, bool done})?> _uploadStatus(
+      DeviceInfo to, Map<String, String> q) async {
+    final deadline = DateTime.now().add(options.stallTimeout);
+    final c = _newClient(expectFp: to.fingerprint);
+    try {
+      while (true) {
+        final req = await c
+            .getUrl(_uri(to.ip, to.port, '/upload-status', q, _landropBase))
+            .timeout(options.probeTimeout);
+        final res = await req.close().timeout(options.probeTimeout);
+        _checkPeerCert(res, to.fingerprint);
+        if (res.statusCode == 403) {
+          await res.drain<void>();
+          throw _HttpError(403, 'session no longer valid on receiver');
+        }
+        if (res.statusCode != 200) {
+          await res.drain<void>();
+          return null;
+        }
+        final j = await _readJsonStream(res).timeout(options.probeTimeout);
+        final received = j['received'];
+        if (received is! int) return null;
+        if (j['active'] == true && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          continue;
+        }
+        return (received: received, done: j['done'] == true);
+      }
+    } on _HttpError {
+      rethrow;
+    } catch (_) {
+      return null;
+    } finally {
+      c.close(force: true);
+    }
+  }
+
+  Future<void> _sendCancel(
+      DeviceInfo to, String sessionId, String? cancelSecret) async {
     final c = _newClient(expectFp: to.fingerprint);
     try {
       final req = await c
-          .postUrl(_uri(to.ip, to.port, '/cancel', {'sessionId': sessionId}))
+          .postUrl(_uri(to.ip, to.port, '/cancel', {
+            'sessionId': sessionId,
+            'cancelSecret': ?cancelSecret,
+          }))
           .timeout(options.probeTimeout);
       final res = await req.close().timeout(options.probeTimeout);
       await res.drain<void>();
@@ -401,12 +637,14 @@ class LanDropCoreImpl implements LanDropCore {
 
   // ------------------------------------------------------------ HTTP client
 
-  Uri _uri(String ip, int port, String path, [Map<String, String>? q]) => Uri(
-      scheme: 'https',
-      host: ip,
-      port: port,
-      path: '$_apiBase$path',
-      queryParameters: q);
+  Uri _uri(String ip, int port, String path,
+          [Map<String, String>? q, String base = _apiBase]) =>
+      Uri(
+          scheme: 'https',
+          host: ip,
+          port: port,
+          path: '$base$path',
+          queryParameters: q);
 
   /// HTTP client that accepts self-signed certs. If [expectFp] is set, only a
   /// certificate with that SHA-256 fingerprint is accepted (pinning).
@@ -659,6 +897,8 @@ class LanDropCoreImpl implements LanDropCore {
         await _handlePrepare(req);
       } else if (path == '$_apiBase/upload' && m == 'POST') {
         await _handleUpload(req);
+      } else if (path == '$_landropBase/upload-status' && m == 'GET') {
+        await _handleUploadStatus(req);
       } else if (path == '$_apiBase/cancel' && m == 'POST') {
         await req.drain<void>();
         _handleCancel(req);
@@ -667,7 +907,7 @@ class LanDropCoreImpl implements LanDropCore {
         throw _HttpError(404, 'not found');
       }
     } on _HttpError catch (e) {
-      _json(res, e.status, {'message': e.message});
+      _json(res, e.status, {'message': e.message, ...?e.extra});
     } catch (e) {
       _json(res, 500, {'message': 'internal error'});
     }
@@ -708,7 +948,7 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   Future<void> _handlePrepare(HttpRequest req) async {
-    final body = await _readJsonStream(req);
+    final body = await _readJsonStream(req, max: 16 << 20);
     if (_pendingDecision || _session != null) {
       throw _HttpError(409, 'busy');
     }
@@ -722,6 +962,7 @@ class LanDropCoreImpl implements LanDropCore {
         infoJson['port'] is int ? infoJson['port'] as int : 53317);
     if (sender == null) throw _HttpError(400, 'invalid sender info');
     final offers = <String, FileOffer>{};
+    final segments = <String, List<String>>{};
     for (final entry in filesJson.entries) {
       final f = entry.value;
       if (f is! Map) throw _HttpError(400, 'invalid file');
@@ -732,7 +973,10 @@ class LanDropCoreImpl implements LanDropCore {
         throw _HttpError(400, 'invalid file');
       }
       final type = f['fileType'];
-      offers[id] = FileOffer(id, name, size,
+      // Folder transfers carry relative paths; every segment is sanitised.
+      final segs = sanitizeRelativePath(name);
+      segments[id] = segs;
+      offers[id] = FileOffer(id, segs.join('/'), size,
           type is String ? type : 'application/octet-stream');
     }
     if (offers.isEmpty) throw _HttpError(400, 'no files');
@@ -757,107 +1001,268 @@ class LanDropCoreImpl implements LanDropCore {
     if (!accepted || !_running) throw _HttpError(403, 'declined');
     if (_session != null) throw _HttpError(409, 'busy');
 
-    final session = _InSession(sessionId, sender, offers,
-        {for (final id in offers.keys) id: randomHex(16)});
+    // Top-level folders get a unique name ("Photos (1)") so a second
+    // transfer of the same folder never merges into / overwrites the first.
+    final tops = <String, String>{};
+    final files = <String, _InFile>{};
+    for (final o in offers.values) {
+      final segs = segments[o.id]!;
+      var dir = <String>[];
+      if (segs.length > 1) {
+        final top = tops.putIfAbsent(
+            segs.first,
+            () => uniqueDirName(_saveDir, segs.first,
+                taken: tops.values.toSet()));
+        dir = [top, ...segs.sublist(1, segs.length - 1)];
+      }
+      files[o.id] = _InFile(o, randomHex(16), dir, segs.last);
+    }
+    final session = _InSession(sessionId, sender, files, randomHex(16));
     _session = session;
     _touch(session);
-    _json(req.response, 200, {'sessionId': sessionId, 'files': session.tokens});
+    _json(req.response, 200, {
+      'sessionId': sessionId,
+      'files': {for (final f in files.values) f.offer.id: f.token},
+      'cancelSecret': session.cancelSecret,
+    });
   }
 
   void _touch(_InSession s) {
     s.idle?.cancel();
     s.idle = Timer(options.sessionIdleTimeout, () {
-      if (identical(_session, s) && s.active.isEmpty) _endSession(s);
+      if (!identical(_session, s)) return;
+      // An upload still running has its own read timeout; check again later.
+      if (s.anyActive) {
+        _touch(s);
+      } else {
+        _endSession(s, reason: 'timed out');
+      }
     });
   }
 
-  void _endSession(_InSession s) {
+  /// Ends [s]. Unfinished files get an error progress event (when [reason]
+  /// is given) and their `.part` files are deleted, as are directories the
+  /// session created that are still empty.
+  void _endSession(_InSession s, {String? reason}) {
     s.idle?.cancel();
     if (identical(_session, s)) _session = null;
+    if (s.allFinished) return;
+    s.cancelled = true;
+    if (reason != null) {
+      for (final f in s.files.values) {
+        if (!f.finished && f.part != null && !f.active) {
+          _progressCtrl.add(TransferProgress(s.id, f.offer.id, 0, f.offer.size,
+              done: true, error: reason, fileName: f.offer.fileName));
+        }
+      }
+    }
+    unawaited(_cleanup(s));
   }
 
-  Future<void> _handleUpload(HttpRequest req) async {
+  Future<void> _cleanup(_InSession s) async {
+    for (final f in s.files.values) {
+      // Also for an active upload: it may be blocked waiting for data. (If
+      // the delete fails, e.g. on Windows, the upload deletes its part when
+      // it notices `cancelled`.)
+      if (!f.finished) {
+        try {
+          await f.part?.delete();
+        } catch (_) {}
+      }
+    }
+    for (final d in s.createdDirs.reversed) {
+      try {
+        await Directory(d).delete(); // only succeeds when empty
+      } catch (_) {}
+    }
+  }
+
+  /// Validates session id and file token for upload / upload-status.
+  (_InSession, _InFile) _authFile(HttpRequest req) {
     final q = req.uri.queryParameters;
     final sessionId = q['sessionId'];
     final fileId = q['fileId'];
     final token = q['token'];
     if (sessionId == null || fileId == null || token == null) {
-      await req.drain<void>();
       throw _HttpError(400, 'missing parameters');
     }
     final s = _session;
     if (s == null || s.id != sessionId || s.cancelled) {
-      await req.drain<void>();
       throw _HttpError(403, 'invalid session');
     }
-    final offer = s.files[fileId];
-    final expected = s.tokens[fileId];
-    if (offer == null || expected == null || expected != token) {
-      await req.drain<void>();
+    final f = s.files[fileId];
+    if (f == null || !_secretEquals(f.token, token)) {
       throw _HttpError(403, 'invalid token');
     }
-    if (s.finished.contains(fileId) || s.active.contains(fileId)) {
+    return (s, f);
+  }
+
+  static bool _secretEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var r = 0;
+    for (var i = 0; i < a.length; i++) {
+      r |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return r == 0;
+  }
+
+  Future<int> _partLength(_InFile f) async {
+    if (f.finished) return f.offer.size;
+    try {
+      return await f.part?.length() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _handleUploadStatus(HttpRequest req) async {
+    await req.drain<void>();
+    final (_, f) = _authFile(req);
+    _json(req.response, 200, {
+      'received': await _partLength(f),
+      'size': f.offer.size,
+      'active': f.active,
+      'done': f.finished,
+    });
+  }
+
+  /// Creates (one level at a time) the directory for [f] below saveDir and
+  /// checks, with symlinks resolved, that it is still inside saveDir.
+  Future<Directory> _dirFor(_InSession s, _InFile f) async {
+    final sep = Platform.pathSeparator;
+    var path = _saveDir;
+    for (final seg in f.dirSegs) {
+      path = '$path$sep$seg';
+      final d = Directory(path);
+      if (!await d.exists()) {
+        await d.create();
+        s.createdDirs.add(path);
+      }
+      if (!await isWithinDir(_saveDir, path)) {
+        throw _HttpError(403, 'unsafe path');
+      }
+    }
+    return Directory(path);
+  }
+
+  Future<void> _handleUpload(HttpRequest req) async {
+    final _InSession s;
+    final _InFile f;
+    try {
+      (s, f) = _authFile(req);
+    } catch (_) {
+      await req.drain<void>();
+      rethrow;
+    }
+    if (f.finished) {
       await req.drain<void>();
       throw _HttpError(409, 'file already uploaded');
     }
-    s.active.add(fileId);
+    if (f.active) {
+      await req.drain<void>();
+      throw _HttpError(
+          409, 'upload in progress', {'received': await _partLength(f)});
+    }
+    final offsetParam = req.uri.queryParameters['offset'];
+    final offset = offsetParam == null ? null : int.tryParse(offsetParam);
+    if (offsetParam != null && (offset == null || offset < 0)) {
+      await req.drain<void>();
+      throw _HttpError(400, 'invalid offset');
+    }
+    f.active = true;
     _touch(s);
 
-    final size = offer.size;
-    File? file;
+    final fileId = f.offer.id;
+    final size = f.offer.size;
     RandomAccessFile? raf;
     var received = 0;
     var lastEmit = 0;
-    _progressCtrl.add(TransferProgress(sessionId, fileId, 0, size));
+    var fatal = false;
+    void emit({bool done = false, String? error}) =>
+        _progressCtrl.add(TransferProgress(s.id, fileId, received, size,
+            done: done, error: error, fileName: f.offer.fileName));
     try {
-      file = await reserveUniqueFile(_saveDir, sanitizeFileName(offer.fileName));
-      raf = await file.open(mode: FileMode.writeOnly);
+      final dir = await _dirFor(s, f);
+      // Written under a hidden temporary name, renamed when complete.
+      f.part ??= await reserveUniqueFile(dir.path, '.${f.name}.part');
+      final have = await f.part!.length();
+      if (offset != null && offset != have) {
+        await req.drain<void>();
+        throw _HttpError(409, 'offset mismatch', {'received': have});
+      }
+      // No offset (plain LocalSend sender): start over.
+      received = offset ?? 0;
+      lastEmit = received;
+      raf = await f.part!.open(
+          mode: offset == null ? FileMode.writeOnly : FileMode.writeOnlyAppend);
+      emit();
       // `await for` + awaited writes = backpressure; never buffers the file.
-      await for (final chunk in req) {
-        if (s.cancelled || !_running) throw _HttpError(409, 'cancelled');
-        received += chunk.length;
-        if (received > size) throw _HttpError(400, 'more data than declared');
+      await for (final chunk in req.timeout(options.sessionIdleTimeout)) {
+        if (s.cancelled || !_running) {
+          fatal = true;
+          throw _HttpError(409, 'cancelled');
+        }
+        if (received + chunk.length > size) {
+          fatal = true;
+          throw _HttpError(400, 'more data than declared');
+        }
         await raf.writeFrom(chunk);
+        received += chunk.length;
         if (received - lastEmit >= _progressStep) {
           lastEmit = received;
-          _progressCtrl.add(TransferProgress(sessionId, fileId, received, size));
+          emit();
           _touch(s);
         }
       }
       await raf.close();
       raf = null;
-      if (received != size) throw _HttpError(400, 'incomplete upload');
-      s.active.remove(fileId);
-      s.finished.add(fileId);
-      _progressCtrl.add(
-          TransferProgress(sessionId, fileId, received, size, done: true));
-      if (s.finished.length == s.files.length) _endSession(s);
+      if (received != size) {
+        throw _HttpError(400, 'incomplete upload', {'received': received});
+      }
+      // Final size verified: move into place under a unique name. The
+      // placeholder reserved by reserveUniqueFile is overwritten by rename.
+      final target = await reserveUniqueFile(dir.path, f.name);
+      await f.part!.rename(target.path);
+      f.finished = true;
+      f.active = false;
+      emit(done: true);
+      if (s.allFinished) _endSession(s);
       _json(req.response, 200, {});
     } catch (e) {
-      s.active.remove(fileId);
+      f.active = false;
       try {
         await raf?.close();
       } catch (_) {}
-      try {
-        await file?.delete();
-      } catch (_) {}
-      _progressCtrl.add(TransferProgress(sessionId, fileId, received, size,
-          done: true, error: e is _HttpError ? e.message : e.toString()));
-      // Sender aborted or something failed: give up the whole session so
-      // we don't stay busy.
-      _endSession(s);
+      if (fatal || s.cancelled || !_running) {
+        try {
+          await f.part?.delete();
+        } catch (_) {}
+        emit(done: true, error: e is _HttpError ? e.message : '$e');
+        _endSession(s);
+      }
+      // Otherwise (connection dropped, stalled, short body) the .part is kept
+      // so the sender can resume until the session idles out.
       if (e is _HttpError) rethrow;
-      throw _HttpError(500, 'write failed');
+      throw _HttpError(500, 'upload failed');
+    } finally {
+      f.active = false;
+      _touch(s);
     }
   }
 
   void _handleCancel(HttpRequest req) {
-    final sid = req.uri.queryParameters['sessionId'];
+    final q = req.uri.queryParameters;
+    final sid = q['sessionId'];
+    final secret = q['cancelSecret'];
     final s = _session;
-    if (s != null && sid == s.id) {
-      s.cancelled = true;
-      _endSession(s);
+    if (s == null ||
+        sid != s.id ||
+        secret == null ||
+        !_secretEquals(s.cancelSecret, secret)) {
+      throw _HttpError(403, 'invalid session or cancel secret');
     }
+    s.cancelled = true;
+    _endSession(s, reason: 'cancelled by sender');
     _json(req.response, 200, {});
   }
 }

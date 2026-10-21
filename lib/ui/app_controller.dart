@@ -82,12 +82,15 @@ class TransferSession {
   final Map<String, FileTransfer> files = {};
   final DateTime started = DateTime.now();
 
-  /// Outgoing only: picked file names keyed by size, for matching core file ids.
-  final Map<int, List<String>> _pendingNamesBySize = {};
   bool? result; // outgoing: send() result
+  String? error; // outgoing: why send() failed
 
-  bool get done =>
-      files.isNotEmpty && files.values.every((f) => f.done || f.error != null);
+  /// Incoming: every file finished. Outgoing: send() returned (files appear
+  /// one at a time as the core starts them, so they cannot tell).
+  bool get done => incoming
+      ? files.isNotEmpty &&
+          files.values.every((f) => f.done || f.error != null)
+      : result != null;
   bool get hasError => files.values.any((f) => f.error != null);
 }
 
@@ -122,6 +125,11 @@ class AppController extends ChangeNotifier {
   final _incomingCtrl = StreamController<IncomingRequest>.broadcast();
   final List<StreamSubscription<dynamic>> _subs = [];
 
+  /// Progress for sessions not (yet) known here, latest event per file.
+  /// Applied when a send learns its session id or a request is accepted.
+  final Map<String, Map<String, TransferProgress>> _orphans = {};
+  bool _discoveryErrorDismissed = false;
+
   String get alias => _alias;
   String get saveDir => _saveDir;
   bool get background => _background;
@@ -144,6 +152,21 @@ class AppController extends ChangeNotifier {
   }
 
   int get selfPort => self?.port ?? 53317;
+
+  /// Why automatic discovery is not running (null when fine or dismissed).
+  String? get discoveryError {
+    if (_discoveryErrorDismissed || status != CoreStatus.running) return null;
+    try {
+      return core.discoveryError;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void dismissDiscoveryError() {
+    _discoveryErrorDismissed = true;
+    _notify();
+  }
 
   String? get selfUrl => selfIp == null ? null : 'https://$selfIp:$selfPort';
 
@@ -208,6 +231,7 @@ class AppController extends ChangeNotifier {
   Future<void> _start() async {
     status = CoreStatus.starting;
     lastError = null;
+    _discoveryErrorDismissed = false;
     _notify();
     try {
       await MulticastLock.acquire();
@@ -303,6 +327,7 @@ class AppController extends ChangeNotifier {
       s.files[f.id] = FileTransfer(f.id, f.fileName, f.size);
     }
     sessions.insert(0, s);
+    _bind(s, req.sessionId);
     _notify();
   }
 
@@ -321,28 +346,32 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  /// Sends files; progress shows up in [sessions]. Returns core result.
+  /// Sends files and/or folders; progress shows up in [sessions], keyed by
+  /// the session id the core reports. Returns the core result.
   Future<bool> send(DeviceInfo to, List<String> paths) async {
     final s = TransferSession(
       sessionId: '',
       incoming: false,
       peerAlias: to.alias,
     );
-    for (final p in paths) {
-      final name = p.split(RegExp(r'[\\/]')).last;
-      var size = -1;
-      try {
-        size = File(p).lengthSync();
-      } catch (_) {}
-      s._pendingNamesBySize.putIfAbsent(size, () => []).add(name);
-    }
     sessions.insert(0, s);
     _notify();
     bool ok;
     try {
-      ok = await core.send(to, paths);
+      final r = await core.sendFiles(
+        to,
+        [for (final p in paths) SendItem(p)],
+        onSession: (sid) {
+          _bind(s, sid);
+          _notify();
+        },
+      );
+      ok = r.ok;
+      s.error = r.error;
+      if (r.sessionId != null && s.sessionId.isEmpty) _bind(s, r.sessionId!);
     } catch (e) {
       ok = false;
+      s.error = '$e';
       lastError = '$e';
     }
     s.result = ok;
@@ -350,34 +379,40 @@ class AppController extends ChangeNotifier {
     return ok;
   }
 
-  void _onProgress(TransferProgress p) {
-    var s = sessions.where((x) => x.sessionId == p.sessionId).firstOrNull;
-    if (s == null) {
-      // Unknown session: assume it belongs to the oldest unbound outgoing send.
-      s = sessions.reversed
-          .where((x) => !x.incoming && x.sessionId.isEmpty && x.result == null)
-          .firstOrNull;
-      if (s != null) {
-        s.sessionId = p.sessionId;
-      } else {
-        s = TransferSession(
-            sessionId: p.sessionId, incoming: false, peerAlias: 'Unknown');
-        sessions.insert(0, s);
-      }
+  /// Gives [s] its session id and applies progress that arrived before.
+  void _bind(TransferSession s, String sessionId) {
+    s.sessionId = sessionId;
+    final early = _orphans.remove(sessionId);
+    for (final p in early?.values ?? const <TransferProgress>[]) {
+      _apply(s, p);
     }
-    final f = s.files.putIfAbsent(p.fileId, () {
-      final names = s!._pendingNamesBySize[p.totalBytes];
-      final name = (names != null && names.isNotEmpty)
-          ? names.removeAt(0)
-          : p.fileId;
-      return FileTransfer(p.fileId, name, p.totalBytes);
-    });
+  }
+
+  void _onProgress(TransferProgress p) {
+    final s = sessions
+        .where((x) => x.sessionId.isNotEmpty && x.sessionId == p.sessionId)
+        .firstOrNull;
+    if (s == null) {
+      // Not ours yet (e.g. the send call has not reported its id): keep it.
+      if (_orphans.length >= 32 && !_orphans.containsKey(p.sessionId)) {
+        _orphans.remove(_orphans.keys.first);
+      }
+      (_orphans[p.sessionId] ??= {})[p.fileId] = p;
+      return;
+    }
+    _apply(s, p);
+    _notify();
+  }
+
+  void _apply(TransferSession s, TransferProgress p) {
+    final f = s.files.putIfAbsent(p.fileId,
+        () => FileTransfer(p.fileId, p.fileName ?? p.fileId, p.totalBytes));
+    if (p.fileName != null) f.name = p.fileName!;
     f
       ..sent = p.sentBytes
       ..total = p.totalBytes
       ..done = p.done
       ..error = p.error;
-    _notify();
   }
 
   void clearFinished() {

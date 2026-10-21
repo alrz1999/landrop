@@ -101,6 +101,17 @@ Not verified: Windows, Linux, iOS; a router that blocks multicast and broadcast;
 - The Android app was frozen in the background, so the server stopped.
 - A persisted default folder would have blocked later default changes.
 
+### 2.9 Changes (2026-10-21, stabilise + resume + folders)
+
+Implemented from section 5 and roadmap steps 1 and 2, where it differs from the text above:
+
+- Progress is keyed by session id: `sendFiles()` reports the id through `onSession` and returns it; `send()` is a wrapper.
+- Received data goes to a hidden `.<name>.part` file, renamed on completion. Resume (`offset` on upload, `GET /api/landrop/v1/upload-status`) works only while the receiver keeps the session (idle timeout); `.part` files are deleted on cancel, timeout or stop, so there is no resume across restarts. No SHA-256 check, only the final size.
+- Folders are sent with relative paths and recreated under the save folder (2.5's "flattened" no longer holds). The top-level folder gets a unique name instead of merging.
+- `cancel` needs the `cancelSecret` from `prepare-upload`. This is a compatibility change: an official LocalSend sender cannot cancel a LanDrop receiver any more (the session then idles out).
+- Uploads are still authenticated only by the per-file token; no client certificates.
+- A discovery startup failure is shown as a dismissible banner on the home page.
+
 ## 3. Next step A: negotiate the best transport
 
 ### 3.1 Problem

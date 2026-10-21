@@ -3,6 +3,32 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import 'format.dart';
 
+/// One row of the incoming dialog: a loose file, or a top-level folder with
+/// the number and total size of the files below it.
+class IncomingEntry {
+  IncomingEntry(this.name, {required this.isFolder});
+  final String name;
+  final bool isFolder;
+  int files = 0;
+  int bytes = 0;
+}
+
+/// Groups offered files by their top-level folder (file names of folder
+/// transfers are relative paths with '/'), keeping the offer order.
+List<IncomingEntry> summarizeOffers(List<FileOffer> files) {
+  final out = <String, IncomingEntry>{};
+  for (final f in files) {
+    final slash = f.fileName.indexOf('/');
+    final isFolder = slash > 0;
+    final name = isFolder ? f.fileName.substring(0, slash) : f.fileName;
+    final e = out.putIfAbsent('${isFolder ? 'd' : 'f'}:$name',
+        () => IncomingEntry(name, isFolder: isFolder));
+    e.files++;
+    e.bytes += f.size;
+  }
+  return out.values.toList();
+}
+
 /// Accept/Decline dialog for an incoming request. Returns true on accept.
 Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req) async {
   final total = req.files.fold<int>(0, (a, f) => a + f.size);
@@ -25,19 +51,27 @@ Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req) async
             ),
             const SizedBox(height: 8),
             Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final f in req.files)
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.insert_drive_file_outlined),
-                      title: Text(f.fileName,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: Text(formatBytes(f.size)),
-                    ),
-                ],
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final e in summarizeOffers(req.files))
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(e.isFolder
+                            ? Icons.folder_outlined
+                            : Icons.insert_drive_file_outlined),
+                        title: Text(e.isFolder ? '${e.name}/' : e.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: e.isFolder
+                            ? Text('${e.files} file${e.files == 1 ? '' : 's'}')
+                            : null,
+                        trailing: Text(formatBytes(e.bytes)),
+                      ),
+                  ],
+                ),
               ),
             ),
             const Divider(),
@@ -126,11 +160,13 @@ class _AddByIpDialogState extends State<_AddByIpDialog> {
 
 /// Lets the user choose a peer. Returns null when cancelled.
 Future<DeviceInfo?> showPeerPicker(
-    BuildContext context, List<DeviceInfo> peers, int fileCount) {
+    BuildContext context, List<DeviceInfo> peers, int fileCount,
+    {String? label}) {
   return showDialog<DeviceInfo>(
     context: context,
     builder: (ctx) => SimpleDialog(
-      title: Text('Send $fileCount file${fileCount == 1 ? '' : 's'} to…'),
+      title: Text(
+          'Send ${label ?? '$fileCount file${fileCount == 1 ? '' : 's'}'} to…'),
       children: [
         if (peers.isEmpty)
           const Padding(

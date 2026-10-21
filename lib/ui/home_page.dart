@@ -20,9 +20,20 @@ Future<List<String>> defaultPickFiles() async {
   ];
 }
 
+/// Picks a folder to send. Overridable for tests.
+typedef FolderPicker = Future<String?> Function();
+
+Future<String?> defaultPickFolder() =>
+    FilePicker.getDirectoryPath(dialogTitle: 'Choose a folder to send');
+
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.pickFiles = defaultPickFiles});
+  const HomePage({
+    super.key,
+    this.pickFiles = defaultPickFiles,
+    this.pickFolder = defaultPickFolder,
+  });
   final FilesPicker pickFiles;
+  final FolderPicker pickFolder;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -94,6 +105,31 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _sendFolderFlow({DeviceInfo? to}) async {
+    final c = AppScope.read(context);
+    String? dir;
+    try {
+      dir = await widget.pickFolder();
+    } catch (e) {
+      _snack('Could not open folder picker: $e', error: true);
+      return;
+    }
+    if (dir == null || dir.isEmpty || !mounted) return;
+    final name = dir
+        .split(RegExp(r'[\\/]'))
+        .lastWhere((s) => s.isNotEmpty, orElse: () => dir!);
+    final peer = to ??
+        await showPeerPicker(context, c.peers, 1, label: 'folder "$name"');
+    if (peer == null) return;
+    final ok = await c.send(peer, [dir]);
+    _snack(
+      ok
+          ? 'Sent folder $name to ${peer.alias}'
+          : 'Sending to ${peer.alias} failed or was declined',
+      error: !ok,
+    );
+  }
+
   Future<void> _addByIp() async {
     final c = AppScope.read(context);
     final res = await showAddByIpDialog(context);
@@ -128,7 +164,25 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
+    final discoveryError = c.discoveryError;
     final peersSection = <Widget>[
+      if (discoveryError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: MaterialBanner(
+            key: const Key('discoveryBanner'),
+            leading: const Icon(Icons.wifi_off),
+            content: Text('Automatic discovery is unavailable: '
+                '$discoveryError. Use Rescan or Add by IP.'),
+            actions: [
+              TextButton(
+                key: const Key('dismissDiscoveryBanner'),
+                onPressed: c.dismissDiscoveryError,
+                child: const Text('Dismiss'),
+              ),
+            ],
+          ),
+        ),
       const SectionHeader('Nearby devices'),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -183,11 +237,26 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('sendFab'),
-        onPressed: _sendFlow,
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Send files'),
+      floatingActionButton: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        alignment: WrapAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            key: const Key('sendFolderFab'),
+            heroTag: 'sendFolder',
+            onPressed: _sendFolderFlow,
+            icon: const Icon(Icons.drive_folder_upload),
+            label: const Text('Send folder'),
+          ),
+          FloatingActionButton.extended(
+            key: const Key('sendFab'),
+            heroTag: 'sendFiles',
+            onPressed: _sendFlow,
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Send files'),
+          ),
+        ],
       ),
       body: LayoutBuilder(builder: (context, box) {
         final wide = box.maxWidth >= 840;

@@ -42,9 +42,34 @@ class TransferProgress {
   final int totalBytes;
   final bool done;
   final String? error;
+
+  /// Name (relative path with '/' for folder transfers) of the file, when
+  /// known. Lets the UI label a file without matching on sizes.
+  final String? fileName;
   const TransferProgress(this.sessionId, this.fileId, this.sentBytes,
       this.totalBytes,
-      {this.done = false, this.error});
+      {this.done = false, this.error, this.fileName});
+}
+
+/// Something to send: a file, or a directory (sent recursively, keeping
+/// relative paths under the directory's name).
+class SendItem {
+  final String path;
+
+  /// Name to use on the receiver instead of the base name of [path]. For a
+  /// directory this is the top-level folder name.
+  final String? name;
+  const SendItem(this.path, {this.name});
+}
+
+class SendResult {
+  /// True when the receiver accepted and every file was uploaded.
+  final bool ok;
+
+  /// Session id assigned by the receiver (null if it never accepted).
+  final String? sessionId;
+  final String? error;
+  const SendResult({required this.ok, this.sessionId, this.error});
 }
 
 abstract class LanDropCore {
@@ -69,6 +94,17 @@ abstract class LanDropCore {
   /// Re-scan /24 subnet (fallback when multicast is blocked).
   Future<void> scanSubnet();
 
+  /// Why automatic (UDP) discovery could not start, or null when it runs (or
+  /// is disabled). Rescan and manual IP still work when this is set.
+  String? get discoveryError;
+
   /// Send local file paths. Returns true when receiver accepted and all uploaded.
+  /// Thin wrapper around [sendFiles].
   Future<bool> send(DeviceInfo to, List<String> paths);
+
+  /// Send files and/or directories. [onSession] is called with the session id
+  /// as soon as the receiver accepts, before any progress for that session is
+  /// emitted, so callers can attribute [progress] events by session id.
+  Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
+      {void Function(String sessionId)? onSession});
 }

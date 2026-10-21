@@ -38,7 +38,9 @@ class _HubTransport implements DiscoveryTransport {
   Future<void> close() async => hub.members.remove(this);
 }
 
-LanDropCoreOptions _opts(int port, {DiscoveryTransport? transport}) =>
+LanDropCoreOptions _opts(int port,
+        {DiscoveryTransport? transport,
+        bool Function(String, int, int)? kill}) =>
     LanDropCoreOptions(
       port: port,
       bindAddress: InternetAddress.loopbackIPv4,
@@ -49,7 +51,49 @@ LanDropCoreOptions _opts(int port, {DiscoveryTransport? transport}) =>
       decisionTimeout: const Duration(seconds: 10),
       announceInterval: const Duration(milliseconds: 300),
       peerTimeout: const Duration(seconds: 2),
+      retryBackoff: const Duration(milliseconds: 50),
+      stallTimeout: const Duration(seconds: 5),
+      debugKillUpload: kill,
     );
+
+Future<File> _randomFile(String path, int bytes, int seed) async {
+  final f = File(path);
+  await f.parent.create(recursive: true);
+  final rnd = Random(seed);
+  final sink = f.openWrite();
+  for (var left = bytes; left > 0; left -= 1 << 20) {
+    sink.add(List<int>.generate(min(left, 1 << 20), (_) => rnd.nextInt(256)));
+  }
+  await sink.close();
+  return f;
+}
+
+/// Every file below [dir] (relative paths with '/'), following no links.
+List<String> _tree(Directory dir) => [
+      for (final e in dir.listSync(recursive: true, followLinks: false))
+        if (e is File)
+          e.path.substring(dir.path.length + 1).replaceAll('\\', '/')
+    ]..sort();
+
+Map<String, dynamic> _mallory(Map<String, Object> files) => {
+      'info': {
+        'alias': 'Mallory',
+        'version': '2.1',
+        'deviceType': 'desktop',
+        'fingerprint': 'cd' * 32,
+        'port': 1,
+        'protocol': 'https',
+      },
+      'files': {
+        for (final e in files.entries)
+          e.key: {
+            'id': e.key,
+            'fileName': e.value,
+            'size': 3,
+            'fileType': 'text/plain'
+          },
+      },
+    };
 
 Future<String> _sha(File f) async =>
     (await sha256.bind(f.openRead()).first).toString();
@@ -81,6 +125,35 @@ Future<(int, Map<String, dynamic>?)> _raw(
   } finally {
     c.close(force: true);
   }
+}
+
+Future<(int, Map<String, dynamic>?)> _rawStatus(
+    DeviceInfo to, String sid, String fileId, String token) async {
+  final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
+  try {
+    final req = await c.getUrl(Uri.https('${to.ip}:${to.port}',
+        '/api/landrop/v1/upload-status',
+        {'sessionId': sid, 'fileId': fileId, 'token': token}));
+    final res = await req.close();
+    final text = await res.transform(utf8.decoder).join();
+    Map<String, dynamic>? body;
+    try {
+      body = jsonDecode(text) as Map<String, dynamic>;
+    } catch (_) {}
+    return (res.statusCode, body);
+  } finally {
+    c.close(force: true);
+  }
+}
+
+class _FailingTransport implements DiscoveryTransport {
+  @override
+  Future<void> start(DiscoveryMessageHandler onMessage) async =>
+      throw const SocketException('no multicast here');
+  @override
+  Future<void> broadcast(Map<String, dynamic> message) async {}
+  @override
+  Future<void> close() async {}
 }
 
 void main() {
@@ -326,6 +399,322 @@ void main() {
     } finally {
       await c.dispose();
       await d.dispose();
+    }
+  });
+
+  test('resume: upload socket killed mid-file twice, transfer completes',
+      () async {
+    final attempts = <int, int>{}; // attempt -> first sentBytes seen
+    final c = LanDropCoreImpl(_opts(0, kill: (fileId, sent, attempt) {
+      attempts.putIfAbsent(attempt, () => sent);
+      return (attempt == 0 && sent >= 5 << 20) ||
+          (attempt == 1 && sent >= 12 << 20);
+    }));
+    await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+    try {
+      final src = await _randomFile('${tmp.path}/resume.bin', 20 << 20, 7);
+      answerB(true);
+      final prog = <TransferProgress>[];
+      final sub = c.progress.listen(prog.add);
+      final peer = (await c.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      String? announced;
+      final r = await c.sendFiles(peer, [SendItem(src.path)],
+          onSession: (sid) => announced = sid);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+      expect(r.ok, isTrue, reason: r.error);
+      expect(r.sessionId, announced);
+      // Three connections; the 2nd and 3rd continued from an offset.
+      expect(attempts.keys, containsAll([0, 1, 2]));
+      expect(attempts[1], greaterThan(1 << 20));
+      expect(attempts[2], greaterThan(attempts[1]!));
+      final dst = File('${dirB.path}/resume.bin');
+      expect(await dst.length(), 20 << 20);
+      expect(await _sha(dst), await _sha(src));
+      expect(_tree(dirB), ['resume.bin'], reason: 'no .part left behind');
+      expect(prog.last.done, isTrue);
+      expect(prog.last.error, isNull);
+      expect(prog.every((p) => p.sessionId == r.sessionId), isTrue);
+    } finally {
+      await c.dispose();
+    }
+  });
+
+  test('resume gives up after the retry limit and cleans up', () async {
+    final c = LanDropCoreImpl(_opts(0, kill: (_, sent, _) => sent >= 1 << 20));
+    await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+    try {
+      final src = await _randomFile('${tmp.path}/fail.bin', 3 << 20, 8);
+      answerB(true);
+      final peer = (await c.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final r = await c.sendFiles(peer, [SendItem(src.path)]);
+      expect(r.ok, isFalse);
+      expect(r.sessionId, isNotNull);
+      // The sender cancelled with its secret: part deleted, receiver free.
+      for (var i = 0; i < 50 && _tree(dirB).isNotEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      expect(_tree(dirB), isEmpty);
+      final small = File('${tmp.path}/ok.txt')..writeAsStringSync('ok');
+      expect(await c.send(peer, [small.path]), isTrue);
+    } finally {
+      await c.dispose();
+    }
+  });
+
+  test('.part file hides partial data; removed on cancel and decline',
+      () async {
+    // Decline: nothing at all is written.
+    answerB(false);
+    final x = File('${tmp.path}/x.txt')..writeAsStringSync('hello');
+    final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+    expect(await a.send(peer, [x.path]), isFalse);
+    expect(_tree(dirB), isEmpty);
+    await autoAnswer!.cancel();
+    answerB(true);
+
+    final (status, body) = await _raw('POST', b.self, '/prepare-upload',
+        json: {
+          ..._mallory({'f1': 'movie.bin'}),
+          'files': {
+            'f1': {'id': 'f1', 'fileName': 'movie.bin', 'size': 1 << 20}
+          },
+        });
+    expect(status, 200);
+    final sid = body!['sessionId'] as String;
+    final token = (body['files'] as Map)['f1'] as String;
+    final secret = body['cancelSecret'] as String;
+
+    final client = HttpClient()..badCertificateCallback = (_, _, _) => true;
+    try {
+      final req = await client.postUrl(Uri.parse(
+          'https://127.0.0.1:${b.self.port}/api/localsend/v2/upload'
+          '?sessionId=$sid&fileId=f1&token=$token'));
+      req.contentLength = 1 << 20;
+      req.add(List<int>.filled(100 * 1024, 7));
+      await req.flush();
+      List<String> tree = [];
+      for (var i = 0; i < 100; i++) {
+        tree = _tree(dirB);
+        if (tree.isNotEmpty &&
+            File('${dirB.path}/${tree.single}').lengthSync() >= 100 * 1024) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(tree, ['.movie.bin.part']);
+      expect(File('${dirB.path}/movie.bin').existsSync(), isFalse);
+
+      // upload-status reports the bytes in the .part file.
+      final st = await _rawStatus(b.self, sid, 'f1', token);
+      expect(st.$1, 200);
+      expect(st.$2!['received'], 100 * 1024);
+      expect(st.$2!['active'], isTrue);
+
+      expect((await _raw('POST', b.self, '/cancel',
+              query: {'sessionId': sid, 'cancelSecret': secret}))
+          .$1, 200);
+      for (var i = 0; i < 50 && _tree(dirB).isNotEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(_tree(dirB), isEmpty);
+      req.abort();
+    } finally {
+      client.close(force: true);
+    }
+  });
+
+  test('upload with a wrong offset gets 409 with the real length', () async {
+    answerB(true);
+    final (_, body) = await _raw('POST', b.self, '/prepare-upload',
+        json: _mallory({'f1': 'r.txt'}));
+    final sid = body!['sessionId'] as String;
+    final token = (body['files'] as Map)['f1'] as String;
+    final q = {'sessionId': sid, 'fileId': 'f1', 'token': token};
+    // Short body: receiver keeps 2 bytes in the .part file.
+    final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
+    final req = await c.postUrl(Uri.https('127.0.0.1:${b.self.port}',
+        '/api/localsend/v2/upload', {...q, 'offset': '0'}));
+    req.add([1, 2]);
+    expect((await req.close()).statusCode, 400);
+    c.close(force: true);
+    expect((await _rawStatus(b.self, sid, 'f1', token)).$2!['received'], 2);
+    final (bad, badBody) = await _raw('POST', b.self, '/upload',
+        query: {...q, 'offset': '1'}, bytes: [2, 3]);
+    expect(bad, 409);
+    expect(badBody!['received'], 2);
+    final (good, _) = await _raw('POST', b.self, '/upload',
+        query: {...q, 'offset': '2'}, bytes: [3]);
+    expect(good, 200);
+    expect(File('${dirB.path}/r.txt').readAsBytesSync(), [1, 2, 3]);
+    expect(_tree(dirB), ['r.txt']);
+    // Wrong token on upload-status.
+    expect((await _rawStatus(b.self, sid, 'f1', 'nope')).$1, 403);
+  });
+
+  test('cancel requires the session cancel secret', () async {
+    answerB(true);
+    final (_, body) = await _raw('POST', b.self, '/prepare-upload',
+        json: _mallory({'f1': 'c.txt'}));
+    final sid = body!['sessionId'] as String;
+    final token = (body['files'] as Map)['f1'] as String;
+    final secret = body['cancelSecret'] as String;
+    expect(secret, matches(RegExp(r'^[0-9a-f]{32}$')));
+
+    expect((await _raw('POST', b.self, '/cancel', query: {'sessionId': sid}))
+        .$1, 403);
+    expect((await _raw('POST', b.self, '/cancel',
+            query: {'sessionId': sid, 'cancelSecret': 'wrong'}))
+        .$1, 403);
+    expect((await _raw('POST', b.self, '/cancel',
+            query: {'sessionId': 'other', 'cancelSecret': secret}))
+        .$1, 403);
+    // Session still alive after the rejected cancels.
+    expect((await _rawStatus(b.self, sid, 'f1', token)).$1, 200);
+
+    expect((await _raw('POST', b.self, '/cancel',
+            query: {'sessionId': sid, 'cancelSecret': secret}))
+        .$1, 200);
+    // Session ended: uploads rejected, receiver free for a new request.
+    expect((await _raw('POST', b.self, '/upload',
+            query: {'sessionId': sid, 'fileId': 'f1', 'token': token},
+            bytes: [1, 2, 3]))
+        .$1, 403);
+    expect((await _raw('POST', b.self, '/prepare-upload',
+            json: _mallory({'f1': 'd.txt'})))
+        .$1, 200);
+  });
+
+  test('folder transfer recreates nested dirs byte-identically', () async {
+    final root = Directory('${tmp.path}/src/Photos');
+    final files = {
+      'a.jpg': await _randomFile('${root.path}/a.jpg', 300000, 1),
+      '2024/b.bin': await _randomFile('${root.path}/2024/b.bin', 1 << 20, 2),
+      '2024/deep/c.txt':
+          await _randomFile('${root.path}/2024/deep/c.txt', 10, 3),
+      'empty.txt': await _randomFile('${root.path}/empty.txt', 0, 4),
+    };
+    IncomingRequest? got;
+    autoAnswer = b.incoming.listen((r) {
+      got = r;
+      r.decision.complete(true);
+    });
+    final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+    final r = await a.sendFiles(peer, [SendItem(root.path)]);
+    expect(r.ok, isTrue, reason: r.error);
+    expect(got!.files.map((f) => f.fileName).toSet(),
+        {for (final k in files.keys) 'Photos/$k'});
+    expect(_tree(dirB), [for (final k in files.keys) 'Photos/$k']..sort());
+    for (final e in files.entries) {
+      expect(await _sha(File('${dirB.path}/Photos/${e.key}')),
+          await _sha(e.value));
+    }
+
+    // Same folder again: goes to "Photos (1)", the first copy is untouched.
+    File('${dirB.path}/Photos/a.jpg').writeAsStringSync('mine');
+    expect((await a.sendFiles(peer, [SendItem(root.path)])).ok, isTrue);
+    expect(File('${dirB.path}/Photos/a.jpg').readAsStringSync(), 'mine');
+    expect(await _sha(File('${dirB.path}/Photos (1)/2024/deep/c.txt')),
+        await _sha(files['2024/deep/c.txt']!));
+    expect(_tree(dirB).where((p) => p.endsWith('.part')), isEmpty);
+  });
+
+  test('hostile relative paths cannot escape saveDir', () async {
+    final outside = _tree(tmp).where((p) => !p.startsWith('b/')).toList();
+    // A symlink inside saveDir pointing outside must not be followed.
+    final escape = await Directory('${tmp.path}/escape').create();
+    Link('${dirB.path}/Evil').createSync(escape.path);
+    answerB(true);
+    final names = {
+      'f1': '../x',
+      'f2': 'a/../../x',
+      'f3': '/abs',
+      'f4': r'C:\x',
+      'f5': 'a//b',
+      'f6': r'..\..\..\win.ini',
+      'f7': 'Evil/payload',
+      'f8': '../../../../../../../../tmp/landrop_pwned',
+    };
+    final (status, body) = await _raw('POST', b.self, '/prepare-upload',
+        json: _mallory(names));
+    expect(status, 200);
+    final sid = body!['sessionId'] as String;
+    final tokens = body['files'] as Map;
+    for (final id in names.keys) {
+      final (up, _) = await _raw('POST', b.self, '/upload',
+          query: {'sessionId': sid, 'fileId': id, 'token': tokens[id]},
+          bytes: utf8.encode('pwn'));
+      expect(up, 200, reason: names[id]);
+    }
+    final inside = _tree(dirB);
+    expect(inside, hasLength(names.length));
+    expect(inside, containsAll(['x', 'a/x', 'abs', 'a/b', 'win.ini']));
+    expect(inside, contains('Evil (1)/payload'));
+    expect(escape.listSync(), isEmpty);
+    expect(_tree(tmp).where((p) => !p.startsWith('b/')).toList(), outside);
+    expect(File('/tmp/landrop_pwned').existsSync(), isFalse);
+
+    expect(sanitizeRelativePath('../x'), ['x']);
+    expect(sanitizeRelativePath('a/../../x'), ['a', 'x']);
+    expect(sanitizeRelativePath('/abs'), ['abs']);
+    expect(sanitizeRelativePath(r'C:\x'), ['x']);
+    expect(sanitizeRelativePath('a//b'), ['a', 'b']);
+    expect(sanitizeRelativePath('./.git/config'), ['git', 'config']);
+    expect(sanitizeRelativePath('..'), ['file']);
+    expect(sanitizeRelativePath(''), ['file']);
+  });
+
+  test('two concurrent sends to different peers keep progress separate',
+      () async {
+    final c = LanDropCoreImpl(_opts(0));
+    await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+    final toC = c.incoming.listen((r) async {
+      // Accept later than b, so session ids arrive out of call order.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      r.decision.complete(true);
+    });
+    try {
+      answerB(true);
+      final f1 = await _randomFile('${tmp.path}/for-c.bin', 2 << 20, 5);
+      final f2 = await _randomFile('${tmp.path}/for-b.bin', 3 << 20, 6);
+      final prog = <TransferProgress>[];
+      final sub = a.progress.listen(prog.add);
+      final peerC = (await a.addPeerByIp('127.0.0.1', port: c.self.port))!;
+      final peerB = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final order = <String>[];
+      final rs = await Future.wait([
+        a.sendFiles(peerC, [SendItem(f1.path)],
+            onSession: (s) => order.add('c:$s')),
+        a.sendFiles(peerB, [SendItem(f2.path)],
+            onSession: (s) => order.add('b:$s')),
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+      expect(rs.every((r) => r.ok), isTrue);
+      expect(order.first, startsWith('b:'), reason: 'b accepted first');
+      final sidC = rs[0].sessionId!, sidB = rs[1].sessionId!;
+      expect(sidC, isNot(sidB));
+      final forC = prog.where((p) => p.sessionId == sidC).toList();
+      final forB = prog.where((p) => p.sessionId == sidB).toList();
+      expect(forC.length + forB.length, prog.length);
+      expect(forC.every((p) => p.fileName == 'for-c.bin'), isTrue);
+      expect(forB.every((p) => p.fileName == 'for-b.bin'), isTrue);
+      expect(forC.last.sentBytes, 2 << 20);
+      expect(forB.last.sentBytes, 3 << 20);
+    } finally {
+      await toC.cancel();
+      await c.dispose();
+    }
+  });
+
+  test('discovery startup failure is reported, not swallowed', () async {
+    final c = LanDropCoreImpl(_opts(0, transport: _FailingTransport()));
+    try {
+      await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+      expect(c.discoveryError, contains('no multicast here'));
+      expect(a.discoveryError, isNull);
+    } finally {
+      await c.dispose();
     }
   });
 }

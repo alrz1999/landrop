@@ -13,6 +13,7 @@ class LanDropApp extends StatefulWidget {
     this.initialSaveDir,
     this.initialAlias,
     this.pickFiles = defaultPickFiles,
+    this.pickFolder = defaultPickFolder,
   });
 
   final LanDropCore core;
@@ -20,6 +21,7 @@ class LanDropApp extends StatefulWidget {
   final String? initialSaveDir;
   final String? initialAlias;
   final FilesPicker pickFiles;
+  final FolderPicker pickFolder;
 
   @override
   State<LanDropApp> createState() => _LanDropAppState();
@@ -64,7 +66,8 @@ class _LanDropAppState extends State<LanDropApp> {
               seedColor: seed, brightness: Brightness.dark),
           useMaterial3: true,
         ),
-        home: HomePage(pickFiles: widget.pickFiles),
+        home: HomePage(
+            pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
       ),
     );
   }

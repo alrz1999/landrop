@@ -32,6 +32,52 @@ String sanitizeFileName(String raw) {
   return name;
 }
 
+/// Split an untrusted, sender-supplied relative path (folder transfers use
+/// `Photos/2024/a.jpg`) into safe path segments. Backslashes count as
+/// separators; empty, `.` and `..` segments and a leading Windows drive
+/// (`C:`) are dropped; every remaining segment goes through
+/// [sanitizeFileName]. Never returns an empty list.
+List<String> sanitizeRelativePath(String raw) {
+  final parts = raw.replaceAll('\\', '/').split('/');
+  final out = <String>[];
+  for (var i = 0; i < parts.length; i++) {
+    final p = parts[i].trim();
+    if (p.isEmpty || p == '.' || p == '..') continue;
+    if (out.isEmpty && RegExp(r'^[A-Za-z]:$').hasMatch(p)) continue;
+    out.add(sanitizeFileName(p));
+  }
+  if (out.length > 64) out.removeRange(63, out.length - 1); // keep the name
+  return out.isEmpty ? ['file'] : out;
+}
+
+/// True when the existing directory [path], with symlinks resolved, is the
+/// existing directory [root] or inside it.
+Future<bool> isWithinDir(String root, String path) async {
+  try {
+    final r = await Directory(root).resolveSymbolicLinks();
+    final t = await Directory(path).resolveSymbolicLinks();
+    final sep = Platform.pathSeparator;
+    return t == r || t.startsWith(r.endsWith(sep) ? r : '$r$sep');
+  } catch (_) {
+    return false;
+  }
+}
+
+/// A directory name in [dir] based on [name] that does not exist yet and is
+/// not in [taken]: `Photos`, `Photos (1)`, ...
+String uniqueDirName(String dir, String name, {Set<String> taken = const {}}) {
+  final sep = Platform.pathSeparator;
+  for (var i = 0; i < 10000; i++) {
+    final candidate = i == 0 ? name : '$name ($i)';
+    if (taken.contains(candidate)) continue;
+    if (FileSystemEntity.typeSync('$dir$sep$candidate', followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      return candidate;
+    }
+  }
+  throw StateError('could not allocate a unique folder name');
+}
+
 /// Atomically reserve a non-existing file in [dir] named after [fileName],
 /// appending " (n)" before the extension on collision.
 Future<File> reserveUniqueFile(String dir, String fileName) async {

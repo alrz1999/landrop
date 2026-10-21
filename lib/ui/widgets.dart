@@ -211,13 +211,42 @@ class TransferSessionCard extends StatelessWidget {
   const TransferSessionCard({super.key, required this.session});
   final TransferSession session;
 
+  static const _maxFileRows = 5;
+
+  List<Widget> _summary(BuildContext context, TransferSession s) {
+    var sent = 0, total = 0, done = 0;
+    for (final f in s.files.values) {
+      sent += f.sent;
+      total += f.total;
+      if (f.done && f.error == null) done++;
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(children: [
+          Expanded(
+            child: Text('$done of ${s.files.length} files',
+                key: Key('summary-${s.sessionId}')),
+          ),
+          Text('${formatBytes(sent)} / ${formatBytes(total)}',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
+      const SizedBox(height: 4),
+      LinearProgressIndicator(
+        key: Key('progress-${s.sessionId}'),
+        value: total <= 0 ? null : (sent / total).clamp(0, 1),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = session;
     final scheme = Theme.of(context).colorScheme;
     String status;
     if (s.hasError || s.result == false) {
-      status = 'Failed';
+      status = s.error != null ? 'Failed: ${s.error}' : 'Failed';
     } else if (s.done || s.result == true) {
       status = 'Done';
     } else if (s.files.isEmpty) {
@@ -248,7 +277,9 @@ class TransferSessionCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,
                     style: TextStyle(
-                        color: status == 'Failed' ? scheme.error : null)),
+                        color: status.startsWith('Failed')
+                            ? scheme.error
+                            : null)),
               ),
             ]),
             if (s.files.isEmpty && s.result == null)
@@ -256,7 +287,14 @@ class TransferSessionCard extends StatelessWidget {
                 padding: EdgeInsets.only(top: 8),
                 child: LinearProgressIndicator(),
               ),
-            for (final f in s.files.values)
+            // Folders can hold hundreds of files: show one overall bar plus
+            // the files that are running or failed.
+            if (s.files.length > _maxFileRows) ..._summary(context, s),
+            for (final f in s.files.length > _maxFileRows
+                ? s.files.values
+                    .where((f) => f.error != null || (!f.done && f.sent > 0))
+                    .take(3)
+                : s.files.values)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Column(
