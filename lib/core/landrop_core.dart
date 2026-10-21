@@ -74,7 +74,7 @@ class LanDropCoreOptions {
     this.decisionTimeout = const Duration(seconds: 120),
     this.sessionIdleTimeout = const Duration(minutes: 2),
     this.probeTimeout = const Duration(seconds: 3),
-    this.scanTimeout = const Duration(milliseconds: 1200),
+    this.scanTimeout = const Duration(milliseconds: 2500),
     this.scanConcurrency = 64,
   });
 }
@@ -198,8 +198,9 @@ class LanDropCoreImpl implements LanDropCore {
         unawaited(_announce());
         _announceTimer =
             Timer.periodic(options.announceInterval, (_) => _announce());
-      } catch (_) {
+      } catch (e) {
         // multicast unavailable; scanSubnet/addPeerByIp still work
+        stderr.writeln('LanDrop: UDP discovery unavailable: $e');
         _discovery = null;
       }
     }

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
 import 'multicast_lock.dart';
+import 'storage_access.dart';
 
 /// Persists alias + save directory. The default implementation writes a small
 /// JSON file in the application support directory.
@@ -106,6 +107,7 @@ class AppController extends ChangeNotifier {
 
   String _alias;
   String _saveDir;
+  bool _customDir = false; // user picked a folder; only then is it persisted
   CoreStatus status = CoreStatus.stopped;
   String? lastError;
   List<DeviceInfo> peers = const [];
@@ -150,18 +152,23 @@ class AppController extends ChangeNotifier {
   }
 
   static Future<String> defaultSaveDir() async {
-    try {
-      final d = await getDownloadsDirectory();
-      if (d != null) return d.path;
-    } catch (_) {}
     if (Platform.isAndroid) {
-      // No Downloads dir via path_provider on Android; app-specific external
-      // storage needs no permission.
+      // Visible in the Files app: Downloads/LanDrop.
+      if (await ensureStorageAccess()) {
+        try {
+          await Directory(androidPublicDir).create(recursive: true);
+          return androidPublicDir;
+        } catch (_) {}
+      }
       try {
         final d = await getExternalStorageDirectory();
         if (d != null) return d.path;
       } catch (_) {}
     }
+    try {
+      final d = await getDownloadsDirectory();
+      if (d != null) return d.path;
+    } catch (_) {}
     final d = await getApplicationDocumentsDirectory();
     return d.path;
   }
@@ -181,6 +188,7 @@ class AppController extends ChangeNotifier {
     }
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
+      _customDir = true;
     }
     if (_saveDir.isEmpty) {
       try {
@@ -227,11 +235,29 @@ class AppController extends ChangeNotifier {
         (saveDir != null && saveDir.isNotEmpty && saveDir != _saveDir);
     if (!changed) return;
     if (a != null && a.isNotEmpty) _alias = a;
-    if (saveDir != null && saveDir.isNotEmpty) _saveDir = saveDir;
-    await _store.save({'alias': _alias, 'saveDir': _saveDir});
+    if (saveDir != null && saveDir.isNotEmpty && saveDir != _saveDir) {
+      await ensureStorageAccess();
+      _saveDir = saveDir;
+      _customDir = true;
+    }
+    await _persist();
     _notify();
     if (status != CoreStatus.stopped) await restart();
   }
+
+  /// Forget the custom folder and go back to the platform default.
+  Future<void> resetSaveDir() async {
+    _customDir = false;
+    _saveDir = await defaultSaveDir();
+    await _persist();
+    _notify();
+    if (status != CoreStatus.stopped) await restart();
+  }
+
+  Future<void> _persist() => _store.save({
+        'alias': _alias,
+        if (_customDir) 'saveDir': _saveDir,
+      });
 
   /// Complete an incoming request's decision and start tracking it.
   void respond(IncomingRequest req, bool accept) {

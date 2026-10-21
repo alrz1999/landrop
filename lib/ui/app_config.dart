@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../core/api.dart';
 import '../core/landrop_core.dart';
 import 'fake_core.dart';
@@ -6,4 +8,8 @@ import 'fake_core.dart';
 /// and the real network core.
 const bool useFake = false;
 
-LanDropCore createCore() => useFake ? FakeCore() : LanDropCoreImpl();
+LanDropCore createCore() => useFake
+    ? FakeCore()
+    : LanDropCoreImpl(LanDropCoreOptions(
+        deviceType:
+            Platform.isAndroid || Platform.isIOS ? 'mobile' : 'desktop'));

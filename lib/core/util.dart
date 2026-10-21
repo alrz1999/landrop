@@ -109,6 +109,14 @@ bool _isPrivate(InternetAddress a) {
       (b[0] == 192 && b[1] == 168);
 }
 
+/// VPN/tunnel interfaces: scanning or announcing on them wastes time and makes
+/// peers show up under the wrong address.
+bool isVpnInterface(String name) {
+  final n = name.toLowerCase();
+  return ['utun', 'tun', 'tap', 'ppp', 'ipsec', 'wg', 'vpn', 'tailscale']
+      .any(n.startsWith);
+}
+
 /// Non-loopback, non-link-local IPv4 addresses of this host, private first.
 Future<List<InternetAddress>> localIPv4Addresses() async {
   final out = <InternetAddress>[];
@@ -116,6 +124,7 @@ Future<List<InternetAddress>> localIPv4Addresses() async {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
     for (final i in ifaces) {
+      if (isVpnInterface(i.name)) continue;
       for (final a in i.addresses) {
         final r = a.rawAddress;
         if (r.length == 4 && !(r[0] == 169 && r[1] == 254) && !a.isLoopback) {

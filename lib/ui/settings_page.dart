@@ -25,8 +25,7 @@ class SettingsPage extends StatelessWidget {
   }
 
   Future<void> _resetDir(AppController c) async {
-    final d = await AppController.defaultSaveDir();
-    await c.updateSettings(saveDir: d);
+    await c.resetSaveDir();
   }
 
   @override
