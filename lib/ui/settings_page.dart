@@ -9,10 +9,66 @@ import 'dialogs.dart';
 import 'format.dart';
 import 'cable_wizard.dart';
 import 'hotspot_wizard.dart';
+import 'l10n.dart';
 import 'wifi_direct_page.dart';
 import 'wifi_join_page.dart';
 import 'shares.dart';
 import 'widgets.dart';
+
+const _systemLanguage = 'system';
+
+/// The language choice as shown in Settings: "System default" (translated),
+/// or the language's own name ("English", "فارسی"), never translated.
+String languageName(AppLocalizations l, Locale? locale) =>
+    switch (locale?.languageCode) {
+      null => l.settingsLanguageSystem,
+      'fa' => l.languagePersian,
+      _ => l.languageEnglish,
+    };
+
+/// Picks the app language; pops with 'system', 'en' or 'fa' (null when
+/// cancelled).
+class LanguageDialog extends StatelessWidget {
+  const LanguageDialog({super.key, this.current});
+
+  /// The current language code; null = system default.
+  final String? current;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l;
+    final options = [
+      (_systemLanguage, l.settingsLanguageSystem),
+      ('en', l.languageEnglish),
+      ('fa', l.languagePersian),
+    ];
+    return AlertDialog(
+      key: const Key('languageDialog'),
+      title: Text(l.settingsLanguage),
+      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+      content: RadioGroup<String>(
+        groupValue: current ?? _systemLanguage,
+        onChanged: (v) => Navigator.pop(context, v),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (code, name) in options)
+              RadioListTile<String>(
+                key: Key('language-$code'),
+                value: code,
+                title: Text(name),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.commonCancel)),
+      ],
+    );
+  }
+}
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, this.isAndroid});
@@ -37,6 +93,15 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _resetDir(AppController c) async {
     await c.resetSaveDir();
+  }
+
+  Future<void> _pickLanguage(BuildContext context, AppController c) async {
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => LanguageDialog(current: c.locale?.languageCode),
+    );
+    if (picked == null) return;
+    await c.setLocale(picked == _systemLanguage ? null : Locale(picked));
   }
 
   Future<void> _setWebHttp(
@@ -80,9 +145,10 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
+    final l = context.l;
     final fp = c.self?.fingerprint;
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(l.settingsTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
@@ -112,6 +178,14 @@ class SettingsPage extends StatelessWidget {
                 title: const Text('Reset to default folder'),
                 subtitle: const Text('Downloads, or Documents if unavailable'),
                 onTap: () => _resetDir(c),
+              ),
+              ListTile(
+                key: const Key('languageSettings'),
+                leading: const Icon(Icons.translate),
+                title: Text(l.settingsLanguage),
+                subtitle: Text(languageName(l, c.locale)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _pickLanguage(context, c),
               ),
               const Divider(),
               ListTile(

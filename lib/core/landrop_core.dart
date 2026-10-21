@@ -718,16 +718,27 @@ class LanDropCoreImpl implements LanDropCore {
       {void Function(String sessionId)? onSession}) async {
     if (!_running || _self == null) throw StateError('core not started');
     if (to.fingerprint.isEmpty) {
-      return const SendResult(ok: false, error: 'peer has no fingerprint');
+      return const SendResult(
+          ok: false,
+          error: 'peer has no fingerprint',
+          errorCode: SendErrorCode.unknown);
     }
     final List<(File, String, int)> expanded;
     try {
       expanded = await _expand(items);
     } catch (e) {
-      return SendResult(ok: false, error: '$e');
+      return SendResult(
+          ok: false,
+          error: '$e',
+          errorCode: e is FileSystemException
+              ? SendErrorCode.diskError
+              : SendErrorCode.unknown);
     }
     if (expanded.isEmpty) {
-      return const SendResult(ok: false, error: 'nothing to send');
+      return const SendResult(
+          ok: false,
+          error: 'nothing to send',
+          errorCode: SendErrorCode.unknown);
     }
     final files = <String, (File, FileOffer)>{};
     for (final (f, name, size) in expanded) {
@@ -774,12 +785,20 @@ class LanDropCoreImpl implements LanDropCore {
               403 => 'declined',
               409 => 'receiver is busy',
               _ => 'HTTP ${prep.$1}',
+            },
+            errorCode: switch (prep.$1) {
+              403 => SendErrorCode.declined,
+              409 => SendErrorCode.busy,
+              _ => SendErrorCode.unknown,
             });
       }
       final sid = prep.$2!['sessionId'];
       final tokens = prep.$2!['files'];
       if (sid is! String || tokens is! Map) {
-        return const SendResult(ok: false, error: 'invalid prepare response');
+        return const SendResult(
+            ok: false,
+            error: 'invalid prepare response',
+            errorCode: SendErrorCode.unknown);
       }
       sessionId = sid;
       final secret = prep.$2!['cancelSecret'];
@@ -797,7 +816,11 @@ class LanDropCoreImpl implements LanDropCore {
         if (err != null) {
           _selector.invalidate(to.fingerprint);
           unawaited(_sendCancel(route.link, sid, cancelSecret));
-          return SendResult(ok: false, sessionId: sid, error: err);
+          return SendResult(
+              ok: false,
+              sessionId: sid,
+              error: err,
+              errorCode: _uploadErrorCode(err));
         }
       }
       return SendResult(ok: true, sessionId: sid);
@@ -806,10 +829,50 @@ class LanDropCoreImpl implements LanDropCore {
       if (sessionId != null) {
         unawaited(_sendCancel(route.link, sessionId, cancelSecret));
       }
-      return SendResult(ok: false, sessionId: sessionId, error: '$e');
+      return SendResult(
+          ok: false,
+          sessionId: sessionId,
+          error: '$e',
+          errorCode: _sendExceptionCode(e));
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// [SendErrorCode] for an exception thrown while sending.
+  static SendErrorCode _sendExceptionCode(Object e) {
+    final cause = e is _ConnectFailed ? e.cause : e;
+    if (cause is HandshakeException) {
+      // The pinned client rejects a certificate only when its fingerprint
+      // differs (badCertificateCallback), which surfaces as VERIFY_FAILED.
+      final m = '$cause';
+      return m.contains('fingerprint') || m.contains('CERTIFICATE_VERIFY')
+          ? SendErrorCode.fingerprintMismatch
+          : SendErrorCode.unreachable;
+    }
+    if (cause is TimeoutException) return SendErrorCode.timeout;
+    if (cause is FileSystemException) return SendErrorCode.diskError;
+    if (cause is SocketException || e is _ConnectFailed) {
+      return SendErrorCode.unreachable;
+    }
+    return SendErrorCode.unknown;
+  }
+
+  /// [SendErrorCode] for the error string [_uploadOne] returns.
+  static SendErrorCode _uploadErrorCode(String err) {
+    if (err.contains('fingerprint')) return SendErrorCode.fingerprintMismatch;
+    if (err.contains('stalled')) return SendErrorCode.timeout;
+    if (err.contains('no longer valid') ||
+        err == 'HTTP 403' ||
+        err == 'HTTP 409') {
+      return SendErrorCode.cancelled;
+    }
+    if (err == 'HTTP 500' || err == 'HTTP 507') return SendErrorCode.diskError;
+    if (err.contains('FileSystemException')) return SendErrorCode.diskError;
+    if (err.contains('SocketException') || err.contains('Connection')) {
+      return SendErrorCode.unreachable;
+    }
+    return SendErrorCode.unknown;
   }
 
   /// [to] plus every address the peer table knows for it.

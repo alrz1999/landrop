@@ -38,6 +38,10 @@ body {
 }
 main, header { max-width: 680px; margin: 0 auto; padding: 0 16px; }
 header { padding-top: 20px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lang { min-width: 44px; padding: 0 12px; }
+html:lang(fa) body { font-family: Tahoma, "Segoe UI", system-ui, -apple-system, sans-serif; }
+body { text-align: start; }
 h1 { font-size: 1.5rem; margin: 0; }
 h2 { font-size: 1.15rem; margin: 0 0 8px; }
 section {
@@ -61,6 +65,7 @@ button:disabled { opacity: .5; cursor: default; }
 .code {
   font-size: 2.5rem; font-weight: 700; letter-spacing: .3em;
   font-variant-numeric: tabular-nums; margin: 8px 0;
+  direction: ltr; unicode-bidi: isolate; text-align: start;
 }
 .drop {
   display: block; border: 2px dashed var(--border); border-radius: 12px;
@@ -74,7 +79,7 @@ button:disabled { opacity: .5; cursor: default; }
 .files { list-style: none; margin: 8px 0 0; padding: 0; }
 .files li { border-top: 1px solid var(--border); padding: 10px 0; }
 .row { display: flex; gap: 12px; align-items: baseline; }
-.name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.name { flex: 1; min-width: 0; overflow-wrap: anywhere; unicode-bidi: isolate; text-align: start; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 progress { width: 100%; height: 10px; margin-top: 6px; accent-color: var(--accent); }
 .preview { display: block; max-width: 100%; max-height: 70vh; margin-top: 8px; border-radius: 8px; }
@@ -85,37 +90,40 @@ audio.preview { width: 100%; }
 </head>
 <body>
 <header>
-  <h1>LanDrop</h1>
+  <div class="top">
+    <h1>LanDrop</h1>
+    <button id="lang-btn" class="secondary lang" type="button" data-ta="langLabel" aria-label="Change language">فا</button>
+  </div>
   <p id="device" class="muted"></p>
 </header>
 <main>
   <section id="shared" hidden aria-labelledby="shared-h">
-    <h2 id="shared-h">Shared with you</h2>
-    <p id="shared-status" class="muted" role="status" aria-live="polite">Loading…</p>
+    <h2 id="shared-h" data-t="sharedWithYou">Shared with you</h2>
+    <p id="shared-status" class="muted" role="status" aria-live="polite" data-t="loading">Loading…</p>
     <ul id="shared-list" class="files"></ul>
   </section>
 
   <section id="send" aria-labelledby="send-h">
-    <h2 id="send-h">Send files to this device</h2>
+    <h2 id="send-h" data-t="sendTitle">Send files to this device</h2>
     <div id="pair">
-      <p class="muted">First the device owner has to allow this browser.</p>
-      <button id="pair-btn" type="button">Pair this browser</button>
+      <p class="muted" data-t="pairFirst">First the device owner has to allow this browser.</p>
+      <button id="pair-btn" type="button" data-t="pairBtn">Pair this browser</button>
       <div id="pair-code-box" hidden>
-        <p>Check that the device shows this code, then the owner approves it there:</p>
-        <p id="pair-code" class="code" aria-label="Pairing code"></p>
+        <p data-t="pairCheck">Check that the device shows this code, then the owner approves it there:</p>
+        <p id="pair-code" class="code" dir="ltr" data-ta="pairCodeLabel" aria-label="Pairing code"></p>
       </div>
       <p id="pair-status" role="status" aria-live="polite"></p>
     </div>
     <div id="upload" hidden>
       <label id="drop" class="drop" for="file-input">
-        <span>Choose files, or drop them here</span>
+        <span data-t="chooseFiles">Choose files, or drop them here</span>
         <input id="file-input" type="file" multiple>
       </label>
-      <button id="send-btn" type="button" disabled>Send</button>
+      <button id="send-btn" type="button" data-t="send" disabled>Send</button>
       <p id="upload-status" role="status" aria-live="polite"></p>
-      <ul id="upload-list" class="files" aria-label="Files to send"></ul>
+      <ul id="upload-list" class="files" data-ta="filesToSend" aria-label="Files to send"></ul>
       <div class="actions">
-        <button id="signout-btn" class="secondary" type="button">Sign out</button>
+        <button id="signout-btn" class="secondary" type="button" data-t="signOut">Sign out</button>
       </div>
     </div>
   </section>
@@ -128,6 +136,161 @@ audio.preview { width: 100%; }
   var picked = [];
   var busy = false;
 
+  // ------------------------------------------------------------ dictionary
+  // Every user-visible string of the page lives here. {0}, {1} are filled by
+  // tr(); numbers passed as arguments are formatted by fmtNum().
+  // REVIEW: Persian wording below is a first draft for native review:
+  // pairBtn / pairCheck ("اتصال" for "pair"), pairCodeLabel ("کد اتصال"),
+  // signOut ("خروج"), linkDead (long sentence), unpaired ("وصلش کنید" is
+  // colloquial, maybe "دوباره متصل کنید"), the unit names in `units`
+  // (کیلوبایت etc. versus KB), and "لینک" versus "پیوند".
+  var T = {
+    en: {
+      sharedWithYou: 'Shared with you',
+      loading: 'Loading…',
+      sendTitle: 'Send files to this device',
+      pairFirst: 'First the device owner has to allow this browser.',
+      pairBtn: 'Pair this browser',
+      pairCheck: 'Check that the device shows this code, then the owner approves it there:',
+      pairCodeLabel: 'Pairing code',
+      chooseFiles: 'Choose files, or drop them here',
+      send: 'Send',
+      signOut: 'Sign out',
+      filesToSend: 'Files to send',
+      langLabel: 'Change language',
+      connectedTo: 'Connected to {0}',
+      tooManyReload: 'Too many attempts. Wait a minute, then reload.',
+      tooMany: 'Too many attempts. Wait a minute and try again.',
+      linkDead: 'This link does not work any more. It may have expired, reached its download limit, or the owner stopped sharing.',
+      files1: '{0} file',
+      filesN: '{0} files',
+      availHours: 'available for {0} more hours',
+      availMin: 'available for {0} more min',
+      dl1: '{0} download left',
+      dlN: '{0} downloads left',
+      downloadBtn: 'Download',
+      openBtn: 'Open',
+      showBtn: 'Show',
+      playBtn: 'Play',
+      ariaDownload: 'Download {0}',
+      ariaOpen: 'Open {0}',
+      ariaShow: 'Show {0}',
+      ariaPlay: 'Play {0}',
+      progressOf: 'Progress of {0}',
+      pairExpired: 'No answer from the device in time. Try again.',
+      pairDenied: 'The device did not allow this browser.',
+      pairAsking: 'Asking the device…',
+      pairWaiting: 'Waiting for the owner to approve…',
+      pairConflict: 'A request from this device is already waiting on the owner\'s screen.',
+      unreachable: 'Could not reach the device.',
+      pairRejected: 'The device did not accept a pairing request.',
+      signedOut: 'Signed out. This browser can no longer send files until it is paired again.',
+      signoutFail: 'Could not sign out (error {0}).',
+      selected: '{0} selected',
+      skipped: 'skipped',
+      done: 'done',
+      failed: 'failed',
+      sentOf: 'Sent {0} of {1} file(s).',
+      sendingOf: 'Sending {0} of {1}…',
+      unpaired: 'This browser is no longer paired (it expired or the owner disconnected it). Pair it again.',
+      lost: 'The connection was lost.',
+      stopped: 'Sending stopped (error {0}).',
+      waitAccept: 'Waiting for the owner to accept…',
+      declined: 'The owner declined the files.',
+      busyDev: 'The device is busy with another transfer. Try again shortly.',
+      startFail: 'Could not start sending (error {0}).',
+      units: 'B,KB,MB,GB,TB'
+    },
+    fa: {
+      sharedWithYou: 'به اشتراک گذاشته شده با شما',
+      loading: 'در حال بارگذاری…',
+      sendTitle: 'ارسال فایل به این دستگاه',
+      pairFirst: 'ابتدا صاحب دستگاه باید به این مرورگر اجازه بدهد.',
+      pairBtn: 'اتصال این مرورگر',
+      pairCheck: 'مطمئن شوید دستگاه همین کد را نشان می‌دهد؛ سپس صاحب دستگاه آن را همان‌جا تأیید می‌کند:',
+      pairCodeLabel: 'کد اتصال',
+      chooseFiles: 'فایل‌ها را انتخاب کنید یا اینجا رها کنید',
+      send: 'ارسال',
+      signOut: 'خروج',
+      filesToSend: 'فایل‌های آمادهٔ ارسال',
+      langLabel: 'تغییر زبان',
+      connectedTo: 'متصل به {0}',
+      tooManyReload: 'تعداد تلاش‌ها زیاد بود. یک دقیقه صبر کنید و صفحه را دوباره باز کنید.',
+      tooMany: 'تعداد تلاش‌ها زیاد بود. یک دقیقه صبر کنید و دوباره امتحان کنید.',
+      linkDead: 'این لینک دیگر کار نمی‌کند. ممکن است منقضی شده باشد، به سقف دانلود رسیده باشد یا صاحب آن اشتراک‌گذاری را متوقف کرده باشد.',
+      files1: '{0} فایل',
+      filesN: '{0} فایل',
+      availHours: 'تا {0} ساعت دیگر در دسترس است',
+      availMin: 'تا {0} دقیقه دیگر در دسترس است',
+      dl1: '{0} بار دانلود باقی مانده',
+      dlN: '{0} بار دانلود باقی مانده',
+      downloadBtn: 'دانلود',
+      openBtn: 'باز کردن',
+      showBtn: 'نمایش',
+      playBtn: 'پخش',
+      ariaDownload: 'دانلود {0}',
+      ariaOpen: 'باز کردن {0}',
+      ariaShow: 'نمایش {0}',
+      ariaPlay: 'پخش {0}',
+      progressOf: 'پیشرفت {0}',
+      pairExpired: 'دستگاه به موقع پاسخ نداد. دوباره امتحان کنید.',
+      pairDenied: 'دستگاه به این مرورگر اجازه نداد.',
+      pairAsking: 'در حال پرسیدن از دستگاه…',
+      pairWaiting: 'در انتظار تأیید صاحب دستگاه…',
+      pairConflict: 'درخواستی از این مرورگر هم‌اکنون روی صفحهٔ صاحب دستگاه منتظر است.',
+      unreachable: 'به دستگاه وصل نشد.',
+      pairRejected: 'دستگاه درخواست اتصال را نپذیرفت.',
+      signedOut: 'خارج شدید. این مرورگر تا اتصال دوباره نمی‌تواند فایل بفرستد.',
+      signoutFail: 'خروج انجام نشد (خطای {0}).',
+      selected: '{0} فایل انتخاب شد',
+      skipped: 'رد شد',
+      done: 'انجام شد',
+      failed: 'ناموفق',
+      sentOf: '{0} از {1} فایل ارسال شد.',
+      sendingOf: 'در حال ارسال {0} از {1}…',
+      unpaired: 'اتصال این مرورگر دیگر معتبر نیست (منقضی شده یا صاحب دستگاه آن را قطع کرده). دوباره آن را متصل کنید.',
+      lost: 'ارتباط قطع شد.',
+      stopped: 'ارسال متوقف شد (خطای {0}).',
+      waitAccept: 'در انتظار پذیرفتن فایل‌ها توسط صاحب دستگاه…',
+      declined: 'صاحب دستگاه فایل‌ها را نپذیرفت.',
+      busyDev: 'دستگاه با انتقال دیگری مشغول است. کمی بعد دوباره امتحان کنید.',
+      startFail: 'ارسال شروع نشد (خطای {0}).',
+      units: 'بایت,کیلوبایت,مگابایت,گیگابایت,ترابایت'
+    }
+  };
+
+  // ------------------------------------------------------------ language
+  var lang = 'en';
+  try {
+    var saved = localStorage.getItem('landrop-lang');
+    if (saved === 'fa' || saved === 'en') lang = saved;
+    else lang = /^fa/i.test(navigator.language || '') ? 'fa' : 'en';
+  } catch (e) {
+    lang = /^fa/i.test(navigator.language || '') ? 'fa' : 'en';
+  }
+
+  function fmtNum(v) {
+    var s = String(v);
+    if (lang !== 'fa') return s;
+    return s.replace(/[0-9]/g, function (d) {
+      return String.fromCharCode(0x06F0 + Number(d));
+    }).replace('.', '\u066B');
+  }
+  function tr(key, args) {
+    var s = T[lang][key];
+    if (s === undefined) s = T.en[key];
+    if (s === undefined) return key;
+    return s.replace(/\{(\d)\}/g, function (m, i) {
+      var a = args ? args[Number(i)] : '';
+      return typeof a === 'number' ? fmtNum(a) : String(a === undefined ? '' : a);
+    });
+  }
+  function t(key) { return tr(key, null); }
+  // Plural: keys base + '1' (exactly one) and base + 'N'.
+  function tn(base, n) { return base + (n === 1 ? '1' : 'N'); }
+  // First-strong isolate, so a file name cannot reorder the text around it.
+  function iso(s) { return '\u2068' + s + '\u2069'; }
+
   function $(id) { return document.getElementById(id); }
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -135,18 +298,88 @@ audio.preview { width: 100%; }
     if (text !== undefined && text !== null) e.textContent = String(text);
     return e;
   }
-  function setText(id, text, cls) {
-    var e = $(id);
-    e.textContent = text || '';
-    if (cls !== undefined) e.className = cls;
+  // Text bound to a dictionary key: refreshed when the language changes.
+  function tx(e, key, args) {
+    e.removeAttribute('data-sz');
+    e.setAttribute('data-t', key);
+    e._a = args || [];
+    e.textContent = tr(key, e._a);
+    return e;
+  }
+  function tel(tag, cls, key, args) { return tx(el(tag, cls), key, args); }
+  // aria-label bound to a dictionary key.
+  function ax(e, key, args) {
+    e.setAttribute('data-ta', key);
+    e._aa = args || [];
+    e.setAttribute('aria-label', tr(key, e._aa));
   }
   function fmt(n) {
     if (typeof n !== 'number' || !isFinite(n)) return '';
-    if (n < 1024) return n + ' B';
-    var u = ['KB', 'MB', 'GB', 'TB'], i = -1;
+    var u = t('units').split(',');
+    if (n < 1024) return fmtNum(n) + ' ' + u[0];
+    var i = 0;
     do { n = n / 1024; i++; } while (n >= 1024 && i < u.length - 1);
-    return n.toFixed(n >= 100 ? 0 : 1) + ' ' + u[i];
+    return fmtNum(n.toFixed(n >= 100 ? 0 : 1)) + ' ' + u[i];
   }
+  // A size (or "loaded / total") that is re-rendered on language change.
+  function sz(e, a, b) {
+    e.removeAttribute('data-t');
+    e.setAttribute('data-sz', '1');
+    e._s = [a, b];
+    e.textContent = b === undefined ? fmt(a) : fmt(a) + ' / ' + fmt(b);
+    return e;
+  }
+  // Message area: key null clears it.
+  function setMsg(id, key, args, cls) {
+    var e = $(id);
+    if (key) {
+      tx(e, key, args);
+    } else {
+      e.removeAttribute('data-t');
+      e.textContent = '';
+    }
+    if (cls !== undefined) e.className = cls;
+  }
+  var alias = null;
+  function showAlias() {
+    var e = $('device');
+    e.textContent = '';
+    if (alias === null) return;
+    var parts = t('connectedTo').split('{0}');
+    e.appendChild(document.createTextNode(parts[0]));
+    e.appendChild(el('bdi', '', alias));
+    e.appendChild(document.createTextNode(parts[1] || ''));
+  }
+  function applyLang() {
+    var root = document.documentElement;
+    root.lang = lang;
+    root.dir = lang === 'fa' ? 'rtl' : 'ltr';
+    var i, n, list;
+    list = document.querySelectorAll('[data-t]');
+    for (i = 0; i < list.length; i++) {
+      n = list[i];
+      n.textContent = tr(n.getAttribute('data-t'), n._a);
+    }
+    list = document.querySelectorAll('[data-sz]');
+    for (i = 0; i < list.length; i++) {
+      n = list[i];
+      n.textContent = n._s[1] === undefined ? fmt(n._s[0]) : fmt(n._s[0]) + ' / ' + fmt(n._s[1]);
+    }
+    list = document.querySelectorAll('[data-ta]');
+    for (i = 0; i < list.length; i++) {
+      n = list[i];
+      n.setAttribute('aria-label', tr(n.getAttribute('data-ta'), n._aa));
+    }
+    showAlias();
+    var lb = $('lang-btn');
+    lb.textContent = lang === 'fa' ? 'EN' : 'فا';
+    lb.lang = lang === 'fa' ? 'en' : 'fa';
+  }
+  $('lang-btn').addEventListener('click', function () {
+    lang = lang === 'fa' ? 'en' : 'fa';
+    try { localStorage.setItem('landrop-lang', lang); } catch (e) { /* private mode */ }
+    applyLang();
+  });
   function baseName(p) {
     var parts = String(p).split('/');
     return parts[parts.length - 1] || 'file';
@@ -176,7 +409,8 @@ audio.preview { width: 100%; }
   // ---------------------------------------------------------------- device
   call('GET', API + '/web/info', null, function (st, j) {
     if (st === 200 && j && typeof j.alias === 'string') {
-      setText('device', 'Connected to ' + j.alias);
+      alias = j.alias;
+      showAlias();
     }
   });
 
@@ -196,33 +430,38 @@ audio.preview { width: 100%; }
     if (mime === 'application/pdf' || mime === 'text/plain') return 'open';
     return null;
   }
+  function nameSpan(name) {
+    var s = el('span', 'name', name);
+    s.setAttribute('dir', 'auto');
+    return s;
+  }
   function fileItem(token, f) {
     var li = el('li');
     var url = API + '/shares/' + encodeURIComponent(token) + '/files/' +
         encodeURIComponent(f.id);
     var row = el('div', 'row');
-    row.appendChild(el('span', 'name', f.name));
-    row.appendChild(el('span', 'muted small', fmt(f.size)));
+    row.appendChild(nameSpan(f.name));
+    row.appendChild(sz(el('span', 'muted small'), f.size));
     li.appendChild(row);
     var actions = el('div', 'actions');
-    var a = el('a', 'button', 'Download');
+    var a = tel('a', 'button', 'downloadBtn');
     a.href = url;
     a.rel = 'noreferrer';
     a.setAttribute('download', baseName(f.name));
-    a.setAttribute('aria-label', 'Download ' + f.name);
+    ax(a, 'ariaDownload', [iso(f.name)]);
     actions.appendChild(a);
     var kind = previewKind(String(f.mime || ''));
     if (kind === 'open') {
-      var o = el('a', 'button secondary', 'Open');
+      var o = tel('a', 'button secondary', 'openBtn');
       o.href = url + '?inline=1';
       o.target = '_blank';
       o.rel = 'noopener noreferrer';
-      o.setAttribute('aria-label', 'Open ' + f.name);
+      ax(o, 'ariaOpen', [iso(f.name)]);
       actions.appendChild(o);
     } else if (kind) {
-      var b = el('button', 'secondary', kind === 'img' ? 'Show' : 'Play');
+      var b = tel('button', 'secondary', kind === 'img' ? 'showBtn' : 'playBtn');
       b.type = 'button';
-      b.setAttribute('aria-label', (kind === 'img' ? 'Show ' : 'Play ') + f.name);
+      ax(b, kind === 'img' ? 'ariaShow' : 'ariaPlay', [iso(f.name)]);
       b.addEventListener('click', function () {
         b.disabled = true;
         var m = el(kind, 'preview');
@@ -245,28 +484,36 @@ audio.preview { width: 100%; }
     li.appendChild(actions);
     return li;
   }
+  // The share summary is a row of bound spans joined by " \u00B7 ".
+  function setParts(id, parts, cls) {
+    var e = $(id);
+    e.removeAttribute('data-t');
+    e.textContent = '';
+    e.className = cls;
+    for (var i = 0; i < parts.length; i++) {
+      if (i) e.appendChild(document.createTextNode(' \u00B7 '));
+      e.appendChild(tel('span', '', parts[i][0], parts[i][1]));
+    }
+  }
   function loadShare(token) {
     $('shared').hidden = false;
     call('GET', API + '/shares/' + encodeURIComponent(token), null, function (st, j) {
       var list = $('shared-list');
       list.textContent = '';
       if (st !== 200 || !j || !j.files || !j.files.length) {
-        setText('shared-status', st === 429
-          ? 'Too many attempts. Wait a minute, then reload.'
-          : 'This link does not work any more. It may have expired, reached its download limit, or the owner stopped sharing.',
-          'error');
+        setMsg('shared-status', st === 429 ? 'tooManyReload' : 'linkDead', null, 'error');
         return;
       }
-      var parts = [j.files.length + (j.files.length === 1 ? ' file' : ' files')];
+      var parts = [[tn('files', j.files.length), [j.files.length]]];
       if (typeof j.expiresIn === 'number') {
         var mins = Math.max(1, Math.round(j.expiresIn / 60));
-        parts.push(mins >= 120 ? 'available for ' + Math.round(mins / 60) + ' more hours'
-                               : 'available for ' + mins + ' more min');
+        parts.push(mins >= 120 ? ['availHours', [Math.round(mins / 60)]]
+                               : ['availMin', [mins]]);
       }
       if (typeof j.downloadsLeft === 'number') {
-        parts.push(j.downloadsLeft + (j.downloadsLeft === 1 ? ' download left' : ' downloads left'));
+        parts.push([tn('dl', j.downloadsLeft), [j.downloadsLeft]]);
       }
-      setText('shared-status', parts.join(' · '), 'muted');
+      setParts('shared-status', parts, 'muted');
       for (var i = 0; i < j.files.length; i++) list.appendChild(fileItem(token, j.files[i]));
     });
   }
@@ -278,19 +525,19 @@ audio.preview { width: 100%; }
     $('pair').hidden = true;
     $('upload').hidden = false;
   }
-  function showPair(msg) {
+  function showPair(key) {
     sessionToken = null;
     $('upload').hidden = true;
     $('pair').hidden = false;
     $('pair-code-box').hidden = true;
     $('pair-btn').disabled = false;
-    setText('pair-status', msg || '', msg ? 'error' : '');
+    setMsg('pair-status', key || null, null, key ? 'error' : '');
   }
   function poll(id) {
     call('GET', API + '/web/pair/' + encodeURIComponent(id), null, function (st, j) {
       if (st === 200 && j && j.status === 'approved') {
         sessionToken = typeof j.token === 'string' ? j.token : null;
-        setText('pair-status', '');
+        setMsg('pair-status', null);
         showUpload();
       } else if (st === 200 && j && j.status === 'pending') {
         poll(id);
@@ -298,28 +545,28 @@ audio.preview { width: 100%; }
         setTimeout(function () { poll(id); }, 2000);
       } else {
         showPair(j && j.status === 'expired'
-          ? 'No answer from the device in time. Try again.'
-          : (st === 429 ? 'Too many attempts. Wait a minute and try again.'
-                        : 'The device did not allow this browser.'));
+          ? 'pairExpired'
+          : (st === 429 ? 'tooMany' : 'pairDenied'));
       }
     });
   }
   $('pair-btn').addEventListener('click', function () {
     var btn = $('pair-btn');
     btn.disabled = true;
-    setText('pair-status', 'Asking the device…', '');
+    setMsg('pair-status', 'pairAsking', null, '');
     call('POST', API + '/web/pair', {}, function (st, j) {
       if (st === 200 && j && typeof j.id === 'string') {
-        setText('pair-code', String(j.code));
+        // The code is digits that must match the device screen: always Latin.
+        $('pair-code').textContent = String(j.code);
         $('pair-code-box').hidden = false;
-        setText('pair-status', 'Waiting for the owner to approve…', '');
+        setMsg('pair-status', 'pairWaiting', null, '');
         poll(j.id);
       } else {
         btn.disabled = false;
-        setText('pair-status', st === 429 ? 'Too many attempts. Wait a minute and try again.'
-          : st === 409 ? 'A request from this device is already waiting on the owner\'s screen.'
-          : st === 0 ? 'Could not reach the device.'
-          : 'The device did not accept a pairing request.', 'error');
+        setMsg('pair-status', st === 429 ? 'tooMany'
+          : st === 409 ? 'pairConflict'
+          : st === 0 ? 'unreachable'
+          : 'pairRejected', null, 'error');
       }
     });
   });
@@ -336,12 +583,13 @@ audio.preview { width: 100%; }
       if (st === 200) {
         picked = [];
         renderPicked();
-        setText('upload-status', '');
+        setMsg('upload-status', null);
         showPair();
-        setText('pair-status', 'Signed out. This browser can no longer send files until it is paired again.', '');
+        setMsg('pair-status', 'signedOut', null, '');
+      } else if (st === 0) {
+        setMsg('upload-status', 'unreachable', null, 'error');
       } else {
-        setText('upload-status', st === 0 ? 'Could not reach the device.'
-          : 'Could not sign out (error ' + st + ').', 'error');
+        setMsg('upload-status', 'signoutFail', [st], 'error');
       }
     });
   });
@@ -354,14 +602,14 @@ audio.preview { width: 100%; }
       var f = picked[i];
       var li = el('li');
       var row = el('div', 'row');
-      row.appendChild(el('span', 'name', f.file.name));
-      f.label = el('span', 'muted small', fmt(f.file.size));
+      row.appendChild(nameSpan(f.file.name));
+      f.label = sz(el('span', 'muted small'), f.file.size);
       row.appendChild(f.label);
       li.appendChild(row);
       f.bar = el('progress');
       f.bar.max = 1;
       f.bar.value = 0;
-      f.bar.setAttribute('aria-label', 'Progress of ' + f.file.name);
+      ax(f.bar, 'progressOf', [iso(f.file.name)]);
       li.appendChild(f.bar);
       list.appendChild(li);
     }
@@ -371,55 +619,57 @@ audio.preview { width: 100%; }
     if (busy || !fileList) return;
     picked = [];
     for (var i = 0; i < fileList.length; i++) picked.push({ file: fileList[i] });
-    setText('upload-status', picked.length ? picked.length + ' selected' : '', 'muted');
+    if (picked.length) setMsg('upload-status', 'selected', [picked.length], 'muted');
+    else setMsg('upload-status', null, null, 'muted');
     renderPicked();
   }
   var input = $('file-input');
   input.addEventListener('change', function () { addFiles(input.files); });
   var drop = $('drop');
-  ['dragenter', 'dragover'].forEach(function (t) {
-    drop.addEventListener(t, function (e) { e.preventDefault(); drop.className = 'drop over'; });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.className = 'drop over'; });
   });
-  ['dragleave', 'drop'].forEach(function (t) {
-    drop.addEventListener(t, function (e) { e.preventDefault(); drop.className = 'drop'; });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.className = 'drop'; });
   });
   drop.addEventListener('drop', function (e) {
     if (e.dataTransfer) addFiles(e.dataTransfer.files);
   });
-  function finish(msg, cls) {
+  function finish(key, args, cls) {
     busy = false;
-    setText('upload-status', msg, cls);
+    setMsg('upload-status', key, args, cls);
     $('send-btn').disabled = picked.length === 0;
     input.disabled = false;
   }
   function uploadNext(sessionId, tokens, i, okCount) {
     if (i >= picked.length) {
-      finish('Sent ' + okCount + ' of ' + picked.length + ' file(s).', 'ok');
+      finish('sentOf', [okCount, picked.length], 'ok');
       return;
     }
     var f = picked[i];
-    var t = tokens[String(i)];
-    if (typeof t !== 'string') { f.label.textContent = 'skipped'; uploadNext(sessionId, tokens, i + 1, okCount); return; }
+    var tk = tokens[String(i)];
+    if (typeof tk !== 'string') { tx(f.label, 'skipped'); uploadNext(sessionId, tokens, i + 1, okCount); return; }
     var q = '?sessionId=' + encodeURIComponent(sessionId) + '&fileId=' + encodeURIComponent(String(i)) +
-        '&token=' + encodeURIComponent(t);
-    setText('upload-status', 'Sending ' + (i + 1) + ' of ' + picked.length + '…', 'muted');
+        '&token=' + encodeURIComponent(tk);
+    setMsg('upload-status', 'sendingOf', [i + 1, picked.length], 'muted');
     call('POST', API + '/web/upload' + q, f.file, function (st) {
       if (st === 200) {
         f.bar.value = 1;
-        f.label.textContent = 'done';
+        tx(f.label, 'done');
         uploadNext(sessionId, tokens, i + 1, okCount + 1);
       } else if (st === 401) {
-        showPair('This browser is no longer paired (it expired or the owner disconnected it). Pair it again.');
-        finish('', '');
+        showPair('unpaired');
+        finish(null, null, '');
       } else {
-        f.label.textContent = 'failed';
+        tx(f.label, 'failed');
         f.label.className = 'error small';
-        finish(st === 0 ? 'The connection was lost.' : 'Sending stopped (error ' + st + ').', 'error');
+        if (st === 0) finish('lost', null, 'error');
+        else finish('stopped', [st], 'error');
       }
     }, function (e) {
       if (e.lengthComputable && e.total > 0) {
         f.bar.value = e.loaded / e.total;
-        f.label.textContent = fmt(e.loaded) + ' / ' + fmt(e.total);
+        sz(f.label, e.loaded, e.total);
       }
     });
   }
@@ -434,22 +684,28 @@ audio.preview { width: 100%; }
       files.push({ id: String(i), fileName: f.name, size: f.size,
                    fileType: f.type || 'application/octet-stream' });
     }
-    setText('upload-status', 'Waiting for the owner to accept…', 'muted');
+    setMsg('upload-status', 'waitAccept', null, 'muted');
     call('POST', API + '/web/upload-prepare', { files: files }, function (st, j) {
       if (st === 200 && j && typeof j.sessionId === 'string' && j.files) {
         uploadNext(j.sessionId, j.files, 0, 0);
       } else if (st === 401) {
-        showPair('This browser is no longer paired (it expired or the owner disconnected it). Pair it again.');
-        finish('', '');
+        showPair('unpaired');
+        finish(null, null, '');
+      } else if (st === 403) {
+        finish('declined', null, 'error');
+      } else if (st === 409) {
+        finish('busyDev', null, 'error');
+      } else if (st === 429) {
+        finish('tooMany', null, 'error');
+      } else if (st === 0) {
+        finish('unreachable', null, 'error');
       } else {
-        finish(st === 403 ? 'The owner declined the files.'
-          : st === 409 ? 'The device is busy with another transfer. Try again shortly.'
-          : st === 429 ? 'Too many attempts. Wait a minute and try again.'
-          : st === 0 ? 'Could not reach the device.'
-          : 'Could not start sending (error ' + st + ').', 'error');
+        finish('startFail', [st], 'error');
       }
     });
   });
+
+  applyLang();
 })();
 </script>
 </body>

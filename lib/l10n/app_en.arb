@@ -1,0 +1,427 @@
+{
+  "@@locale": "en",
+  "appTitle": "LanDrop",
+  "@appTitle": {
+    "description": "App name (brand, never translated)."
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Settings page title and tooltip."
+  },
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {
+    "description": "Settings row and dialog title for the app language."
+  },
+  "settingsLanguageSystem": "System default",
+  "@settingsLanguageSystem": {
+    "description": "Language option: follow the device language."
+  },
+  "languageEnglish": "English",
+  "@languageEnglish": {
+    "description": "Name of the English language, always written in English."
+  },
+  "languagePersian": "فارسی",
+  "@languagePersian": {
+    "description": "Name of the Persian language, always written in Persian."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Generic cancel button."
+  },
+  "sizeBytes": "{value} B",
+  "@sizeBytes": {
+    "description": "File size in bytes; value is pre-formatted.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeKB": "{value} KB",
+  "@sizeKB": {
+    "description": "File size in kilobytes.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeMB": "{value} MB",
+  "@sizeMB": {
+    "description": "File size in megabytes.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeGB": "{value} GB",
+  "@sizeGB": {
+    "description": "File size in gigabytes.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeTB": "{value} TB",
+  "@sizeTB": {
+    "description": "File size in terabytes.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "speedPerSecond": "{size}/s",
+  "@speedPerSecond": {
+    "description": "Transfer speed; size is a formatted size such as \"3.1 MB\".",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "durationSeconds": "{seconds} s",
+  "@durationSeconds": {
+    "description": "Short duration in seconds.",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "durationMinutes": "{minutes} min",
+  "@durationMinutes": {
+    "description": "Short duration in minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "durationHours": "{hours} h",
+  "@durationHours": {
+    "description": "Duration in whole hours.",
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
+  "durationHoursMinutes": "{hours} h {minutes} min",
+  "@durationHoursMinutes": {
+    "description": "Duration in hours and minutes.",
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      },
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "sendErrorDeclined": "The other device declined.",
+  "@sendErrorDeclined": {
+    "description": "Send failed: the receiver declined (SendErrorCode.declined)."
+  },
+  "sendErrorBusy": "The other device is busy with another transfer. Try again in a moment.",
+  "@sendErrorBusy": {
+    "description": "Send failed: receiver busy."
+  },
+  "sendErrorUnreachable": "Could not reach the other device. Check that both are on the same network.",
+  "@sendErrorUnreachable": {
+    "description": "Send failed: connection failed."
+  },
+  "sendErrorCancelled": "The transfer was cancelled.",
+  "@sendErrorCancelled": {
+    "description": "Send failed: cancelled by either side."
+  },
+  "sendErrorTimeout": "The other device stopped responding.",
+  "@sendErrorTimeout": {
+    "description": "Send failed: timeout or stalled upload."
+  },
+  "sendErrorFingerprintMismatch": "The other device's security code has changed. Search again before sending.",
+  "@sendErrorFingerprintMismatch": {
+    "description": "Send failed: certificate fingerprint differs from the pinned one."
+  },
+  "sendErrorDiskError": "A file could not be read or saved.",
+  "@sendErrorDiskError": {
+    "description": "Send failed: file system error on either side."
+  },
+  "sendErrorUnknown": "Sending failed.",
+  "@sendErrorUnknown": {
+    "description": "Send failed for another reason."
+  },
+  "diagWhatToDo": "What to do: {fix}",
+  "@diagWhatToDo": {
+    "description": "Prefix before the fix of a diagnosis finding.",
+    "placeholders": {
+      "fix": {
+        "type": "String"
+      }
+    }
+  },
+  "diagServerDownTitle": "This device cannot receive files right now",
+  "@diagServerDownTitle": {
+    "description": "Diagnosis finding \"server-down\": headline."
+  },
+  "diagServerDownDetail": "LanDrop on this device is not accepting connections, so other devices cannot see it or send to it.",
+  "@diagServerDownDetail": {
+    "description": "Diagnosis finding \"server-down\": what it means."
+  },
+  "diagServerDownFix": "Use \"Restart service\" in Settings, or close and reopen LanDrop.",
+  "@diagServerDownFix": {
+    "description": "Diagnosis finding \"server-down\": what to do."
+  },
+  "diagDiscoveryFailedTitle": "Automatic discovery is off",
+  "@diagDiscoveryFailedTitle": {
+    "description": "Diagnosis finding \"discovery-failed\": headline."
+  },
+  "diagDiscoveryFailedDetail": "LanDrop could not start looking for nearby devices, so they will not appear on their own. Sending by IP still works.",
+  "@diagDiscoveryFailedDetail": {
+    "description": "Diagnosis finding \"discovery-failed\": what it means."
+  },
+  "diagDiscoveryFailedFix": "Use \"Rescan network\" or \"Add by IP\". Restarting LanDrop or allowing local network access may fix it.",
+  "@diagDiscoveryFailedFix": {
+    "description": "Diagnosis finding \"discovery-failed\": what to do."
+  },
+  "diagNoLanTitle": "Not connected to Wi-Fi or a LAN",
+  "@diagNoLanTitle": {
+    "description": "Diagnosis finding \"no-lan\": headline."
+  },
+  "diagNoLanDetail": "This device has no local network address, so it cannot reach other devices nearby.",
+  "@diagNoLanDetail": {
+    "description": "Diagnosis finding \"no-lan\": what it means."
+  },
+  "diagNoLanFix": "Connect to the same Wi-Fi as the other device, plug in an Ethernet cable, or turn on a hotspot on one device and join it from the other.",
+  "@diagNoLanFix": {
+    "description": "Diagnosis finding \"no-lan\": what to do."
+  },
+  "diagLinkLocalOnlyTitle": "Direct cable or no DHCP",
+  "@diagLinkLocalOnlyTitle": {
+    "description": "Diagnosis finding \"link-local-only\": headline."
+  },
+  "diagLinkLocalOnlyDetail": "This looks like a direct cable or a network without DHCP. LanDrop works, but both devices must be connected to each other; give both devices a moment to get addresses.",
+  "@diagLinkLocalOnlyDetail": {
+    "description": "Diagnosis finding \"link-local-only\": what it means."
+  },
+  "diagVpnActiveTitle": "A VPN is on",
+  "@diagVpnActiveTitle": {
+    "description": "Diagnosis finding \"vpn-active\": headline."
+  },
+  "diagVpnActiveDetail": "VPNs often hide the local network, so nearby devices cannot reach each other.",
+  "@diagVpnActiveDetail": {
+    "description": "Diagnosis finding \"vpn-active\": what it means."
+  },
+  "diagVpnActiveFix": "Turn the VPN off, or allow \"local network access\" in its settings, then try again.",
+  "@diagVpnActiveFix": {
+    "description": "Diagnosis finding \"vpn-active\": what to do."
+  },
+  "diagAnnounceBlockedTitle": "Devices only show up after a scan",
+  "@diagAnnounceBlockedTitle": {
+    "description": "Diagnosis finding \"announce-blocked\": headline."
+  },
+  "diagAnnounceBlockedDetail": "Your router seems to block the messages devices use to find each other (multicast and broadcast). Transfers still work by IP.",
+  "@diagAnnounceBlockedDetail": {
+    "description": "Diagnosis finding \"announce-blocked\": what it means."
+  },
+  "diagAnnounceBlockedFix": "Use \"Rescan network\" or \"Add by IP\". To fix it for good, turn on multicast / turn off \"AP isolation\" in the router.",
+  "@diagAnnounceBlockedFix": {
+    "description": "Diagnosis finding \"announce-blocked\": what to do."
+  },
+  "diagSomePeersSilentTitle": "Some devices did not announce themselves",
+  "@diagSomePeersSilentTitle": {
+    "description": "Diagnosis finding \"some-peers-silent\": headline."
+  },
+  "diagSomePeersSilentDetail": "Other devices were found automatically, but these only by scan or IP. They may be on another part of the network or have discovery turned off.",
+  "@diagSomePeersSilentDetail": {
+    "description": "Diagnosis finding \"some-peers-silent\": what it means."
+  },
+  "diagProbeRefusedTitle": "The device is there, but LanDrop is not answering",
+  "@diagProbeRefusedTitle": {
+    "description": "Diagnosis finding \"probe-refused\": headline."
+  },
+  "diagProbeRefusedDetail": "The other device answered, but nothing accepted the connection. LanDrop is probably closed there, or it uses a different port.",
+  "@diagProbeRefusedDetail": {
+    "description": "Diagnosis finding \"probe-refused\": what it means."
+  },
+  "diagProbeRefusedFix": "Open LanDrop on the other device and keep it in front. Check the address and port shown on its screen.",
+  "@diagProbeRefusedFix": {
+    "description": "Diagnosis finding \"probe-refused\": what to do."
+  },
+  "diagProbeTimeoutTitle": "No answer from that address",
+  "@diagProbeTimeoutTitle": {
+    "description": "Diagnosis finding \"probe-timeout\": headline."
+  },
+  "diagProbeTimeoutDetail": "Nothing came back. A firewall, \"AP / client isolation\" on the router, or being on a different network can cause this.",
+  "@diagProbeTimeoutDetail": {
+    "description": "Diagnosis finding \"probe-timeout\": what it means."
+  },
+  "diagProbeTimeoutFix": "Check both devices are on the same Wi-Fi (not a guest network). Allow LanDrop in the firewall. If it still fails, turn on a hotspot on one device and join it from the other.",
+  "@diagProbeTimeoutFix": {
+    "description": "Diagnosis finding \"probe-timeout\": what to do."
+  },
+  "diagProbeUnreachableTitle": "That address cannot be reached from here",
+  "@diagProbeUnreachableTitle": {
+    "description": "Diagnosis finding \"probe-unreachable\": headline."
+  },
+  "diagProbeUnreachableDetail": "This device has no way to reach that address. It is probably on a different network, or the address is wrong.",
+  "@diagProbeUnreachableDetail": {
+    "description": "Diagnosis finding \"probe-unreachable\": what it means."
+  },
+  "diagProbeUnreachableFix": "Check the address on the other device, and connect both to the same Wi-Fi or hotspot.",
+  "@diagProbeUnreachableFix": {
+    "description": "Diagnosis finding \"probe-unreachable\": what to do."
+  },
+  "diagProbeFingerprintMismatchTitle": "A different device is at this address",
+  "@diagProbeFingerprintMismatchTitle": {
+    "description": "Diagnosis finding \"probe-fingerprint-mismatch\": headline."
+  },
+  "diagProbeFingerprintMismatchDetail": "The device at this address is not the one LanDrop knew before. Either another device took the address, or LanDrop was reinstalled there and made a new security key.",
+  "@diagProbeFingerprintMismatchDetail": {
+    "description": "Diagnosis finding \"probe-fingerprint-mismatch\": what it means."
+  },
+  "diagProbeFingerprintMismatchFix": "Check the fingerprint shown in Settings on the other device. If it is right, remove and add the device again.",
+  "@diagProbeFingerprintMismatchFix": {
+    "description": "Diagnosis finding \"probe-fingerprint-mismatch\": what to do."
+  },
+  "diagProbeNotLandropTitle": "Something answered, but it is not LanDrop",
+  "@diagProbeNotLandropTitle": {
+    "description": "Diagnosis finding \"probe-not-landrop\": headline."
+  },
+  "diagProbeNotLandropDetail": "A program accepted the connection on that port, but it did not respond like LanDrop or LocalSend.",
+  "@diagProbeNotLandropDetail": {
+    "description": "Diagnosis finding \"probe-not-landrop\": what it means."
+  },
+  "diagProbeNotLandropFix": "Check the port shown in LanDrop on the other device.",
+  "@diagProbeNotLandropFix": {
+    "description": "Diagnosis finding \"probe-not-landrop\": what to do."
+  },
+  "diagProbeOkTitle": "The device answers",
+  "@diagProbeOkTitle": {
+    "description": "Diagnosis finding \"probe-ok\": headline."
+  },
+  "diagProbeOkDetail": "{alias} at this address is reachable and working.",
+  "@diagProbeOkDetail": {
+    "description": "Diagnosis finding \"probe-ok\": what it means.",
+    "placeholders": {
+      "alias": {
+        "type": "String"
+      }
+    }
+  },
+  "diagDifferentSubnetTitle": "The devices seem to be on different networks",
+  "@diagDifferentSubnetTitle": {
+    "description": "Diagnosis finding \"different-subnet\": headline."
+  },
+  "diagDifferentSubnetDetail": "The addresses do not match, so the devices may be on different Wi-Fi networks, or one is on a guest network.",
+  "@diagDifferentSubnetDetail": {
+    "description": "Diagnosis finding \"different-subnet\": what it means."
+  },
+  "diagDifferentSubnetFix": "Connect both devices to the same Wi-Fi (not a guest network).",
+  "@diagDifferentSubnetFix": {
+    "description": "Diagnosis finding \"different-subnet\": what to do."
+  },
+  "diagHotspotLikelyFixTitle": "No other device found yet",
+  "@diagHotspotLikelyFixTitle": {
+    "description": "Diagnosis finding \"hotspot-likely-fix\": headline."
+  },
+  "diagHotspotLikelyFixDetail": "If LanDrop is open on the other device and it still does not show up, this network probably keeps devices apart (common on guest, office, school and hotel Wi-Fi). Connecting both devices through a hotspot from a phone or laptop usually fixes it, and needs no router.",
+  "@diagHotspotLikelyFixDetail": {
+    "description": "Diagnosis finding \"hotspot-likely-fix\": what it means."
+  },
+  "diagHotspotLikelyFixFix": "Tap \"Connect with a hotspot\" for step-by-step help, or use \"Add by IP\" if you know the other device's address.",
+  "@diagHotspotLikelyFixFix": {
+    "description": "Diagnosis finding \"hotspot-likely-fix\": what to do."
+  },
+  "diagMdnsOnlyTitle": "Standard device discovery works",
+  "@diagMdnsOnlyTitle": {
+    "description": "Diagnosis finding \"mdns-only\": headline."
+  },
+  "diagMdnsOnlyDetail": "LanDrop's own announcements are blocked on this network, but standard device discovery (mDNS / Bonjour) works. Transfers will work.",
+  "@diagMdnsOnlyDetail": {
+    "description": "Diagnosis finding \"mdns-only\": what it means."
+  },
+  "diagMdnsVisibleUnreachableTitle": "The device is on your network, but LanDrop cannot reach it",
+  "@diagMdnsVisibleUnreachableTitle": {
+    "description": "Diagnosis finding \"mdns-visible-unreachable\": headline."
+  },
+  "diagMdnsVisibleUnreachableDetail": "The device is on your network and announces itself, but LanDrop's port cannot be reached: a firewall on that device or this one, or the app is closing. {reason}",
+  "@diagMdnsVisibleUnreachableDetail": {
+    "description": "Diagnosis finding \"mdns-visible-unreachable\": what it means.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "diagMdnsVisibleUnreachableFix": "Allow LanDrop in the firewall on both devices, keep LanDrop open on the other device, then use \"Rescan network\".",
+  "@diagMdnsVisibleUnreachableFix": {
+    "description": "Diagnosis finding \"mdns-visible-unreachable\": what to do."
+  },
+  "diagMdnsReasonTimeout": "Nothing answered on LanDrop's port (timeout), which usually means a firewall is dropping it.",
+  "@diagMdnsReasonTimeout": {
+    "description": "Reason inserted as {reason} in diagMdnsVisibleUnreachableDetail: timeout."
+  },
+  "diagMdnsReasonRefused": "The port refused the connection, which usually means LanDrop is closing or not running there.",
+  "@diagMdnsReasonRefused": {
+    "description": "Reason inserted as {reason}: connection refused."
+  },
+  "diagMdnsReasonFingerprintMismatch": "Something answered, but with a different security key than the device announced.",
+  "@diagMdnsReasonFingerprintMismatch": {
+    "description": "Reason inserted as {reason}: certificate fingerprint differs."
+  },
+  "diagMdnsReasonOther": "The connection or the check of its identity failed.",
+  "@diagMdnsReasonOther": {
+    "description": "Reason inserted as {reason}: any other failure."
+  },
+  "diagUdpOnlyNoMdnsTitle": "Standard discovery (mDNS) is blocked",
+  "@diagUdpOnlyNoMdnsTitle": {
+    "description": "Diagnosis finding \"udp-only-no-mdns\": headline."
+  },
+  "diagUdpOnlyNoMdnsDetail": "Devices were found with LanDrop's own announcements, but not through standard discovery (mDNS / Bonjour). This is not a problem for LanDrop.",
+  "@diagUdpOnlyNoMdnsDetail": {
+    "description": "Diagnosis finding \"udp-only-no-mdns\": what it means."
+  },
+  "diagMdnsUnavailableTitle": "Standard device discovery could not start",
+  "@diagMdnsUnavailableTitle": {
+    "description": "Diagnosis finding \"mdns-unavailable\": headline."
+  },
+  "diagMdnsUnavailableDetail": "LanDrop could not start mDNS / Bonjour on this device, so it relies on its own announcements. Sending by IP still works.",
+  "@diagMdnsUnavailableDetail": {
+    "description": "Diagnosis finding \"mdns-unavailable\": what it means."
+  },
+  "diagMdnsUnavailableFix": "Use \"Rescan network\" or \"Add by IP\".",
+  "@diagMdnsUnavailableFix": {
+    "description": "Diagnosis finding \"mdns-unavailable\": what to do."
+  },
+  "diagMdnsUnavailableDetailBoth": "LanDrop could not start mDNS / Bonjour on this device, so it relies on its own announcements. Those failed too, so devices will not appear on their own. Sending by IP still works.",
+  "@diagMdnsUnavailableDetailBoth": {
+    "description": "Diagnosis finding \"mdns-unavailable\" when automatic discovery failed too: what it means."
+  },
+  "diagAllGoodTitle": "No problems found",
+  "@diagAllGoodTitle": {
+    "description": "Diagnosis finding \"all-good\": headline."
+  },
+  "diagAllGoodDetail": "This device is on a local network and ready to send and receive.",
+  "@diagAllGoodDetail": {
+    "description": "Diagnosis finding \"all-good\": what it means."
+  },
+  "diagAllGoodFix": "If a device is still missing, make sure LanDrop is open on it, then use \"Rescan network\" or \"Add by IP\".",
+  "@diagAllGoodFix": {
+    "description": "Diagnosis finding \"all-good\": what to do."
+  },
+  "diagNetworkTitle": "Your network",
+  "@diagNetworkTitle": {
+    "description": "Diagnosis finding \"network\": headline."
+  },
+  "diagNetworkDetail": "Addresses this device has, for reference.",
+  "@diagNetworkDetail": {
+    "description": "Diagnosis finding \"network\": what it means."
+  },
+  "diagSearchFailedTitle": "The search failed",
+  "@diagSearchFailedTitle": {
+    "description": "Hotspot wizard finding \"search-failed\": headline."
+  }
+}

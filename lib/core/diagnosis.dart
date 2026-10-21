@@ -32,8 +32,14 @@ class Finding {
   /// [hotspotWizardAction]. The UI shows a button for actions it knows.
   final String? action;
 
+  /// Structured values behind the English texts (interface names, ip, port,
+  /// short fingerprints, aliases, counts), so the UI can build localized
+  /// texts from [code] + [params] (`lib/ui/finding_text.dart`). Keys per code
+  /// are documented at each rule; values are String, int or bool.
+  final Map<String, Object?> params;
+
   const Finding(this.severity, this.code, this.title, this.detail,
-      {this.fix = '', this.technical, this.action});
+      {this.fix = '', this.technical, this.action, this.params = const {}});
 
   @override
   String toString() => '${severity.name}:$code';
@@ -196,6 +202,15 @@ String shortFp(String? fp) {
   return '${fp.substring(0, 8)}…${fp.substring(fp.length - 8)}'.toUpperCase();
 }
 
+/// [Finding.params] shared by the probe rules: `ip`, `port`, `address`
+/// (`ip:port`) and `error` (may be null).
+Map<String, Object?> _probeParams(ProbeObservation p) => {
+      'ip': p.ip,
+      'port': p.port,
+      'address': '${p.ip}:${p.port}',
+      'error': p.error,
+    };
+
 // ------------------------------------------------------------------ rules
 
 List<Finding> ruleServerNotListening(DiagnosisInput i) => i.serverListening
@@ -209,7 +224,8 @@ List<Finding> ruleServerNotListening(DiagnosisInput i) => i.serverListening
                 'LanDrop.',
             technical: i.serverPort == null
                 ? 'HTTPS server not running'
-                : 'HTTPS server not answering on port ${i.serverPort}'),
+                : 'HTTPS server not answering on port ${i.serverPort}',
+            params: {'port': i.serverPort}),
       ];
 
 List<Finding> ruleDiscoveryFailed(DiagnosisInput i) => i.discoveryError == null
@@ -221,7 +237,8 @@ List<Finding> ruleDiscoveryFailed(DiagnosisInput i) => i.discoveryError == null
                 'not appear on their own. Sending by IP still works.',
             fix: 'Use "Rescan network" or "Add by IP". Restarting LanDrop or '
                 'allowing local network access may fix it.',
-            technical: i.discoveryError),
+            technical: i.discoveryError,
+            params: {'error': i.discoveryError}),
       ];
 
 List<Finding> ruleNoLan(DiagnosisInput i) =>
@@ -237,7 +254,8 @@ List<Finding> ruleNoLan(DiagnosisInput i) =>
             technical: i.interfaces.isEmpty
                 ? 'no IPv4 interfaces'
                 : 'no private IPv4 on a non-VPN interface',
-            action: hotspotWizardAction),
+            action: hotspotWizardAction,
+            params: {'interfaceCount': i.interfaces.length}),
       ];
 
 /// Only 169.254.x.x addresses: a direct cable between two computers, or a
@@ -252,7 +270,8 @@ List<Finding> ruleLinkLocalOnly(DiagnosisInput i) {
             'works, but both devices must be connected to each other; give '
             'both devices a moment to get addresses.',
         technical: ll.join(', '),
-        action: cableWizardAction),
+        action: cableWizardAction,
+        params: {'addresses': ll.join(', '), 'count': ll.length}),
   ];
 }
 
@@ -270,7 +289,11 @@ List<Finding> ruleVpnActive(DiagnosisInput i) {
             'settings, then try again.',
         technical: vpns
             .map((f) => '${f.name} ${f.addresses.join(', ')}')
-            .join('; ')),
+            .join('; '),
+        params: {
+          'interfaces': vpns.map((f) => f.name).join(', '),
+          'count': vpns.length,
+        }),
   ];
 }
 
@@ -285,6 +308,12 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
       .toList();
   if (silent.isEmpty) return const [];
   final names = silent.map((p) => '${p.alias} (${p.ip})').join(', ');
+  final params = <String, Object?>{
+    'peers': names,
+    'count': silent.length,
+    'total': i.peers.length,
+    'mdnsStarted': i.mdnsStarted,
+  };
   if (silent.length == i.peers.length) {
     return [
       Finding(Severity.warn, 'announce-blocked',
@@ -295,7 +324,8 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
               'on multicast / turn off "AP isolation" in the router.',
           technical: 'found only by scan/manual: $names'
               '${i.mdnsStarted ? '; mDNS found nothing either' : ''}',
-          action: hotspotWizardAction),
+          action: hotspotWizardAction,
+          params: params),
     ];
   }
   return [
@@ -304,7 +334,8 @@ List<Finding> ruleAnnounceBlocked(DiagnosisInput i) {
         'Other devices were found automatically, but these only by scan or '
             'IP. They may be on another part of the network or have '
             'discovery turned off.',
-        technical: 'found only by scan/manual: $names'),
+        technical: 'found only by scan/manual: $names',
+        params: params),
   ];
 }
 
@@ -318,7 +349,8 @@ List<Finding> ruleProbeRefused(DiagnosisInput i) {
             'LanDrop is probably closed there, or it uses a different port.',
         fix: 'Open LanDrop on the other device and keep it in front. Check '
             'the address and port shown on its screen.',
-        technical: 'TCP connect to ${p.ip}:${p.port} refused'),
+        technical: 'TCP connect to ${p.ip}:${p.port} refused',
+        params: _probeParams(p)),
   ];
 }
 
@@ -334,7 +366,8 @@ List<Finding> ruleProbeTimeout(DiagnosisInput i) {
             'hotspot on one device and join it from the other.',
         technical: 'TCP connect to ${p.ip}:${p.port} timed out'
             '${p.error == null ? '' : ' (${p.error})'}',
-        action: hotspotWizardAction),
+        action: hotspotWizardAction,
+        params: _probeParams(p)),
   ];
 }
 
@@ -349,7 +382,8 @@ List<Finding> ruleProbeUnreachable(DiagnosisInput i) {
         fix: 'Check the address on the other device, and connect both to the '
             'same Wi-Fi or hotspot.',
         technical: 'TCP connect to ${p.ip}:${p.port} failed'
-            '${p.error == null ? '' : ': ${p.error}'}'),
+            '${p.error == null ? '' : ': ${p.error}'}',
+        params: _probeParams(p)),
   ];
 }
 
@@ -365,7 +399,12 @@ List<Finding> ruleProbeFingerprintMismatch(DiagnosisInput i) {
         fix: 'Check the fingerprint shown in Settings on the other device. '
             'If it is right, remove and add the device again.',
         technical: 'expected ${shortFp(p.expectedFingerprint)}, got '
-            '${shortFp(p.presentedFingerprint)}'),
+            '${shortFp(p.presentedFingerprint)}',
+        params: {
+          ..._probeParams(p),
+          'expected': shortFp(p.expectedFingerprint),
+          'presented': shortFp(p.presentedFingerprint),
+        }),
   ];
 }
 
@@ -384,7 +423,8 @@ List<Finding> ruleProbeNotLanDrop(DiagnosisInput i) {
             'respond like LanDrop or LocalSend.',
         fix: 'Check the port shown in LanDrop on the other device.',
         technical: '${p.ip}:${p.port} connected; TLS or /info failed'
-            '${p.error == null ? '' : ': ${p.error}'}'),
+            '${p.error == null ? '' : ': ${p.error}'}',
+        params: _probeParams(p)),
   ];
 }
 
@@ -395,7 +435,12 @@ List<Finding> ruleProbeOk(DiagnosisInput i) {
     Finding(Severity.info, 'probe-ok', 'The device answers',
         '${p.alias ?? 'LanDrop'} at this address is reachable and working.',
         technical: '${p.ip}:${p.port} fingerprint '
-            '${shortFp(p.presentedFingerprint)}'),
+            '${shortFp(p.presentedFingerprint)}',
+        params: {
+          ..._probeParams(p),
+          'alias': p.alias ?? 'LanDrop',
+          'fingerprint': shortFp(p.presentedFingerprint),
+        }),
   ];
 }
 
@@ -414,7 +459,8 @@ List<Finding> ruleDifferentSubnet(DiagnosisInput i) {
         fix: 'Connect both devices to the same Wi-Fi (not a guest network).',
         technical: 'this device ${own.join(', ')} vs target ${p.ip} '
             '(compared as /24)',
-        action: hotspotWizardAction),
+        action: hotspotWizardAction,
+        params: {..._probeParams(p), 'own': own.join(', ')}),
   ];
 }
 
@@ -455,7 +501,11 @@ List<Finding> ruleMdnsOnly(DiagnosisInput i) {
             'standard device discovery (mDNS / Bonjour) works. Transfers '
             'will work.',
         technical: 'found via mDNS but never via LanDrop announce: '
-            '${only.map((p) => '${p.alias} (${p.ip})').join(', ')}'),
+            '${only.map((p) => '${p.alias} (${p.ip})').join(', ')}',
+        params: {
+          'peers': only.map((p) => '${p.alias} (${p.ip})').join(', '),
+          'count': only.length,
+        }),
   ];
 }
 
@@ -487,7 +537,16 @@ List<Finding> ruleMdnsVisibleUnreachable(DiagnosisInput i) {
         technical: bad
             .map((m) => '${m.alias} ${m.ip}:${m.port} ${m.failure}')
             .join('; '),
-        action: hotspotWizardAction),
+        action: hotspotWizardAction,
+        params: {
+          'alias': m.alias,
+          'ip': m.ip,
+          'port': m.port,
+          'address': '${m.ip}:${m.port}',
+          'fingerprint': shortFp(m.fingerprint),
+          'failure': m.failure,
+          'count': bad.length,
+        }),
   ];
 }
 
@@ -502,7 +561,11 @@ List<Finding> ruleUdpOnlyNoMdns(DiagnosisInput i) {
             'through standard discovery (mDNS / Bonjour). This is not a '
             'problem for LanDrop.',
         technical: 'found by UDP, none by mDNS: '
-            '${udp.map((p) => '${p.alias} (${p.ip})').join(', ')}'),
+            '${udp.map((p) => '${p.alias} (${p.ip})').join(', ')}',
+        params: {
+          'peers': udp.map((p) => '${p.alias} (${p.ip})').join(', '),
+          'count': udp.length,
+        }),
   ];
 }
 
@@ -519,7 +582,8 @@ List<Finding> ruleMdnsUnavailable(DiagnosisInput i) {
         fix: both
             ? 'Use "Rescan network" or "Add by IP".'
             : '',
-        technical: i.mdnsError),
+        technical: i.mdnsError,
+        params: {'error': i.mdnsError, 'discoveryFailed': both}),
   ];
 }
 
@@ -589,7 +653,14 @@ Finding networkSummary(DiagnosisInput i) {
   ];
   return Finding(Severity.info, 'network', 'Your network',
       'Addresses this device has, for reference.',
-      technical: lines.join('\n'));
+      technical: lines.join('\n'),
+      params: {
+        'interfaces': i.interfaces.map((f) => f.name).join(', '),
+        'interfaceCount': i.interfaces.length,
+        'port': i.serverPort,
+        'listening': i.serverListening,
+        'peerCount': i.peers.length,
+      });
 }
 
 /// Plain-text report (for "Copy report"). Contains no tokens or secrets;

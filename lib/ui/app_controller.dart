@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -155,6 +156,7 @@ class AppController extends ChangeNotifier {
   bool _customDir = false; // user picked a folder; only then is it persisted
   bool _webHttp = false; // plain HTTP listener for browsers (opt-in)
   bool _keepShares = true; // shares survive a restart (opt-out)
+  Locale? _locale; // app language; null = follow the system
   CoreStatus status = CoreStatus.stopped;
   String? lastError;
   List<DeviceInfo> peers = const [];
@@ -233,6 +235,22 @@ class AppController extends ChangeNotifier {
   /// "Keep shares after restart" (persisted, default on).
   bool get keepShares => _keepShares;
 
+  /// The app language chosen in Settings (persisted as `'locale'`:
+  /// `'system'`, `'en'` or `'fa'`); null follows the system language.
+  Locale? get locale => _locale;
+
+  /// Changes the app language (null = system default). No restart needed.
+  Future<void> setLocale(Locale? locale) async {
+    final next = locale == null ? null : Locale(locale.languageCode);
+    if (next == _locale) return;
+    _locale = next;
+    await _persist();
+    _notify();
+  }
+
+  static Locale? _parseLocale(Object? v) =>
+      v is String && v.isNotEmpty && v != 'system' ? Locale(v) : null;
+
   String? _guard(String? Function() f) {
     if (status != CoreStatus.running) return null;
     try {
@@ -309,6 +327,7 @@ class AppController extends ChangeNotifier {
     if (s['background'] is bool) _background = s['background'] as bool;
     if (s['webHttp'] is bool) _webHttp = s['webHttp'] as bool;
     if (s['keepShares'] is bool) _keepShares = s['keepShares'] as bool;
+    _locale = _parseLocale(s['locale']);
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
       _customDir = true;
@@ -465,6 +484,7 @@ class AppController extends ChangeNotifier {
         'background': _background,
         'webHttp': _webHttp,
         'keepShares': _keepShares,
+        'locale': _locale?.languageCode ?? 'system',
         if (_customDir) 'saveDir': _saveDir,
       });
 

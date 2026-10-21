@@ -176,8 +176,41 @@ class SendResult {
 
   /// Session id assigned by the receiver (null if it never accepted).
   final String? sessionId;
+
+  /// English technical reason (logs, reports); null when [ok].
   final String? error;
-  const SendResult({required this.ok, this.sessionId, this.error});
+
+  /// Stable reason for the UI to show a localized message; null when [ok].
+  final SendErrorCode? errorCode;
+  const SendResult(
+      {required this.ok, this.sessionId, this.error, this.errorCode});
+}
+
+/// Why a send failed, stable across versions (see [SendResult.errorCode]).
+enum SendErrorCode {
+  /// The receiver declined the request.
+  declined,
+
+  /// The receiver is busy with another transfer.
+  busy,
+
+  /// The receiver could not be reached (connection failed).
+  unreachable,
+
+  /// The transfer was cancelled (by either side) or the session ended.
+  cancelled,
+
+  /// The receiver stopped answering (decision wait or upload stalled).
+  timeout,
+
+  /// The receiver presented a different certificate than expected.
+  fingerprintMismatch,
+
+  /// A file could not be read here or written on the receiver.
+  diskError,
+
+  /// Anything else.
+  unknown,
 }
 
 /// A browser asking to be allowed to send files (DESIGN.md 4.5). The page

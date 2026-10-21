@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../core/api.dart';
 import 'cable_wizard.dart';
+import 'finding_text.dart';
 import 'hotspot_wizard.dart';
+import 'l10n.dart';
 import 'widgets.dart';
 
 /// Runs the guided diagnosis (optionally probing [targetIp]) and shows the
@@ -156,6 +158,10 @@ class FindingTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final f = finding;
+    // Localized title/detail/fix; technical details and the copied report
+    // stay English (in English the finding's own texts are shown).
+    final l = context.l;
+    final text = localizeFinding(l, f);
     final (icon, color) = switch (f.severity) {
       Severity.problem => (Icons.error_outline, scheme.error),
       Severity.warn => (Icons.warning_amber_rounded, Colors.orange.shade800),
@@ -178,14 +184,15 @@ class FindingTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(f.title, style: t.titleSmall?.copyWith(color: color)),
-                if (f.detail.isNotEmpty) ...[
+                Text(text.title,
+                    style: t.titleSmall?.copyWith(color: color)),
+                if (text.detail.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(f.detail, style: t.bodyMedium),
+                  Text(text.detail, style: t.bodyMedium),
                 ],
-                if (f.fix.isNotEmpty) ...[
+                if (text.fix.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text('What to do: ${f.fix}', style: t.bodyMedium),
+                  Text(l.diagWhatToDo(text.fix), style: t.bodyMedium),
                 ],
                 if (f.technical != null && f.technical!.isNotEmpty) ...[
                   const SizedBox(height: 4),

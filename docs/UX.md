@@ -1030,7 +1030,9 @@ pages keep `maxWidth: 640`.
 
 Rules for every step: keep every existing `Key` (move it with the widget it identifies); keep the
 English copy byte-identical until a step explicitly changes copy, and update the matching
-`find.text` assertions in the same PR; `flutter analyze` clean; all 212 tests green.
+`find.text` assertions in the same PR; `flutter analyze` clean; all tests green (212 before the
+l10n work; 235 after L1/L5/R1-infra: +22 in `test/l10n_test.dart`, +1 send error-code test in
+`test/core_test.dart`; the suite total also includes tests added by parallel steps).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1055,14 +1057,20 @@ A unit test checks that `app_fa.arb` has every key of `app_en.arb` and the same 
 
 | # | Step | Size | Files | Notes |
 |---|---|---|---|---|
-| **L1** | l10n infrastructure: deps, `l10n.yaml`, empty-ish `app_en.arb`/`app_fa.arb`, delegates in `MaterialApp`, `locale` in settings JSON + picker in Settings, test helper | S | `pubspec.yaml`, `l10n.yaml`, `lib/l10n/*`, `app.dart`, `app_controller.dart`, `settings_page.dart`, `test/helpers/` | ships a working language switch with Material strings in fa |
+| **L1** | l10n infrastructure: deps, `l10n.yaml`, empty-ish `app_en.arb`/`app_fa.arb`, delegates in `MaterialApp`, `locale` in settings JSON + picker in Settings, test helper | S | `pubspec.yaml`, `l10n.yaml`, `lib/l10n/*`, `app.dart`, `app_controller.dart`, `settings_page.dart`, `test/helpers/` | ships a working language switch with Material strings in fa. **Implemented:** gen-l10n with `output-class: AppLocalizations` (not `L10n`), no synthetic package (generated into `lib/l10n/`), `intl: ^0.20.3`; `context.l` in `lib/ui/l10n.dart` (English fallback without the delegate); `AppController.locale`/`setLocale` persisted as `'locale': 'system'\|'en'\|'fa'`; Settings ▸ Language (`languageSettings`, `LanguageDialog` with `language-system/en/fa`); only the Settings title and Language row are translated so far |
 | **L2** | Extract strings: home, widgets, dialogs (about 85) | M | `home_page.dart`, `widgets.dart`, `dialogs.dart`, ARB | English unchanged, Persian added |
 | **L3** | Extract: settings, shares, diagnosis dialog (about 90) + formatters (`format.dart`) | M | `settings_page.dart`, `shares.dart`, `diagnosis_dialog.dart`, `format.dart` | |
 | **L4** | Extract: wizards and Android services (about 190) | L | `hotspot_wizard.dart`, `cable_wizard.dart`, `wifi_*`, `hotspot_service.dart` | biggest; per-OS steps |
-| **L5** | Finding params + `localizeFinding`; `SendResult.errorCode` | M | `lib/core/diagnosis.dart`, `lib/core/api.dart`, core send code, `lib/ui/finding_text.dart` | English fields stay → diagnosis tests unchanged |
+| **L5** | Finding params + `localizeFinding`; `SendResult.errorCode` | M | `lib/core/diagnosis.dart`, `lib/core/api.dart`, core send code, `lib/ui/finding_text.dart` | English fields stay → diagnosis tests unchanged. **Implemented:** `Finding.params` on every rule; `SendErrorCode` enum + `SendResult.errorCode` set in `LanDropCore.sendFiles`; `localizeFinding` (English keeps the core texts), `localizeSendError`/`localizeSendResult`; `diag*` and `sendError*` keys in en+fa; `FindingTile` uses it (dialog chrome such as "Copy report" still English until L3) |
 | **L6** | Platform strings: Android `values-fa`, `supportsRtl`, `locales_config`; iOS/macOS `CFBundleLocalizations` + `fa.lproj` | S | `android/…`, `LanDropService.kt`, `ios/Runner/`, `macos/Runner/` | built in CI only (no local SDK) |
+
+**L6 implemented:** Android `strings.xml` + `values-fa/strings.xml` (plurals for shares/browsers; English output unchanged), `supportsRtl`, `res/xml/locales_config.xml` (en, fa) + `android:localeConfig`. iOS: `CFBundleLocalizations` en/fa, `en.lproj` and `fa.lproj` `InfoPlist.strings` (only `NSLocalNetworkUsageDescription` exists), registered in `project.pbxproj` as a variant group, `fa` added to `knownRegions`. macOS: `CFBundleLocalizations` and `CFBundleDevelopmentRegion` = `en` only (it has no usage strings, so no `.strings` files). Windows and Linux: nothing needed. Compiled only in CI (not verified locally).
+
 | **L7** | Browser page dictionary + `dir` | M | `lib/core/web_assets.dart`, `test/web_test.dart` (add a check that both dictionaries have the same keys) | |
-| **R1** | RTL pass: `EdgeInsetsDirectional`, `LtrText`, `ltr()`/`iso()` isolates, middle ellipsis, LTR inputs, Persian-digit input normalising | M | all `lib/ui/*` | `l10n_test.dart` at 375/1000 |
+
+**L7 implemented:** `web_assets.dart` has a `T = {en, fa}` dictionary, `t()`/`tr()`/`tn()` lookups, `fmtNum` (Persian digits in fa), a visible `EN / فا` toggle persisted in `localStorage` (try/catch), `<html lang dir>` updates, logical CSS, `<bdi>`/`dir="auto"`/`unicode-bidi: isolate` for names, addresses and the (Latin) pairing code. Language switches live without a reload. Uncertain Persian wording is marked `REVIEW:` in the script. `test/web_test.dart` group "page i18n" checks key parity and usage.
+
+| **R1** | RTL pass: `EdgeInsetsDirectional`, `LtrText`, `ltr()`/`iso()` isolates, middle ellipsis, LTR inputs, Persian-digit input normalising | M | all `lib/ui/*` | `l10n_test.dart` at 375/1000. **Partially implemented (infrastructure only):** `lib/ui/ltr_text.dart` (`LtrText`, `ltr`, `iso`, `stripIsolates`, `middleEllipsis`), `lib/ui/digits.dart` (`localizeDigits`, `normalizeDigits`), locale-aware `formatBytes`/`formatSpeed`/`formatDuration` in `format.dart`. Screens are not converted yet (no `EdgeInsetsDirectional`, LTR inputs or digit normalising at call sites) |
 | **R2** | Vazirmatn font for fa, line height, `StatusColors` extension | S | `assets/fonts/`, `pubspec.yaml`, `app.dart` | +~0.2-0.4 MB |
 | **U1** | Home simplification: one Send FAB + Send sheet (Files/Folder), remove `QrCard`/`WebAccessCard`/`ConnectedBrowsersCard`/`SharesSection` from home, status line, device subtitles without IP | M | `home_page.dart`, `widgets.dart`, `ui_test.dart` | keep `sendFab`; `sendFolderFab` → sheet item key `sendFolder`; update tests that tap `shareFab`/`sendFolderFab` |
 | **U2** | Share page with "Send a link" / "Use from a browser" (keeps `sharesAction`, `shareFiles`, `shareFolder`, `webAccessCard`, `connectedBrowsersCard`, `confirmShare`…) | M | `shares.dart` | |

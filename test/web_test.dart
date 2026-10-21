@@ -18,20 +18,19 @@ LanDropCoreOptions _opts({
   Duration pairingTimeout = const Duration(seconds: 10),
   Duration streamWindow = const Duration(minutes: 30),
   String? sharesStorePath,
-}) =>
-    LanDropCoreOptions(
-      sharesStorePath: sharesStorePath,
-      port: 0,
-      bindAddress: InternetAddress.loopbackIPv4,
-      advertiseIp: '127.0.0.1',
-      multicastEnabled: false,
-      persistIdentity: false,
-      decisionTimeout: const Duration(seconds: 10),
-      httpPort: httpPort,
-      webRateLimit: rateLimit,
-      webPairingTimeout: pairingTimeout,
-      webStreamWindow: streamWindow,
-    );
+}) => LanDropCoreOptions(
+  sharesStorePath: sharesStorePath,
+  port: 0,
+  bindAddress: InternetAddress.loopbackIPv4,
+  advertiseIp: '127.0.0.1',
+  multicastEnabled: false,
+  persistIdentity: false,
+  decisionTimeout: const Duration(seconds: 10),
+  httpPort: httpPort,
+  webRateLimit: rateLimit,
+  webPairingTimeout: pairingTimeout,
+  webStreamWindow: streamWindow,
+);
 
 class _Resp {
   final int status;
@@ -51,10 +50,13 @@ class _Resp {
   String? h(String name) => headers.value(name);
 }
 
-Future<_Resp> _call(String method, String url,
-    {Map<String, String> headers = const {},
-    Object? json,
-    List<int>? bytes}) async {
+Future<_Resp> _call(
+  String method,
+  String url, {
+  Map<String, String> headers = const {},
+  Object? json,
+  List<int>? bytes,
+}) async {
   final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
   try {
     final req = await c.openUrl(method, Uri.parse(url));
@@ -89,14 +91,17 @@ const _api = '/api/landrop/v1';
 
 /// A full read is charged when the server has finished writing, which can be
 /// a moment after the client has read the last byte.
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 100));
+Future<void> _settle() =>
+    Future<void>.delayed(const Duration(milliseconds: 100));
 
 void _expectSecurityHeaders(_Resp r) {
   expect(r.h('content-security-policy'), webCsp);
-  expect(r.h('content-security-policy'),
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-      "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-      "media-src 'self'; frame-ancestors 'none'");
+  expect(
+    r.h('content-security-policy'),
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    "media-src 'self'; frame-ancestors 'none'",
+  );
   expect(r.h('referrer-policy'), 'no-referrer');
   expect(r.h('x-frame-options'), 'DENY');
   expect(r.h('x-content-type-options'), 'nosniff');
@@ -107,8 +112,10 @@ void main() {
   late Directory tmp;
   final cores = <LanDropCoreImpl>[];
 
-  Future<LanDropCoreImpl> startCore(LanDropCoreOptions o,
-      {String name = 'a'}) async {
+  Future<LanDropCoreImpl> startCore(
+    LanDropCoreOptions o, {
+    String name = 'a',
+  }) async {
     final c = LanDropCoreImpl(o);
     cores.add(c);
     final dir = await Directory('${tmp.path}/$name-save').create();
@@ -147,7 +154,8 @@ void main() {
 
   group('parseRange', () {
     test('forms, clamping, ignored and unsatisfiable', () {
-      String? r(String? h, [int size = 1000]) => parseRange(h, size)?.toString();
+      String? r(String? h, [int size = 1000]) =>
+          parseRange(h, size)?.toString();
       expect(r(null), isNull);
       expect(r('bytes=0-99'), '0-99');
       expect(r('bytes=100-'), '100-999');
@@ -167,113 +175,130 @@ void main() {
         'bytes=1-2-3',
         'bytes=99999999999999999999999-',
       ]) {
-        expect(() => parseRange(bad, 1000),
-            throwsA(isA<RangeNotSatisfiable>()), reason: bad);
+        expect(
+          () => parseRange(bad, 1000),
+          throwsA(isA<RangeNotSatisfiable>()),
+          reason: bad,
+        );
       }
-      expect(() => parseRange('bytes=0-', 0),
-          throwsA(isA<RangeNotSatisfiable>()));
+      expect(
+        () => parseRange('bytes=0-', 0),
+        throwsA(isA<RangeNotSatisfiable>()),
+      );
     });
 
     test('content disposition is RFC 5987 encoded', () {
-      expect(contentDisposition('a b.txt', inline: false),
-          "attachment; filename=\"a b.txt\"; filename*=UTF-8''a%20b.txt");
-      expect(contentDisposition('é"(1).mp4', inline: true),
-          "inline; filename=\"__(1).mp4\"; "
-          "filename*=UTF-8''%C3%A9%22%281%29.mp4");
+      expect(
+        contentDisposition('a b.txt', inline: false),
+        "attachment; filename=\"a b.txt\"; filename*=UTF-8''a%20b.txt",
+      );
+      expect(
+        contentDisposition('é"(1).mp4', inline: true),
+        "inline; filename=\"__(1).mp4\"; "
+        "filename*=UTF-8''%C3%A9%22%281%29.mp4",
+      );
     });
   });
 
-  test('range requests on a 5 MB file: 200, 206, 416, HEAD, reassembly',
-      () async {
-    final a = await startCore(_opts());
-    final data = _randomBytes(5 << 20, 7);
-    final f = File('${tmp.path}/clip.mp4')..writeAsBytesSync(data);
-    final share = a.createShare([f.path]);
-    expect(share.url, '${base(a)}/#s=${share.token}');
-    expect(share.token, matches(RegExp(r'^[A-Za-z0-9_-]{22}$')));
-    final fileId = share.files.single.id;
-    final url = '${base(a)}$_api/shares/${share.token}/files/$fileId';
-    const size = 5 << 20;
+  test(
+    'range requests on a 5 MB file: 200, 206, 416, HEAD, reassembly',
+    () async {
+      final a = await startCore(_opts());
+      final data = _randomBytes(5 << 20, 7);
+      final f = File('${tmp.path}/clip.mp4')..writeAsBytesSync(data);
+      final share = a.createShare([f.path]);
+      expect(share.url, '${base(a)}/#s=${share.token}');
+      expect(share.token, matches(RegExp(r'^[A-Za-z0-9_-]{22}$')));
+      final fileId = share.files.single.id;
+      final url = '${base(a)}$_api/shares/${share.token}/files/$fileId';
+      const size = 5 << 20;
 
-    final list = await _call('GET', '${base(a)}$_api/shares/${share.token}');
-    expect(list.status, 200);
-    _expectSecurityHeaders(list);
-    final lf = (list.json!['files'] as List).single as Map;
-    expect(lf['name'], 'clip.mp4');
-    expect(lf['mime'], 'video/mp4');
-    expect(lf['size'], size);
+      final list = await _call('GET', '${base(a)}$_api/shares/${share.token}');
+      expect(list.status, 200);
+      _expectSecurityHeaders(list);
+      final lf = (list.json!['files'] as List).single as Map;
+      expect(lf['name'], 'clip.mp4');
+      expect(lf['mime'], 'video/mp4');
+      expect(lf['size'], size);
 
-    final full = await _call('GET', url);
-    expect(full.status, 200);
-    _expectSecurityHeaders(full);
-    expect(full.h('accept-ranges'), 'bytes');
-    expect(full.h('content-type'), 'video/mp4');
-    expect(full.h('content-length'), '$size');
-    expect(full.h('content-range'), isNull);
-    expect(full.h('content-disposition'),
-        "attachment; filename=\"clip.mp4\"; filename*=UTF-8''clip.mp4");
-    expect(_sha(full.body), _sha(data));
+      final full = await _call('GET', url);
+      expect(full.status, 200);
+      _expectSecurityHeaders(full);
+      expect(full.h('accept-ranges'), 'bytes');
+      expect(full.h('content-type'), 'video/mp4');
+      expect(full.h('content-length'), '$size');
+      expect(full.h('content-range'), isNull);
+      expect(
+        full.h('content-disposition'),
+        "attachment; filename=\"clip.mp4\"; filename*=UTF-8''clip.mp4",
+      );
+      expect(_sha(full.body), _sha(data));
 
-    final r1 = await _call('GET', url, headers: {'Range': 'bytes=0-99'});
-    expect(r1.status, 206);
-    expect(r1.h('content-range'), 'bytes 0-99/$size');
-    expect(r1.h('content-length'), '100');
-    expect(r1.body, data.sublist(0, 100));
+      final r1 = await _call('GET', url, headers: {'Range': 'bytes=0-99'});
+      expect(r1.status, 206);
+      expect(r1.h('content-range'), 'bytes 0-99/$size');
+      expect(r1.h('content-length'), '100');
+      expect(r1.body, data.sublist(0, 100));
 
-    final r2 = await _call('GET', url, headers: {'Range': 'bytes=100-'});
-    expect(r2.status, 206);
-    expect(r2.h('content-range'), 'bytes 100-${size - 1}/$size');
-    expect(r2.h('content-length'), '${size - 100}');
-    expect(_sha(r2.body), _sha(data.sublist(100)));
+      final r2 = await _call('GET', url, headers: {'Range': 'bytes=100-'});
+      expect(r2.status, 206);
+      expect(r2.h('content-range'), 'bytes 100-${size - 1}/$size');
+      expect(r2.h('content-length'), '${size - 100}');
+      expect(_sha(r2.body), _sha(data.sublist(100)));
 
-    final r3 = await _call('GET', url, headers: {'Range': 'bytes=-50'});
-    expect(r3.status, 206);
-    expect(r3.h('content-range'), 'bytes ${size - 50}-${size - 1}/$size');
-    expect(r3.body, data.sublist(size - 50));
+      final r3 = await _call('GET', url, headers: {'Range': 'bytes=-50'});
+      expect(r3.status, 206);
+      expect(r3.h('content-range'), 'bytes ${size - 50}-${size - 1}/$size');
+      expect(r3.body, data.sublist(size - 50));
 
-    final r4 = await _call('GET', url, headers: {'Range': 'bytes=$size-'});
-    expect(r4.status, 416);
-    expect(r4.h('content-range'), 'bytes */$size');
-    _expectSecurityHeaders(r4);
-    final r5 = await _call('GET', url, headers: {'Range': 'bytes=9-3'});
-    expect(r5.status, 416);
+      final r4 = await _call('GET', url, headers: {'Range': 'bytes=$size-'});
+      expect(r4.status, 416);
+      expect(r4.h('content-range'), 'bytes */$size');
+      _expectSecurityHeaders(r4);
+      final r5 = await _call('GET', url, headers: {'Range': 'bytes=9-3'});
+      expect(r5.status, 416);
 
-    // Multi-range is ignored: full 200 body.
-    final mr = await _call('GET', url, headers: {'Range': 'bytes=0-1,4-5'});
-    expect(mr.status, 200);
-    expect(mr.body.length, size);
+      // Multi-range is ignored: full 200 body.
+      final mr = await _call('GET', url, headers: {'Range': 'bytes=0-1,4-5'});
+      expect(mr.status, 200);
+      expect(mr.body.length, size);
 
-    final head = await _call('HEAD', url);
-    expect(head.status, 200);
-    expect(head.h('content-length'), '$size');
-    expect(head.h('accept-ranges'), 'bytes');
-    expect(head.body, isEmpty);
-    final headR = await _call('HEAD', url, headers: {'Range': 'bytes=10-19'});
-    expect(headR.status, 206);
-    expect(headR.h('content-range'), 'bytes 10-19/$size');
-    expect(headR.h('content-length'), '10');
-    expect(headR.body, isEmpty);
+      final head = await _call('HEAD', url);
+      expect(head.status, 200);
+      expect(head.h('content-length'), '$size');
+      expect(head.h('accept-ranges'), 'bytes');
+      expect(head.body, isEmpty);
+      final headR = await _call('HEAD', url, headers: {'Range': 'bytes=10-19'});
+      expect(headR.status, 206);
+      expect(headR.h('content-range'), 'bytes 10-19/$size');
+      expect(headR.h('content-length'), '10');
+      expect(headR.body, isEmpty);
 
-    final inline = await _call('GET', '$url?inline=1',
-        headers: {'Range': 'bytes=0-0'});
-    expect(inline.h('content-disposition'), startsWith('inline;'));
+      final inline = await _call(
+        'GET',
+        '$url?inline=1',
+        headers: {'Range': 'bytes=0-0'},
+      );
+      expect(inline.h('content-disposition'), startsWith('inline;'));
 
-    // Reassemble from odd-sized ranges: byte-identical.
-    final parts = BytesBuilder(copy: false);
-    const step = 777777;
-    for (var s = 0; s < size; s += step) {
-      final e = min(s + step, size) - 1;
-      final r = await _call('GET', url, headers: {'Range': 'bytes=$s-$e'});
-      expect(r.status, 206);
-      expect(r.h('content-range'), 'bytes $s-$e/$size');
-      parts.add(r.body);
-    }
-    expect(_sha(parts.takeBytes()), _sha(data));
-  });
+      // Reassemble from odd-sized ranges: byte-identical.
+      final parts = BytesBuilder(copy: false);
+      const step = 777777;
+      for (var s = 0; s < size; s += step) {
+        final e = min(s + step, size) - 1;
+        final r = await _call('GET', url, headers: {'Range': 'bytes=$s-$e'});
+        expect(r.status, 206);
+        expect(r.h('content-range'), 'bytes $s-$e/$size');
+        parts.add(r.body);
+      }
+      expect(_sha(parts.takeBytes()), _sha(data));
+    },
+  );
 
   test('HTML/SVG are never served inline; text gets a charset', () async {
     final a = await startCore(_opts());
-    final h = File('${tmp.path}/page.html')..writeAsStringSync('<script>1</script>');
+    final h = File('${tmp.path}/page.html')
+      ..writeAsStringSync('<script>1</script>');
     final t = File('${tmp.path}/notes.txt')..writeAsStringSync('hi');
     final s = a.createShare([h.path, t.path]);
     String u(SharedFile f) =>
@@ -286,17 +311,21 @@ void main() {
     expect(tr.h('content-type'), 'text/plain; charset=utf-8');
   });
 
-  test('wrong, expired, revoked and exhausted tokens give identical 404s',
-      () async {
+  test('wrong, expired, revoked and exhausted tokens give identical 404s', () async {
     final a = await startCore(_opts());
-    final f = File('${tmp.path}/x.bin')..writeAsBytesSync(_randomBytes(1000, 1));
-    final expired = a.createShare([f.path], ttl: const Duration(milliseconds: 150));
+    final f = File('${tmp.path}/x.bin')
+      ..writeAsBytesSync(_randomBytes(1000, 1));
+    final expired = a.createShare([
+      f.path,
+    ], ttl: const Duration(milliseconds: 150));
     final revoked = a.createShare([f.path]);
     final exhausted = a.createShare([f.path], maxDownloads: 1);
     final good = a.createShare([f.path]);
 
-    final dl = await _call('GET',
-        '${base(a)}$_api/shares/${exhausted.token}/files/${exhausted.files.single.id}');
+    final dl = await _call(
+      'GET',
+      '${base(a)}$_api/shares/${exhausted.token}/files/${exhausted.files.single.id}',
+    );
     expect(dl.status, 200);
     a.revokeShare(revoked.id);
     expect(a.shares.map((s) => s.id), isNot(contains(revoked.id)));
@@ -312,25 +341,30 @@ void main() {
       expect(l.body, ref.body);
       expect(l.h('content-type'), ref.h('content-type'));
       expect(l.h('content-length'), ref.h('content-length'));
-      final b = await _call('GET',
-          '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}');
+      final b = await _call(
+        'GET',
+        '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}',
+      );
       expect(b.status, 404);
       expect(b.body, ref.body);
     }
     // A wrong file id under a good token: same 404.
-    final wf = await _call('GET',
-        '${base(a)}$_api/shares/${good.token}/files/${'0' * 16}');
+    final wf = await _call(
+      'GET',
+      '${base(a)}$_api/shares/${good.token}/files/${'0' * 16}',
+    );
     expect(wf.status, 404);
     expect(wf.body, ref.body);
     expect(
-        (await _call('GET', '${base(a)}$_api/shares/${good.token}')).status,
-        200);
+      (await _call('GET', '${base(a)}$_api/shares/${good.token}')).status,
+      200,
+    );
   });
 
-  test('file ids are opaque; traversal in ids and paths is refused',
-      () async {
+  test('file ids are opaque; traversal in ids and paths is refused', () async {
     final a = await startCore(_opts());
-    final dir = await Directory('${tmp.path}/Album/sub').create(recursive: true);
+    final dir = await Directory('${tmp.path}/Album/sub')
+        .create(recursive: true);
     File('${dir.path}/b.txt').writeAsStringSync('bbb');
     File('${tmp.path}/Album/a.txt').writeAsStringSync('aaa');
     final secret = File('${tmp.path}/secret.txt')..writeAsStringSync('secret');
@@ -341,8 +375,10 @@ void main() {
     }
     final l = await _call('GET', '${base(a)}$_api/shares/${s.token}');
     expect(l.text, isNot(contains(tmp.path)));
-    final b = await _call('GET',
-        '${base(a)}$_api/shares/${s.token}/files/${s.files[1].id}');
+    final b = await _call(
+      'GET',
+      '${base(a)}$_api/shares/${s.token}/files/${s.files[1].id}',
+    );
     expect(b.text, 'bbb');
     expect(b.h('content-disposition'), contains('filename="b.txt"'));
 
@@ -357,7 +393,9 @@ void main() {
       '',
     ]) {
       final r = await _call(
-          'GET', '${base(a)}$_api/shares/${s.token}/files/${enc(id)}');
+        'GET',
+        '${base(a)}$_api/shares/${s.token}/files/${enc(id)}',
+      );
       expect(r.status, 404, reason: id);
       expect(r.text, isNot(contains('secret')));
     }
@@ -372,8 +410,10 @@ void main() {
     }
     // The file changed size after sharing: no longer served.
     File('${tmp.path}/Album/a.txt').writeAsStringSync('changed!');
-    final ch = await _call('GET',
-        '${base(a)}$_api/shares/${s.token}/files/${s.files[0].id}');
+    final ch = await _call(
+      'GET',
+      '${base(a)}$_api/shares/${s.token}/files/${s.files[0].id}',
+    );
     expect(ch.status, 404);
   });
 
@@ -396,8 +436,10 @@ void main() {
     await _settle();
     expect(a.shares.firstWhere((x) => x.id == s2.id).downloadsLeft, 0);
     expect((await _call('GET', url(s2))).status, 404);
-    expect((await _call('GET', url(s2), headers: {'Range': 'bytes=5-9'}))
-        .status, 404);
+    expect(
+      (await _call('GET', url(s2), headers: {'Range': 'bytes=5-9'})).status,
+      404,
+    );
 
     // A partial range is charged at once (first request of a sequence).
     final s1 = a.createShare([f.path], maxDownloads: 1);
@@ -408,8 +450,10 @@ void main() {
     // the file cannot be reassembled range by range.
     final p2 = await _call('GET', url(s1), headers: {'Range': 'bytes=10-19'});
     expect(p2.status, 404);
-    expect((await _call('GET', '${base(a)}$_api/shares/${s1.token}')).status,
-        404);
+    expect(
+      (await _call('GET', '${base(a)}$_api/shares/${s1.token}')).status,
+      404,
+    );
 
     // Concurrent full reads cannot exceed the limit (slot reserved in flight).
     final sc = a.createShare([f.path], maxDownloads: 1);
@@ -425,10 +469,11 @@ void main() {
     final data = _randomBytes(1 << 20, 4);
     final f = File('${tmp.path}/v.mp4')..writeAsBytesSync(data);
     final s = a.createShare([f.path], maxDownloads: 1);
-    final url =
-        '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}';
-    expect((await _call('GET', url, headers: {'Range': 'bytes=1000-'})).status,
-        206);
+    final url = '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}';
+    expect(
+      (await _call('GET', url, headers: {'Range': 'bytes=1000-'})).status,
+      206,
+    );
     expect(a.shares.single.downloadsLeft, 0);
     // Same client, same file: seeking keeps working without a new charge.
     final r = await _call('GET', url, headers: {'Range': 'bytes=0-'});
@@ -436,102 +481,126 @@ void main() {
     expect(_sha(r.body), _sha(data));
     expect(a.shares.single.downloadsLeft, 0);
     // A new client would get the 404 (listing reflects that).
-    expect((await _call('GET', '${base(a)}$_api/shares/${s.token}')).status,
-        404);
+    expect(
+      (await _call('GET', '${base(a)}$_api/shares/${s.token}')).status,
+      404,
+    );
   });
 
-  test('pairing: 401 without session, decline 403, approve -> upload works',
-      () async {
-    final a = await startCore(_opts());
-    final b = base(a);
-    // No session: upload endpoints refuse.
-    expect((await _call('GET', '$b$_api/web/session')).status, 401);
-    expect(
-        (await _call('POST', '$b$_api/web/upload-prepare', json: {
-          'files': [
-            {'id': '0', 'fileName': 'a.txt', 'size': 1}
-          ]
-        }))
-            .status,
-        401);
-    expect(
-        (await _call('POST',
-                '$b$_api/web/upload?sessionId=x&fileId=0&token=y',
-                bytes: [1, 2, 3]))
-            .status,
-        401);
-    expect(
-        (await _call('POST', '$b$_api/web/upload-prepare',
-                headers: {'Authorization': 'Bearer nope'},
-                json: {'files': []}))
-            .status,
-        401);
+  test(
+    'pairing: 401 without session, decline 403, approve -> upload works',
+    () async {
+      final a = await startCore(_opts());
+      final b = base(a);
+      // No session: upload endpoints refuse.
+      expect((await _call('GET', '$b$_api/web/session')).status, 401);
+      expect(
+        (await _call(
+          'POST',
+          '$b$_api/web/upload-prepare',
+          json: {
+            'files': [
+              {'id': '0', 'fileName': 'a.txt', 'size': 1},
+            ],
+          },
+        )).status,
+        401,
+      );
+      expect(
+        (await _call(
+          'POST',
+          '$b$_api/web/upload?sessionId=x&fileId=0&token=y',
+          bytes: [1, 2, 3],
+        )).status,
+        401,
+      );
+      expect(
+        (await _call(
+          'POST',
+          '$b$_api/web/upload-prepare',
+          headers: {'Authorization': 'Bearer nope'},
+          json: {'files': []},
+        )).status,
+        401,
+      );
 
-    // Decline.
-    final seen = <WebPairingRequest>[];
-    var answer = false;
-    final sub = a.webPairing.listen((r) {
-      seen.add(r);
-      r.decision.complete(answer);
-    });
-    final p = await _call('POST', '$b$_api/web/pair',
+      // Decline.
+      final seen = <WebPairingRequest>[];
+      var answer = false;
+      final sub = a.webPairing.listen((r) {
+        seen.add(r);
+        r.decision.complete(answer);
+      });
+      final p = await _call(
+        'POST',
+        '$b$_api/web/pair',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
-              '(KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36'
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36',
         },
-        json: {});
-    expect(p.status, 200);
-    _expectSecurityHeaders(p);
-    expect(p.json!['code'], matches(RegExp(r'^\d{4}$')));
-    final declined =
-        await _call('GET', '$b$_api/web/pair/${p.json!['id']}');
-    expect(declined.status, 403);
-    expect(declined.json!['status'], 'declined');
-    expect(declined.headers['set-cookie'], isNull);
-    expect(seen.single.code, p.json!['code']);
-    expect(seen.single.remoteIp, '127.0.0.1');
-    expect(seen.single.userAgent, 'Chrome on Android');
-    // The pairing id is single use.
-    expect((await _call('GET', '$b$_api/web/pair/${p.json!['id']}')).status,
-        404);
+        json: {},
+      );
+      expect(p.status, 200);
+      _expectSecurityHeaders(p);
+      expect(p.json!['code'], matches(RegExp(r'^\d{4}$')));
+      final declined = await _call('GET', '$b$_api/web/pair/${p.json!['id']}');
+      expect(declined.status, 403);
+      expect(declined.json!['status'], 'declined');
+      expect(declined.headers['set-cookie'], isNull);
+      expect(seen.single.code, p.json!['code']);
+      expect(seen.single.remoteIp, '127.0.0.1');
+      expect(seen.single.userAgent, 'Chrome on Android');
+      // The pairing id is single use.
+      expect(
+        (await _call('GET', '$b$_api/web/pair/${p.json!['id']}')).status,
+        404,
+      );
 
-    // Approve.
-    answer = true;
-    final p2 = await _call('POST', '$b$_api/web/pair', json: {});
-    final ok = await _call('GET', '$b$_api/web/pair/${p2.json!['id']}');
-    expect(ok.status, 200);
-    expect(ok.json!['status'], 'approved');
-    final token = ok.json!['token'] as String;
-    expect(token.length, greaterThanOrEqualTo(40));
-    final cookie = ok.headers['set-cookie']!.single;
-    expect(cookie, startsWith('landrop_session=$token;'));
-    for (final part in [
-      'HttpOnly',
-      'SameSite=Strict',
-      'Path=/',
-      'Max-Age=3600',
-      'Secure'
-    ]) {
-      expect(cookie, contains(part));
-    }
-    await sub.cancel();
-    expect(
-        (await _call('GET', '$b$_api/web/session',
-                headers: {'Cookie': 'other=1; landrop_session=$token'}))
-            .status,
-        200);
-    final auth = {'Authorization': 'Bearer $token'};
-    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
-        200);
+      // Approve.
+      answer = true;
+      final p2 = await _call('POST', '$b$_api/web/pair', json: {});
+      final ok = await _call('GET', '$b$_api/web/pair/${p2.json!['id']}');
+      expect(ok.status, 200);
+      expect(ok.json!['status'], 'approved');
+      final token = ok.json!['token'] as String;
+      expect(token.length, greaterThanOrEqualTo(40));
+      final cookie = ok.headers['set-cookie']!.single;
+      expect(cookie, startsWith('landrop_session=$token;'));
+      for (final part in [
+        'HttpOnly',
+        'SameSite=Strict',
+        'Path=/',
+        'Max-Age=3600',
+        'Secure',
+      ]) {
+        expect(cookie, contains(part));
+      }
+      await sub.cancel();
+      expect(
+        (await _call(
+          'GET',
+          '$b$_api/web/session',
+          headers: {'Cookie': 'other=1; landrop_session=$token'},
+        )).status,
+        200,
+      );
+      final auth = {'Authorization': 'Bearer $token'};
+      expect(
+        (await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        200,
+      );
 
-    // Browser upload through the normal Accept dialog and receive pipeline.
-    final data = _randomBytes(1536 * 1024 + 7, 9);
-    IncomingRequest? got;
-    final inSub = a.incoming.listen((r) {
-      got = r;
-      r.decision.complete(true);
-    });
-    final prep = await _call('POST', '$b$_api/web/upload-prepare',
+      // Browser upload through the normal Accept dialog and receive pipeline.
+      final data = _randomBytes(1536 * 1024 + 7, 9);
+      IncomingRequest? got;
+      final inSub = a.incoming.listen((r) {
+        got = r;
+        r.decision.complete(true);
+      });
+      final prep = await _call(
+        'POST',
+        '$b$_api/web/upload-prepare',
         headers: {'Cookie': 'landrop_session=$token'},
         json: {
           'files': [
@@ -539,55 +608,73 @@ void main() {
               'id': '0',
               'fileName': '../../photo.bin',
               'size': data.length,
-              'fileType': 'application/octet-stream'
-            }
-          ]
-        });
-    expect(prep.status, 200);
-    _expectSecurityHeaders(prep);
-    expect(got!.sender.alias, 'Browser 127.0.0.1');
-    expect(got!.sender.deviceType, 'web');
-    expect(got!.files.single.fileName, 'photo.bin'); // sanitised
-    final sid = prep.json!['sessionId'] as String;
-    final ftok = (prep.json!['files'] as Map)['0'] as String;
-    final q = 'sessionId=$sid&fileId=0&token=$ftok';
+              'fileType': 'application/octet-stream',
+            },
+          ],
+        },
+      );
+      expect(prep.status, 200);
+      _expectSecurityHeaders(prep);
+      expect(got!.sender.alias, 'Browser 127.0.0.1');
+      expect(got!.sender.deviceType, 'web');
+      expect(got!.files.single.fileName, 'photo.bin'); // sanitised
+      final sid = prep.json!['sessionId'] as String;
+      final ftok = (prep.json!['files'] as Map)['0'] as String;
+      final q = 'sessionId=$sid&fileId=0&token=$ftok';
 
-    // Another browser session cannot use these tokens.
-    final other = await pair(a);
-    final stolen = await _call('POST', '$b$_api/web/upload?$q',
-        headers: {'Authorization': 'Bearer $other'}, bytes: data);
-    expect(stolen.status, 403);
+      // Another browser session cannot use these tokens.
+      final other = await pair(a);
+      final stolen = await _call(
+        'POST',
+        '$b$_api/web/upload?$q',
+        headers: {'Authorization': 'Bearer $other'},
+        bytes: data,
+      );
+      expect(stolen.status, 403);
 
-    final up = await _call('POST', '$b$_api/web/upload?$q',
-        headers: auth, bytes: data);
-    expect(up.status, 200);
-    _expectSecurityHeaders(up);
-    final dst = File('${tmp.path}/a-save/photo.bin');
-    expect(dst.existsSync(), isTrue);
-    expect(_sha(dst.readAsBytesSync()), _sha(data));
+      final up = await _call(
+        'POST',
+        '$b$_api/web/upload?$q',
+        headers: auth,
+        bytes: data,
+      );
+      expect(up.status, 200);
+      _expectSecurityHeaders(up);
+      final dst = File('${tmp.path}/a-save/photo.bin');
+      expect(dst.existsSync(), isTrue);
+      expect(_sha(dst.readAsBytesSync()), _sha(data));
 
-    // Owner declines a second batch -> 403.
-    await inSub.cancel();
-    final decSub = a.incoming.listen((r) => r.decision.complete(false));
-    final dec = await _call('POST', '$b$_api/web/upload-prepare',
+      // Owner declines a second batch -> 403.
+      await inSub.cancel();
+      final decSub = a.incoming.listen((r) => r.decision.complete(false));
+      final dec = await _call(
+        'POST',
+        '$b$_api/web/upload-prepare',
         headers: auth,
         json: {
           'files': [
-            {'id': '0', 'fileName': 'x.txt', 'size': 1}
-          ]
-        });
-    expect(dec.status, 403);
-    await decSub.cancel();
+            {'id': '0', 'fileName': 'x.txt', 'size': 1},
+          ],
+        },
+      );
+      expect(dec.status, 403);
+      await decSub.cancel();
 
-    // A cross-site POST (foreign Origin) is refused.
-    final xs = await _call('POST', '$b$_api/web/pair',
-        headers: {'Origin': 'http://evil.test'}, json: {});
-    expect(xs.status, 403);
-  });
+      // A cross-site POST (foreign Origin) is refused.
+      final xs = await _call(
+        'POST',
+        '$b$_api/web/pair',
+        headers: {'Origin': 'http://evil.test'},
+        json: {},
+      );
+      expect(xs.status, 403);
+    },
+  );
 
   test('pairing times out; duplicate is 409; rate limit gives 429', () async {
-    final a = await startCore(_opts(
-        rateLimit: 4, pairingTimeout: const Duration(milliseconds: 300)));
+    final a = await startCore(
+      _opts(rateLimit: 4, pairingTimeout: const Duration(milliseconds: 300)),
+    );
     final b = base(a);
     final got = <WebPairingRequest>[];
     final sub = a.webPairing.listen(got.add); // never answers
@@ -614,71 +701,77 @@ void main() {
     expect((await _call('GET', '$b/')).status, 200);
   });
 
-  test('HTTP listener: off by default; page and shares only; no Secure',
-      () async {
-    final a = await startCore(_opts());
-    expect(a.webHttpEnabled, isFalse);
-    expect(a.webHttpPort, isNull);
-    expect(a.webHttpUrl, isNull);
-    expect(a.webUrl, '${base(a)}/');
+  test(
+    'HTTP listener: off by default; page and shares only; no Secure',
+    () async {
+      final a = await startCore(_opts());
+      expect(a.webHttpEnabled, isFalse);
+      expect(a.webHttpPort, isNull);
+      expect(a.webHttpUrl, isNull);
+      expect(a.webUrl, '${base(a)}/');
 
-    final f = File('${tmp.path}/h.txt')..writeAsStringSync('hello http');
-    final s = a.createShare([f.path]);
-    expect(s.httpUrl, isNull);
+      final f = File('${tmp.path}/h.txt')..writeAsStringSync('hello http');
+      final s = a.createShare([f.path]);
+      expect(s.httpUrl, isNull);
 
-    final changes = <List<Share>>[];
-    final sub = a.sharesChanged.listen(changes.add);
-    await a.setWebHttpEnabled(true);
-    final port = a.webHttpPort!;
-    final hb = 'http://127.0.0.1:$port';
-    expect(a.webHttpUrl, '$hb/');
-    await Future<void>.delayed(Duration.zero);
-    expect(changes.last.single.httpUrl, '$hb/#s=${s.token}');
-    await sub.cancel();
+      final changes = <List<Share>>[];
+      final sub = a.sharesChanged.listen(changes.add);
+      await a.setWebHttpEnabled(true);
+      final port = a.webHttpPort!;
+      final hb = 'http://127.0.0.1:$port';
+      expect(a.webHttpUrl, '$hb/');
+      await Future<void>.delayed(Duration.zero);
+      expect(changes.last.single.httpUrl, '$hb/#s=${s.token}');
+      await sub.cancel();
 
-    final page = await _call('GET', '$hb/');
-    expect(page.status, 200);
-    expect(page.h('content-type'), startsWith('text/html'));
-    expect(page.text, webPageHtml);
-    _expectSecurityHeaders(page);
-    final l = await _call('GET', '$hb$_api/shares/${s.token}');
-    expect(l.status, 200);
-    final fb = await _call('GET',
+      final page = await _call('GET', '$hb/');
+      expect(page.status, 200);
+      expect(page.h('content-type'), startsWith('text/html'));
+      expect(page.text, webPageHtml);
+      _expectSecurityHeaders(page);
+      final l = await _call('GET', '$hb$_api/shares/${s.token}');
+      expect(l.status, 200);
+      final fb = await _call(
+        'GET',
         '$hb$_api/shares/${s.token}/files/${s.files.single.id}',
-        headers: {'Range': 'bytes=6-'});
-    expect(fb.status, 206);
-    expect(fb.text, 'http');
+        headers: {'Range': 'bytes=6-'},
+      );
+      expect(fb.status, 206);
+      expect(fb.text, 'http');
 
-    // Never the device API over plain HTTP.
-    for (final (m, p) in [
-      ('GET', '/api/localsend/v2/info'),
-      ('POST', '/api/localsend/v2/register'),
-      ('POST', '/api/localsend/v2/prepare-upload'),
-      ('POST', '/api/localsend/v2/upload'),
-      ('POST', '/api/localsend/v2/cancel'),
-      ('GET', '/api/landrop/v1/capabilities'),
-      ('GET', '/api/landrop/v1/upload-status'),
-    ]) {
-      final r = await _call(m, '$hb$p', json: m == 'POST' ? {} : null);
-      expect(r.status, 404, reason: p);
-      _expectSecurityHeaders(r);
-    }
+      // Never the device API over plain HTTP.
+      for (final (m, p) in [
+        ('GET', '/api/localsend/v2/info'),
+        ('POST', '/api/localsend/v2/register'),
+        ('POST', '/api/localsend/v2/prepare-upload'),
+        ('POST', '/api/localsend/v2/upload'),
+        ('POST', '/api/localsend/v2/cancel'),
+        ('GET', '/api/landrop/v1/capabilities'),
+        ('GET', '/api/landrop/v1/upload-status'),
+      ]) {
+        final r = await _call(m, '$hb$p', json: m == 'POST' ? {} : null);
+        expect(r.status, 404, reason: p);
+        _expectSecurityHeaders(r);
+      }
 
-    // Pairing over HTTP: cookie without Secure.
-    final sub2 = a.webPairing.listen((r) => r.decision.complete(true));
-    final p = await _call('POST', '$hb$_api/web/pair', json: {});
-    final ok = await _call('GET', '$hb$_api/web/pair/${p.json!['id']}');
-    await sub2.cancel();
-    final cookie = ok.headers['set-cookie']!.single;
-    expect(cookie, contains('HttpOnly'));
-    expect(cookie, contains('SameSite=Strict'));
-    expect(cookie, isNot(contains('Secure')));
+      // Pairing over HTTP: cookie without Secure.
+      final sub2 = a.webPairing.listen((r) => r.decision.complete(true));
+      final p = await _call('POST', '$hb$_api/web/pair', json: {});
+      final ok = await _call('GET', '$hb$_api/web/pair/${p.json!['id']}');
+      await sub2.cancel();
+      final cookie = ok.headers['set-cookie']!.single;
+      expect(cookie, contains('HttpOnly'));
+      expect(cookie, contains('SameSite=Strict'));
+      expect(cookie, isNot(contains('Secure')));
 
-    await a.setWebHttpEnabled(false);
-    expect(a.webHttpPort, isNull);
-    await expectLater(Socket.connect('127.0.0.1', port),
-        throwsA(isA<SocketException>()));
-  });
+      await a.setWebHttpEnabled(false);
+      expect(a.webHttpPort, isNull);
+      await expectLater(
+        Socket.connect('127.0.0.1', port),
+        throwsA(isA<SocketException>()),
+      );
+    },
+  );
 
   test('HTTP listener can be on from the start (options.httpPort)', () async {
     final a = await startCore(_opts(httpPort: 0));
@@ -687,44 +780,54 @@ void main() {
     expect(r.status, 200);
   });
 
-  test('page asset: no external URLs, no markup sinks, served with headers',
-      () async {
-    expect(RegExp(r'https?://', caseSensitive: false).hasMatch(webPageHtml),
-        isFalse);
-    expect(
+  test(
+    'page asset: no external URLs, no markup sinks, served with headers',
+    () async {
+      expect(
+        RegExp(r'https?://', caseSensitive: false).hasMatch(webPageHtml),
+        isFalse,
+      );
+      expect(
         RegExp(r'''(src|href|action)\s*=\s*["']?\s*//''').hasMatch(webPageHtml),
-        isFalse);
-    expect(webPageHtml, isNot(contains('@import')));
-    expect(webPageHtml, isNot(contains('url(')));
-    for (final sink in [
-      'innerHTML',
-      'outerHTML',
-      'insertAdjacentHTML',
-      'document.write',
-      'eval(',
-      'new Function',
-    ]) {
-      expect(webPageHtml, isNot(contains(sink)), reason: sink);
-    }
-    expect(webPageHtml, contains('textContent'));
-    expect(webPageHtml, contains('<meta name="referrer" content="no-referrer">'));
-    expect(webPageHtml, contains('prefers-color-scheme: dark'));
-    // Media previews are created as elements, not markup.
-    expect(webPageHtml, contains("el(kind, 'preview')"));
+        isFalse,
+      );
+      expect(webPageHtml, isNot(contains('@import')));
+      expect(webPageHtml, isNot(contains('url(')));
+      for (final sink in [
+        'innerHTML',
+        'outerHTML',
+        'insertAdjacentHTML',
+        'document.write',
+        'eval(',
+        'new Function',
+      ]) {
+        expect(webPageHtml, isNot(contains(sink)), reason: sink);
+      }
+      expect(webPageHtml, contains('textContent'));
+      expect(
+        webPageHtml,
+        contains('<meta name="referrer" content="no-referrer">'),
+      );
+      expect(webPageHtml, contains('prefers-color-scheme: dark'));
+      // Media previews are created as elements, not markup.
+      expect(webPageHtml, contains("el(kind, 'preview')"));
 
-    final a = await startCore(_opts());
-    final page = await _call('GET', '${base(a)}/');
-    expect(page.status, 200);
-    expect(page.h('content-type'), startsWith('text/html'));
-    expect(page.text, webPageHtml);
-    _expectSecurityHeaders(page);
-    final head = await _call('HEAD', '${base(a)}/');
-    expect(head.status, 200);
-    expect(head.body, isEmpty);
-    // The device API is unaffected on HTTPS.
-    expect((await _call('GET', '${base(a)}/api/localsend/v2/info')).status,
-        200);
-  });
+      final a = await startCore(_opts());
+      final page = await _call('GET', '${base(a)}/');
+      expect(page.status, 200);
+      expect(page.h('content-type'), startsWith('text/html'));
+      expect(page.text, webPageHtml);
+      _expectSecurityHeaders(page);
+      final head = await _call('HEAD', '${base(a)}/');
+      expect(head.status, 200);
+      expect(head.body, isEmpty);
+      // The device API is unaffected on HTTPS.
+      expect(
+        (await _call('GET', '${base(a)}/api/localsend/v2/info')).status,
+        200,
+      );
+    },
+  );
 
   test('hostile file names travel as JSON data only', () async {
     final a = await startCore(_opts());
@@ -737,11 +840,18 @@ void main() {
     expect(l.h('x-content-type-options'), 'nosniff');
     expect((l.json!['files'] as List).single['name'], evil);
     // The page renders names with textContent / attributes only.
-    expect(webPageHtml, contains("el('span', 'name', f.name)"));
+    expect(webPageHtml, contains("nameSpan(f.name)"));
+    expect(webPageHtml, contains("var s = el('span', 'name', name);"));
     final file = await _call(
-        'GET', '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}');
-    expect(file.h('content-disposition'),
-        contains("filename*=UTF-8''%3Cimg%20src%3Dx%20onerror%3Dalert%281%29%3E.txt"));
+      'GET',
+      '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}',
+    );
+    expect(
+      file.h('content-disposition'),
+      contains(
+        "filename*=UTF-8''%3Cimg%20src%3Dx%20onerror%3Dalert%281%29%3E.txt",
+      ),
+    );
   });
 
   test('end to end: two cores, 30 MB share fetched by ranges, re-uploaded '
@@ -751,8 +861,7 @@ void main() {
     final data = _randomBytes(30 << 20, 30);
     final f = File('${tmp.path}/big.bin')..writeAsBytesSync(data);
     final s = a.createShare([f.path], maxDownloads: 1);
-    final url =
-        '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}';
+    final url = '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}';
     const size = 30 << 20;
     const chunk = 4 << 20;
     final out = BytesBuilder(copy: false);
@@ -780,18 +889,26 @@ void main() {
     final token = await pair(b);
     final inSub = b.incoming.listen((r) => r.decision.complete(true));
     final auth = {'Authorization': 'Bearer $token'};
-    final prep = await _call('POST', '${base(b)}$_api/web/upload-prepare',
-        headers: auth,
-        json: {
-          'files': [
-            {'id': 'f', 'fileName': 'big.bin', 'size': size}
-          ]
-        });
+    final prep = await _call(
+      'POST',
+      '${base(b)}$_api/web/upload-prepare',
+      headers: auth,
+      json: {
+        'files': [
+          {'id': 'f', 'fileName': 'big.bin', 'size': size},
+        ],
+      },
+    );
     expect(prep.status, 200);
-    final q = 'sessionId=${prep.json!['sessionId']}&fileId=f'
+    final q =
+        'sessionId=${prep.json!['sessionId']}&fileId=f'
         '&token=${(prep.json!['files'] as Map)['f']}';
-    final up = await _call('POST', '${base(b)}$_api/web/upload?$q',
-        headers: auth, bytes: got);
+    final up = await _call(
+      'POST',
+      '${base(b)}$_api/web/upload?$q',
+      headers: auth,
+      bytes: got,
+    );
     expect(up.status, 200);
     await inSub.cancel();
     final dst = File('${tmp.path}/b-save/big.bin');
@@ -800,72 +917,101 @@ void main() {
 
   // ------------------------------------------------ browser sessions
 
-  test('logout ends the session, clears the cookie and is idempotent',
-      () async {
-    final a = await startCore(_opts());
-    final b = base(a);
-    final changes = <List<WebSessionInfo>>[];
-    final sub = a.webSessionsChanged.listen(changes.add);
-    final token = await pair(a);
-    final auth = {'Authorization': 'Bearer $token'};
-    expect(a.webSessions, hasLength(1));
-    final info = a.webSessions.single;
-    expect(info.remoteIp, '127.0.0.1');
-    expect(info.userAgent, 'Dart client');
-    expect(info.id, isNot(token));
-    expect(info.pairedAt.isAfter(info.lastSeen), isFalse);
-    expect(changes.last.single.id, info.id);
+  test(
+    'logout ends the session, clears the cookie and is idempotent',
+    () async {
+      final a = await startCore(_opts());
+      final b = base(a);
+      final changes = <List<WebSessionInfo>>[];
+      final sub = a.webSessionsChanged.listen(changes.add);
+      final token = await pair(a);
+      final auth = {'Authorization': 'Bearer $token'};
+      expect(a.webSessions, hasLength(1));
+      final info = a.webSessions.single;
+      expect(info.remoteIp, '127.0.0.1');
+      expect(info.userAgent, 'Dart client');
+      expect(info.id, isNot(token));
+      expect(info.pairedAt.isAfter(info.lastSeen), isFalse);
+      expect(changes.last.single.id, info.id);
 
-    // A foreign Origin cannot sign the browser out (CSRF).
-    final xs = await _call('POST', '$b$_api/web/logout',
-        headers: {...auth, 'Origin': 'http://evil.test'}, json: {});
-    expect(xs.status, 403);
-    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
-        200);
+      // A foreign Origin cannot sign the browser out (CSRF).
+      final xs = await _call(
+        'POST',
+        '$b$_api/web/logout',
+        headers: {...auth, 'Origin': 'http://evil.test'},
+        json: {},
+      );
+      expect(xs.status, 403);
+      expect(
+        (await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        200,
+      );
 
-    final out = await _call('POST', '$b$_api/web/logout',
-        headers: {'Cookie': 'landrop_session=$token'}, json: {});
-    expect(out.status, 200);
-    _expectSecurityHeaders(out);
-    final cookie = out.headers['set-cookie']!.single;
-    expect(cookie, startsWith('landrop_session=;'));
-    for (final part in ['Max-Age=0', 'Path=/', 'HttpOnly', 'SameSite=Strict',
-        'Secure']) {
-      expect(cookie, contains(part));
-    }
-    expect(a.webSessions, isEmpty);
-    await Future<void>.delayed(Duration.zero);
-    expect(changes.last, isEmpty);
-    await sub.cancel();
+      final out = await _call(
+        'POST',
+        '$b$_api/web/logout',
+        headers: {'Cookie': 'landrop_session=$token'},
+        json: {},
+      );
+      expect(out.status, 200);
+      _expectSecurityHeaders(out);
+      final cookie = out.headers['set-cookie']!.single;
+      expect(cookie, startsWith('landrop_session=;'));
+      for (final part in [
+        'Max-Age=0',
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Strict',
+        'Secure',
+      ]) {
+        expect(cookie, contains(part));
+      }
+      expect(a.webSessions, isEmpty);
+      await Future<void>.delayed(Duration.zero);
+      expect(changes.last, isEmpty);
+      await sub.cancel();
 
-    // The token is dead, by header and by cookie.
-    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
-        401);
-    expect(
-        (await _call('GET', '$b$_api/web/session',
-                headers: {'Cookie': 'landrop_session=$token'}))
-            .status,
-        401);
-    expect(
-        (await _call('POST', '$b$_api/web/upload-prepare',
-                headers: auth,
-                json: {
-                  'files': [
-                    {'id': '0', 'fileName': 'a.txt', 'size': 1}
-                  ]
-                }))
-            .status,
-        401);
-    // Signing out twice (or without a session) is fine.
-    expect((await _call('POST', '$b$_api/web/logout', json: {})).status, 200);
-  });
+      // The token is dead, by header and by cookie.
+      expect(
+        (await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        401,
+      );
+      expect(
+        (await _call(
+          'GET',
+          '$b$_api/web/session',
+          headers: {'Cookie': 'landrop_session=$token'},
+        )).status,
+        401,
+      );
+      expect(
+        (await _call(
+          'POST',
+          '$b$_api/web/upload-prepare',
+          headers: auth,
+          json: {
+            'files': [
+              {'id': '0', 'fileName': 'a.txt', 'size': 1},
+            ],
+          },
+        )).status,
+        401,
+      );
+      // Signing out twice (or without a session) is fine.
+      expect((await _call('POST', '$b$_api/web/logout', json: {})).status, 200);
+    },
+  );
 
   test('logout over plain HTTP clears the cookie without Secure', () async {
     final a = await startCore(_opts(httpPort: 0));
     final hb = 'http://127.0.0.1:${a.webHttpPort}';
     final token = await pair(a, url: hb);
-    final out = await _call('POST', '$hb$_api/web/logout',
-        headers: {'Authorization': 'Bearer $token'}, json: {});
+    final out = await _call(
+      'POST',
+      '$hb$_api/web/logout',
+      headers: {'Authorization': 'Bearer $token'},
+      json: {},
+    );
     expect(out.status, 200);
     final cookie = out.headers['set-cookie']!.single;
     expect(cookie, contains('Max-Age=0'));
@@ -873,55 +1019,72 @@ void main() {
     expect(a.webSessions, isEmpty);
   });
 
-  test('revoking a browser: token dies, prepared uploads are refused',
-      () async {
-    final a = await startCore(_opts());
-    final b = base(a);
-    final token = await pair(a);
-    final auth = {'Authorization': 'Bearer $token'};
-    final inSub = a.incoming.listen((r) => r.decision.complete(true));
-    final prep = await _call('POST', '$b$_api/web/upload-prepare',
+  test(
+    'revoking a browser: token dies, prepared uploads are refused',
+    () async {
+      final a = await startCore(_opts());
+      final b = base(a);
+      final token = await pair(a);
+      final auth = {'Authorization': 'Bearer $token'};
+      final inSub = a.incoming.listen((r) => r.decision.complete(true));
+      final prep = await _call(
+        'POST',
+        '$b$_api/web/upload-prepare',
         headers: auth,
         json: {
           'files': [
             {'id': '0', 'fileName': 'one.txt', 'size': 3},
             {'id': '1', 'fileName': 'two.txt', 'size': 3},
-          ]
-        });
-    expect(prep.status, 200);
-    final sid = prep.json!['sessionId'] as String;
-    final toks = prep.json!['files'] as Map;
-    String q(String id) => 'sessionId=$sid&fileId=$id&token=${toks[id]}';
-    expect(
-        (await _call('POST', '$b$_api/web/upload?${q('0')}',
-                headers: auth, bytes: [1, 2, 3]))
-            .status,
-        200);
+          ],
+        },
+      );
+      expect(prep.status, 200);
+      final sid = prep.json!['sessionId'] as String;
+      final toks = prep.json!['files'] as Map;
+      String q(String id) => 'sessionId=$sid&fileId=$id&token=${toks[id]}';
+      expect(
+        (await _call(
+          'POST',
+          '$b$_api/web/upload?${q('0')}',
+          headers: auth,
+          bytes: [1, 2, 3],
+        )).status,
+        200,
+      );
 
-    final changes = <List<WebSessionInfo>>[];
-    final sub = a.webSessionsChanged.listen(changes.add);
-    a.revokeWebSession(a.webSessions.single.id);
-    a.revokeWebSession('unknown'); // ignored
-    expect(a.webSessions, isEmpty);
-    await Future<void>.delayed(Duration.zero);
-    expect(changes.single, isEmpty);
-    await sub.cancel();
+      final changes = <List<WebSessionInfo>>[];
+      final sub = a.webSessionsChanged.listen(changes.add);
+      a.revokeWebSession(a.webSessions.single.id);
+      a.revokeWebSession('unknown'); // ignored
+      expect(a.webSessions, isEmpty);
+      await Future<void>.delayed(Duration.zero);
+      expect(changes.single, isEmpty);
+      await sub.cancel();
 
-    expect((await _call('GET', '$b$_api/web/session', headers: auth)).status,
-        401);
-    // Upload after revoke: the browser token is refused ...
-    final after = await _call('POST', '$b$_api/web/upload?${q('1')}',
-        headers: auth, bytes: [4, 5, 6]);
-    expect(after.status, 401);
-    // ... and so is the receive session itself, even with its file token.
-    final direct = await _call(
-        'POST', '$b/api/localsend/v2/upload?${q('1')}',
-        bytes: [4, 5, 6]);
-    expect(direct.status, 403);
-    expect(File('${tmp.path}/a-save/one.txt').existsSync(), isTrue);
-    expect(File('${tmp.path}/a-save/two.txt').existsSync(), isFalse);
-    await inSub.cancel();
-  });
+      expect(
+        (await _call('GET', '$b$_api/web/session', headers: auth)).status,
+        401,
+      );
+      // Upload after revoke: the browser token is refused ...
+      final after = await _call(
+        'POST',
+        '$b$_api/web/upload?${q('1')}',
+        headers: auth,
+        bytes: [4, 5, 6],
+      );
+      expect(after.status, 401);
+      // ... and so is the receive session itself, even with its file token.
+      final direct = await _call(
+        'POST',
+        '$b/api/localsend/v2/upload?${q('1')}',
+        bytes: [4, 5, 6],
+      );
+      expect(direct.status, 403);
+      expect(File('${tmp.path}/a-save/one.txt').existsSync(), isTrue);
+      expect(File('${tmp.path}/a-save/two.txt').existsSync(), isFalse);
+      await inSub.cancel();
+    },
+  );
 
   test('revoking a browser aborts its upload in flight', () async {
     final a = await startCore(_opts());
@@ -930,25 +1093,32 @@ void main() {
     final auth = {'Authorization': 'Bearer $token'};
     final inSub = a.incoming.listen((r) => r.decision.complete(true));
     const size = 4 << 20;
-    final prep = await _call('POST', '$b$_api/web/upload-prepare',
-        headers: auth,
-        json: {
-          'files': [
-            {'id': '0', 'fileName': 'big.bin', 'size': size}
-          ]
-        });
+    final prep = await _call(
+      'POST',
+      '$b$_api/web/upload-prepare',
+      headers: auth,
+      json: {
+        'files': [
+          {'id': '0', 'fileName': 'big.bin', 'size': size},
+        ],
+      },
+    );
     expect(prep.status, 200);
     final sid = prep.json!['sessionId'] as String;
     final ftok = (prep.json!['files'] as Map)['0'];
-    final started = a.progress
-        .firstWhere((p) => p.sessionId == sid && p.error == null);
-    final errored = a.progress.firstWhere((p) => p.sessionId == sid && p.error != null);
+    final started = a.progress.firstWhere(
+      (p) => p.sessionId == sid && p.error == null,
+    );
+    final errored = a.progress.firstWhere(
+      (p) => p.sessionId == sid && p.error != null,
+    );
 
     final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
     int? status;
     try {
-      final req = await c.postUrl(Uri.parse(
-          '$b$_api/web/upload?sessionId=$sid&fileId=0&token=$ftok'));
+      final req = await c.postUrl(
+        Uri.parse('$b$_api/web/upload?sessionId=$sid&fileId=0&token=$ftok'),
+      );
       req.headers.set('Authorization', 'Bearer $token');
       req.contentLength = size;
       final data = _randomBytes(size, 11);
@@ -985,13 +1155,16 @@ void main() {
       a.revokeWebSession(a.webSessions.single.id);
       r.decision.complete(true);
     });
-    final prep = await _call('POST', '${base(a)}$_api/web/upload-prepare',
-        headers: {'Authorization': 'Bearer $token'},
-        json: {
-          'files': [
-            {'id': '0', 'fileName': 'x.txt', 'size': 1}
-          ]
-        });
+    final prep = await _call(
+      'POST',
+      '${base(a)}$_api/web/upload-prepare',
+      headers: {'Authorization': 'Bearer $token'},
+      json: {
+        'files': [
+          {'id': '0', 'fileName': 'x.txt', 'size': 1},
+        ],
+      },
+    );
     expect(prep.status, 401);
     await inSub.cancel();
   });
@@ -1000,6 +1173,127 @@ void main() {
     expect(webPageHtml, contains('id="signout-btn"'));
     expect(webPageHtml, contains(">Sign out<"));
     expect(webPageHtml, contains("API + '/web/logout'"));
+  });
+
+  group('page i18n', () {
+    // Keys of one language block of `var T = {en: {...}, fa: {...}}`.
+    Set<String> dictKeys(String lang) {
+      final start = webPageHtml.indexOf('\n    $lang: {');
+      expect(start, greaterThan(0), reason: lang);
+      final end = webPageHtml.indexOf('\n    }', start);
+      final block = webPageHtml.substring(start, end);
+      return RegExp(
+        r'^      (\w+):',
+        multiLine: true,
+      ).allMatches(block).map((m) => m.group(1)!).toSet();
+    }
+
+    String scriptAfterDictionary() {
+      final i = webPageHtml.indexOf(
+        '// ------------------------------------------------------------ language',
+      );
+      expect(i, greaterThan(0));
+      return webPageHtml.substring(i);
+    }
+
+    test('en and fa dictionaries have the same keys', () {
+      final en = dictKeys('en');
+      final fa = dictKeys('fa');
+      expect(en.length, greaterThan(40));
+      expect(en.difference(fa), isEmpty, reason: 'missing in fa');
+      expect(fa.difference(en), isEmpty, reason: 'missing in en');
+    });
+
+    test('every key the page uses exists, and every key is used', () {
+      final keys = dictKeys('en');
+      final js = scriptAfterDictionary();
+      final html = webPageHtml.substring(0, webPageHtml.indexOf('<script>'));
+      final used = <String>{};
+      void add(RegExp r, {String suffix = ''}) {
+        for (final m in r.allMatches(js)) {
+          used.add(m.group(1)! + suffix);
+        }
+      }
+
+      add(RegExp(r"\bt\('(\w+)'\)"));
+      add(RegExp(r"\btx\([^,()]+, '(\w+)'"));
+      add(RegExp(r"\btel\('\w+', '[^']*', '(\w+)'"));
+      add(RegExp(r"\bax\([^,()]+, '(\w+)'"));
+      add(RegExp(r"\bsetMsg\('[\w-]+', '(\w+)'"));
+      add(RegExp(r"\bshowPair\('(\w+)'"));
+      add(RegExp(r"\bfinish\('(\w+)'"));
+      add(RegExp(r"\btn\('(\w+)'"), suffix: '1');
+      add(RegExp(r"\btn\('(\w+)'"), suffix: 'N');
+      // Keys chosen by ternaries.
+      for (final m in RegExp(
+        r"\? '(\w+)'|: '(\w+)'|\? \['(\w+)'|: \['(\w+)'",
+      ).allMatches(js)) {
+        for (var g = 1; g <= 4; g++) {
+          final k = m.group(g);
+          if (k != null && keys.contains(k)) used.add(k);
+        }
+      }
+      for (final m in RegExp(r'data-ta?="(\w+)"').allMatches(html)) {
+        used.add(m.group(1)!);
+      }
+      expect(used.difference(keys), isEmpty, reason: 'used but undefined');
+      expect(keys.difference(used), isEmpty, reason: 'defined but unused');
+    });
+
+    test('no user-visible English is hard-coded in the script', () {
+      final js = scriptAfterDictionary();
+      for (final bad in [
+        "'Download'",
+        "'Open '",
+        "'Sending ",
+        "'Sent '",
+        "' B'",
+        "'Show'",
+        "'Play'",
+      ]) {
+        expect(js, isNot(contains(bad)), reason: bad);
+      }
+    });
+
+    test('lang/dir handling, toggle, persistence and bidi isolation', () {
+      expect(webPageHtml, contains('document.documentElement'));
+      expect(webPageHtml, contains("root.dir = lang === 'fa' ? 'rtl' : 'ltr'"));
+      expect(webPageHtml, contains('root.lang = lang'));
+      expect(webPageHtml, contains('navigator.language'));
+      expect(webPageHtml, contains(r"/^fa/i"));
+      expect(webPageHtml, contains("localStorage.getItem('landrop-lang')"));
+      expect(webPageHtml, contains("localStorage.setItem('landrop-lang'"));
+      // Storage is guarded: a throwing localStorage must not break the page.
+      expect(
+        RegExp(r'try \{[^}]*localStorage\.getItem').hasMatch(webPageHtml),
+        isTrue,
+      );
+      expect(
+        RegExp(r'try \{ localStorage\.setItem').hasMatch(webPageHtml),
+        isTrue,
+      );
+      expect(webPageHtml, contains('function fmtNum'));
+      expect(webPageHtml, contains('0x06F0'));
+      expect(webPageHtml, contains("el('bdi'"));
+      expect(webPageHtml, contains('unicode-bidi: isolate'));
+      expect(webPageHtml, contains('id="pair-code" class="code" dir="ltr"'));
+      expect(webPageHtml, contains("setAttribute('dir', 'auto')"));
+      // RTL support uses logical properties only.
+      expect(
+        RegExp(r'(margin|padding)-(left|right)|text-align:\s*(left|right)')
+            .hasMatch(webPageHtml),
+        isFalse,
+      );
+      expect(webPageHtml, contains('REVIEW:'));
+    });
+
+    test('the served page contains the language toggle', () async {
+      final a = await startCore(_opts());
+      final page = await _call('GET', '${base(a)}/');
+      expect(page.status, 200);
+      expect(page.text, contains('id="lang-btn"'));
+      expect(page.text, contains('landrop-lang'));
+    });
   });
 
   // ------------------------------------------------ share persistence
@@ -1018,8 +1312,11 @@ void main() {
       final a = await startCore(_opts(sharesStorePath: store), name: 'a');
       final data = _randomBytes(100000, 21);
       final f = File('${tmp.path}/keep.bin')..writeAsBytesSync(data);
-      final limited = a.createShare([f.path],
-          ttl: const Duration(hours: 1), maxDownloads: 3);
+      final limited = a.createShare(
+        [f.path],
+        ttl: const Duration(hours: 1),
+        maxDownloads: 3,
+      );
       final forever = a.createShare([f.path]);
       final url =
           '${base(a)}$_api/shares/${limited.token}/files/${limited.files.single.id}';
@@ -1042,34 +1339,38 @@ void main() {
       expect(l.token, limited.token);
       expect(l.downloadsLeft, 2);
       expect(l.maxDownloads, 3);
-      expect(l.expiresAt!.difference(limited.expiresAt!).inSeconds.abs(),
-          lessThan(1));
+      expect(
+        l.expiresAt!.difference(limited.expiresAt!).inSeconds.abs(),
+        lessThan(1),
+      );
       expect(l.files.single.id, limited.files.single.id);
       expect(l.files.single.name, 'keep.bin');
       expect(got[forever.id]!.expiresAt, isNull);
       expect(got[forever.id]!.downloadsLeft, isNull);
       // The link is rebuilt for the current address; the token is what counts.
       expect(l.url, '${base(b)}/#s=${limited.token}');
-      final again = await _call('GET',
-          '${base(b)}$_api/shares/${l.token}/files/${l.files.single.id}');
+      final again = await _call(
+        'GET',
+        '${base(b)}$_api/shares/${l.token}/files/${l.files.single.id}',
+      );
       expect(again.status, 200);
       expect(_sha(again.body), _sha(data));
       await _settle();
       expect(b.shares.firstWhere((s) => s.id == limited.id).downloadsLeft, 1);
       // And the new count is stored too.
       final stored = jsonDecode(File(store).readAsStringSync()) as Map;
-      final row = (stored['shares'] as List)
-          .cast<Map>()
-          .firstWhere((s) => s['id'] == limited.id);
+      final row = (stored['shares'] as List).cast<Map>().firstWhere(
+        (s) => s['id'] == limited.id,
+      );
       expect(row['downloadsLeft'], 1);
     });
 
-    test('expired, missing and changed files are dropped on restore',
-        () async {
+    test('expired, missing and changed files are dropped on restore', () async {
       final a = await startCore(_opts(sharesStorePath: store), name: 'a');
       File mk(String n) => File('${tmp.path}/$n')..writeAsStringSync('12345');
-      final expired =
-          a.createShare([mk('e.txt').path], ttl: const Duration(milliseconds: 300));
+      final expired = a.createShare([
+        mk('e.txt').path,
+      ], ttl: const Duration(milliseconds: 300));
       final missing = a.createShare([mk('m.txt').path]);
       final changed = a.createShare([mk('c.txt').path]);
       final dir = await Directory('${tmp.path}/Album').create();
@@ -1095,8 +1396,9 @@ void main() {
       for (final s in [expired, missing, changed, folderPartlyGone]) {
         expect(after, isNot(contains(s.token)), reason: s.id);
         expect(
-            (await _call('GET', '${base(b)}$_api/shares/${s.token}')).status,
-            404);
+          (await _call('GET', '${base(b)}$_api/shares/${s.token}')).status,
+          404,
+        );
       }
     });
 
@@ -1105,51 +1407,60 @@ void main() {
       final f = File('${tmp.path}/once.txt')..writeAsStringSync('once');
       final s = a.createShare([f.path], maxDownloads: 1);
       expect(
-          (await _call('GET',
-                  '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}'))
-              .status,
-          200);
+        (await _call(
+          'GET',
+          '${base(a)}$_api/shares/${s.token}/files/${s.files.single.id}',
+        )).status,
+        200,
+      );
       await _settle();
       await drop(a);
       final b = await startCore(_opts(sharesStorePath: store), name: 'b');
       expect(b.shares, isEmpty);
     });
 
-    test('turning persistence off deletes the store and stops writing',
-        () async {
-      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
-      expect(a.sharesPersistence, isTrue);
-      final f = File('${tmp.path}/p.txt')..writeAsStringSync('p');
-      final s1 = a.createShare([f.path]);
-      expect(File(store).existsSync(), isTrue);
-      a.setSharesPersistence(false);
-      expect(a.sharesPersistence, isFalse);
-      expect(File(store).existsSync(), isFalse);
-      a.createShare([f.path]);
-      a.revokeShare(s1.id);
-      expect(File(store).existsSync(), isFalse);
-      expect(a.shares, hasLength(1)); // still active until the app stops
-      a.setSharesPersistence(true);
-      expect(File(store).existsSync(), isTrue);
-      expect((jsonDecode(File(store).readAsStringSync())['shares'] as List),
-          hasLength(1));
-    });
+    test(
+      'turning persistence off deletes the store and stops writing',
+      () async {
+        final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+        expect(a.sharesPersistence, isTrue);
+        final f = File('${tmp.path}/p.txt')..writeAsStringSync('p');
+        final s1 = a.createShare([f.path]);
+        expect(File(store).existsSync(), isTrue);
+        a.setSharesPersistence(false);
+        expect(a.sharesPersistence, isFalse);
+        expect(File(store).existsSync(), isFalse);
+        a.createShare([f.path]);
+        a.revokeShare(s1.id);
+        expect(File(store).existsSync(), isFalse);
+        expect(a.shares, hasLength(1)); // still active until the app stops
+        a.setSharesPersistence(true);
+        expect(File(store).existsSync(), isTrue);
+        expect(
+          (jsonDecode(File(store).readAsStringSync())['shares'] as List),
+          hasLength(1),
+        );
+      },
+    );
 
-    test('off before start: the stored shares are deleted, not restored',
-        () async {
-      final a = await startCore(_opts(sharesStorePath: store), name: 'a');
-      final f = File('${tmp.path}/q.txt')..writeAsStringSync('q');
-      a.createShare([f.path]);
-      await drop(a);
-      final b = LanDropCoreImpl(_opts(sharesStorePath: store));
-      cores.add(b);
-      b.setSharesPersistence(false);
-      await b.start(
+    test(
+      'off before start: the stored shares are deleted, not restored',
+      () async {
+        final a = await startCore(_opts(sharesStorePath: store), name: 'a');
+        final f = File('${tmp.path}/q.txt')..writeAsStringSync('q');
+        a.createShare([f.path]);
+        await drop(a);
+        final b = LanDropCoreImpl(_opts(sharesStorePath: store));
+        cores.add(b);
+        b.setSharesPersistence(false);
+        await b.start(
           alias: 'b',
-          saveDir: (await Directory('${tmp.path}/b-save').create()).path);
-      expect(b.shares, isEmpty);
-      expect(File(store).existsSync(), isFalse);
-    });
+          saveDir: (await Directory('${tmp.path}/b-save').create()).path,
+        );
+        expect(b.shares, isEmpty);
+        expect(File(store).existsSync(), isFalse);
+      },
+    );
 
     test('a corrupt store is ignored without crashing', () async {
       await File(store).create(recursive: true);

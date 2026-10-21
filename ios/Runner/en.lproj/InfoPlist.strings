@@ -1,0 +1,2 @@
+/* LanDrop localised permission text. */
+"NSLocalNetworkUsageDescription" = "LanDrop finds your other devices on this Wi-Fi network and sends files to them directly, without the internet.";

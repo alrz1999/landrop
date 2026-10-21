@@ -35,12 +35,13 @@ class LanDropService : Service() {
         }
 
         /** "Ready to receive files on your network", or e.g. "Ready to receive · 2 active shares · 1 browser connected". */
-        fun statusText(shares: Int, browsers: Int): String {
-            if (shares <= 0 && browsers <= 0) return "Ready to receive files on your network"
+        fun statusText(context: Context, shares: Int, browsers: Int): String {
+            val res = context.resources
+            if (shares <= 0 && browsers <= 0) return res.getString(R.string.status_ready)
             val parts = ArrayList<String>()
-            parts.add("Ready to receive")
-            if (shares > 0) parts.add(if (shares == 1) "1 active share" else "$shares active shares")
-            if (browsers > 0) parts.add(if (browsers == 1) "1 browser connected" else "$browsers browsers connected")
+            parts.add(res.getString(R.string.status_ready_short))
+            if (shares > 0) parts.add(res.getQuantityString(R.plurals.status_shares, shares, shares))
+            if (browsers > 0) parts.add(res.getQuantityString(R.plurals.status_browsers, browsers, browsers))
             return parts.joinToString(" · ")
         }
     }
@@ -60,8 +61,8 @@ class LanDropService : Service() {
 
     private fun buildNotification(): Notification =
         newBuilder()
-            .setContentTitle("LanDrop is running")
-            .setContentText(statusText(activeShares, connectedBrowsers))
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(statusText(this, activeShares, connectedBrowsers))
             .setSmallIcon(applicationInfo.icon)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -77,7 +78,11 @@ class LanDropService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "LanDrop", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(
+                    CHANNEL_ID,
+                    getString(R.string.notification_channel_name),
+                    NotificationManager.IMPORTANCE_LOW,
+                )
             )
         }
         val notification = buildNotification()

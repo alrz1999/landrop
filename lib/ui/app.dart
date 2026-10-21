@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import '../l10n/app_localizations.dart';
 import 'app_controller.dart';
 import 'home_page.dart';
 import 'hotspot_service.dart';
@@ -45,11 +46,22 @@ class _LanDropAppState extends State<LanDropApp> {
       initialAlias: widget.initialAlias,
       hotspotService: widget.hotspotService,
     );
+    controller.addListener(_onControllerChanged);
     controller.init();
+  }
+
+  /// MaterialApp itself only depends on the language; everything else
+  /// listens through [AppScope].
+  Locale? _locale;
+  void _onControllerChanged() {
+    if (controller.locale != _locale) {
+      setState(() => _locale = controller.locale);
+    }
   }
 
   @override
   void dispose() {
+    controller.removeListener(_onControllerChanged);
     controller.dispose();
     super.dispose();
   }
@@ -61,6 +73,10 @@ class _LanDropAppState extends State<LanDropApp> {
       controller: controller,
       child: MaterialApp(
         title: 'LanDrop',
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: _locale, // null = follow the system
+        localeResolutionCallback: resolveAppLocale,
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.system,
         theme: ThemeData(
@@ -78,3 +94,9 @@ class _LanDropAppState extends State<LanDropApp> {
     );
   }
 }
+
+/// The supported locale with [device]'s language, else English. Persian
+/// (fa) makes MaterialApp lay out right to left.
+Locale resolveAppLocale(Locale? device, Iterable<Locale> supported) =>
+    supported.firstWhere((l) => l.languageCode == device?.languageCode,
+        orElse: () => const Locale('en'));

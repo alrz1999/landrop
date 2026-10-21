@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_title">LanDrop is running</string>
+    <string name="notification_channel_name">LanDrop</string>
+    <string name="status_ready">Ready to receive files on your network</string>
+    <string name="status_ready_short">Ready to receive</string>
+    <plurals name="status_shares">
+        <item quantity="one">%d active share</item>
+        <item quantity="other">%d active shares</item>
+    </plurals>
+    <plurals name="status_browsers">
+        <item quantity="one">%d browser connected</item>
+        <item quantity="other">%d browsers connected</item>
+    </plurals>
+</resources>

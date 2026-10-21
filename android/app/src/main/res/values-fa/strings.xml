@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- REVIEW: native Persian check. -->
+    <string name="notification_title">LanDrop در حال اجراست</string>
+    <string name="notification_channel_name">LanDrop</string>
+    <string name="status_ready">آمادهٔ دریافت فایل در شبکهٔ شما</string>
+    <string name="status_ready_short">آمادهٔ دریافت</string>
+    <plurals name="status_shares">
+        <item quantity="one">%d لینک فعال</item>
+        <item quantity="other">%d لینک فعال</item>
+    </plurals>
+    <plurals name="status_browsers">
+        <item quantity="one">%d مرورگر متصل</item>
+        <item quantity="other">%d مرورگر متصل</item>
+    </plurals>
+</resources>

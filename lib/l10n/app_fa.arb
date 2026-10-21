@@ -1,0 +1,223 @@
+{
+  "@@locale": "fa",
+  "appTitle": "LanDrop",
+  "settingsTitle": "تنظیمات",
+  "settingsLanguage": "زبان",
+  "settingsLanguageSystem": "پیش‌فرض سیستم",
+  "languageEnglish": "English",
+  "languagePersian": "فارسی",
+  "commonCancel": "انصراف",
+  "sizeBytes": "{value} بایت",
+  "@sizeBytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeKB": "{value} کیلوبایت",
+  "@sizeKB": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeMB": "{value} مگابایت",
+  "@sizeMB": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeGB": "{value} گیگابایت",
+  "@sizeGB": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sizeTB": "{value} ترابایت",
+  "@sizeTB": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "speedPerSecond": "{size} بر ثانیه",
+  "@speedPerSecond": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "durationSeconds": "{seconds} ثانیه",
+  "@durationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "durationMinutes": "{minutes} دقیقه",
+  "@durationMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "durationHours": "{hours} ساعت",
+  "@durationHours": {
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
+  "durationHoursMinutes": "{hours} ساعت و {minutes} دقیقه",
+  "@durationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      },
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "sendErrorDeclined": "دستگاه دیگر ارسال را رد کرد.",
+  "sendErrorBusy": "دستگاه دیگر مشغول انتقال دیگری است. چند لحظه بعد دوباره امتحان کنید.",
+  "sendErrorUnreachable": "اتصال به دستگاه دیگر ممکن نشد. بررسی کنید هر دو دستگاه در یک شبکه باشند.",
+  "sendErrorCancelled": "انتقال لغو شد.",
+  "sendErrorTimeout": "پاسخی از دستگاه دیگر نرسید.",
+  "sendErrorFingerprintMismatch": "کد امنیتی دستگاه دیگر تغییر کرده است. پیش از ارسال دوباره جست‌وجو کنید.",
+  "@sendErrorFingerprintMismatch": {
+    "description": "REVIEW: \"security code\" for fingerprint, see UX.md 4.12."
+  },
+  "sendErrorDiskError": "خواندن یا ذخیرهٔ یک فایل ممکن نشد.",
+  "sendErrorUnknown": "ارسال انجام نشد.",
+  "diagWhatToDo": "راه‌حل: {fix}",
+  "@diagWhatToDo": {
+    "description": "REVIEW: \"What to do\" rendered as «راه‌حل» (solution).",
+    "placeholders": {
+      "fix": {
+        "type": "String"
+      }
+    }
+  },
+  "diagServerDownTitle": "این دستگاه الان نمی‌تواند فایل دریافت کند",
+  "diagServerDownDetail": "LanDrop روی این دستگاه اتصالی نمی‌پذیرد، پس دستگاه‌های دیگر نمی‌توانند آن را ببینند یا برایش فایل بفرستند.",
+  "diagServerDownFix": "در تنظیمات «راه‌اندازی دوبارهٔ سرویس» را بزنید، یا LanDrop را ببندید و دوباره باز کنید.",
+  "@diagServerDownFix": {
+    "description": "REVIEW: quotes the Settings row \"Restart service\"; align with its final Persian label."
+  },
+  "diagDiscoveryFailedTitle": "جست‌وجوی خودکار خاموش است",
+  "diagDiscoveryFailedDetail": "LanDrop نتوانست جست‌وجوی دستگاه‌های اطراف را شروع کند، پس آن‌ها خودبه‌خود نمایش داده نمی‌شوند. ارسال با نشانی IP همچنان کار می‌کند.",
+  "diagDiscoveryFailedFix": "از «جست‌وجوی دوبارهٔ شبکه» یا «افزودن با IP» استفاده کنید. راه‌اندازی دوبارهٔ LanDrop یا اجازه دادن به دسترسی شبکهٔ محلی ممکن است مشکل را حل کند.",
+  "@diagDiscoveryFailedFix": {
+    "description": "REVIEW: quotes UI button names (\"Rescan network\", \"Add by IP\" ...) that are not translated yet; align with their final Persian labels."
+  },
+  "diagNoLanTitle": "به وای‌فای یا شبکهٔ محلی وصل نیست",
+  "diagNoLanDetail": "این دستگاه نشانی شبکهٔ محلی ندارد، پس نمی‌تواند به دستگاه‌های اطراف برسد.",
+  "diagNoLanFix": "به همان وای‌فای دستگاه دیگر وصل شوید، کابل شبکه وصل کنید، یا هات‌اسپات را روی یک دستگاه روشن کنید و با دستگاه دیگر به آن وصل شوید.",
+  "diagLinkLocalOnlyTitle": "اتصال مستقیم با کابل یا شبکهٔ بدون DHCP",
+  "@diagLinkLocalOnlyTitle": {
+    "description": "REVIEW: technical title; «DHCP» kept in Latin."
+  },
+  "diagLinkLocalOnlyDetail": "به نظر می‌رسد دستگاه‌ها مستقیم با کابل وصل‌اند یا شبکه DHCP ندارد. LanDrop کار می‌کند، ولی هر دو دستگاه باید به هم وصل باشند؛ چند لحظه به هر دو فرصت دهید تا نشانی بگیرند.",
+  "diagVpnActiveTitle": "یک VPN روشن است",
+  "diagVpnActiveDetail": "VPN معمولاً شبکهٔ محلی را پنهان می‌کند، پس دستگاه‌های اطراف نمی‌توانند به هم برسند.",
+  "diagVpnActiveFix": "VPN را خاموش کنید یا در تنظیمات آن «دسترسی به شبکهٔ محلی» را مجاز کنید، سپس دوباره امتحان کنید.",
+  "@diagVpnActiveFix": {
+    "description": "REVIEW: the name of the \"local network access\" option differs per VPN app."
+  },
+  "diagAnnounceBlockedTitle": "دستگاه‌ها فقط بعد از جست‌وجو نمایش داده می‌شوند",
+  "diagAnnounceBlockedDetail": "به نظر می‌رسد روتر (مودم) شما پیام‌هایی را که دستگاه‌ها برای پیدا کردن هم می‌فرستند (multicast و broadcast) مسدود می‌کند. انتقال با نشانی IP همچنان کار می‌کند.",
+  "@diagAnnounceBlockedDetail": {
+    "description": "REVIEW: \"router\" rendered as «روتر (مودم)», since most home users call it a modem."
+  },
+  "diagAnnounceBlockedFix": "از «جست‌وجوی دوبارهٔ شبکه» یا «افزودن با IP» استفاده کنید. برای حل همیشگی، در تنظیمات روتر multicast را روشن و «AP isolation» را خاموش کنید.",
+  "diagSomePeersSilentTitle": "برخی دستگاه‌ها خودشان را اعلام نکردند",
+  "diagSomePeersSilentDetail": "دستگاه‌های دیگر خودکار پیدا شدند، ولی این‌ها فقط با جست‌وجو یا نشانی IP. شاید در بخش دیگری از شبکه باشند یا پیدا شدن خودکار در آن‌ها خاموش باشد.",
+  "diagProbeRefusedTitle": "دستگاه در دسترس است، ولی LanDrop پاسخ نمی‌دهد",
+  "diagProbeRefusedDetail": "دستگاه دیگر پاسخ داد، ولی هیچ برنامه‌ای اتصال را نپذیرفت. احتمالاً LanDrop روی آن بسته است یا از پورت دیگری استفاده می‌کند.",
+  "diagProbeRefusedFix": "LanDrop را روی دستگاه دیگر باز کنید و روی صفحه نگه دارید. نشانی و پورتی را که روی صفحهٔ آن نمایش داده می‌شود بررسی کنید.",
+  "diagProbeTimeoutTitle": "پاسخی از این نشانی نیامد",
+  "diagProbeTimeoutDetail": "هیچ پاسخی نرسید. ممکن است علت آن دیوار آتش، «AP / client isolation» در روتر، یا قرار داشتن در شبکهٔ دیگری باشد.",
+  "@diagProbeTimeoutDetail": {
+    "description": "REVIEW: \"firewall\" rendered as «دیوار آتش»; «فایروال» is more common in speech (UX.md 4.12)."
+  },
+  "diagProbeTimeoutFix": "بررسی کنید هر دو دستگاه به یک وای‌فای وصل باشند (نه شبکهٔ مهمان). به LanDrop در دیوار آتش اجازه دهید. اگر باز هم نشد، هات‌اسپات را روی یک دستگاه روشن کنید و با دستگاه دیگر به آن وصل شوید.",
+  "diagProbeUnreachableTitle": "از اینجا نمی‌توان به این نشانی رسید",
+  "diagProbeUnreachableDetail": "این دستگاه راهی برای رسیدن به این نشانی ندارد. احتمالاً در شبکهٔ دیگری است یا نشانی اشتباه است.",
+  "diagProbeUnreachableFix": "نشانی را روی دستگاه دیگر بررسی کنید و هر دو را به یک وای‌فای یا هات‌اسپات وصل کنید.",
+  "diagProbeFingerprintMismatchTitle": "دستگاه دیگری در این نشانی است",
+  "diagProbeFingerprintMismatchDetail": "دستگاهِ این نشانی همان دستگاهی نیست که LanDrop قبلاً می‌شناخت. یا دستگاه دیگری این نشانی را گرفته، یا LanDrop آنجا دوباره نصب شده و کلید امنیتی تازه‌ای ساخته است.",
+  "diagProbeFingerprintMismatchFix": "کد امنیتی نمایش‌داده‌شده در تنظیمات دستگاه دیگر را بررسی کنید. اگر درست است، دستگاه را حذف و دوباره اضافه کنید.",
+  "@diagProbeFingerprintMismatchFix": {
+    "description": "REVIEW: \"fingerprint\" rendered as «کد امنیتی» (UX.md 4.12); must match the Settings label once translated."
+  },
+  "diagProbeNotLandropTitle": "چیزی پاسخ داد، ولی LanDrop نیست",
+  "diagProbeNotLandropDetail": "برنامه‌ای اتصال را روی این پورت پذیرفت، ولی مثل LanDrop یا LocalSend پاسخ نداد.",
+  "diagProbeNotLandropFix": "پورتی را که LanDrop روی دستگاه دیگر نشان می‌دهد بررسی کنید.",
+  "diagProbeOkTitle": "دستگاه پاسخ می‌دهد",
+  "diagProbeOkDetail": "{alias} در این نشانی در دسترس است و کار می‌کند.",
+  "@diagProbeOkDetail": {
+    "placeholders": {
+      "alias": {
+        "type": "String"
+      }
+    }
+  },
+  "diagDifferentSubnetTitle": "به نظر می‌رسد دستگاه‌ها در شبکه‌های مختلف هستند",
+  "diagDifferentSubnetDetail": "نشانی‌ها با هم جور نیستند، پس شاید دستگاه‌ها به وای‌فای‌های مختلف وصل باشند یا یکی در شبکهٔ مهمان باشد.",
+  "diagDifferentSubnetFix": "هر دو دستگاه را به یک وای‌فای وصل کنید (نه شبکهٔ مهمان).",
+  "diagHotspotLikelyFixTitle": "هنوز دستگاه دیگری پیدا نشد",
+  "diagHotspotLikelyFixDetail": "اگر LanDrop روی دستگاه دیگر باز است و باز هم نمایش داده نمی‌شود، احتمالاً این شبکه دستگاه‌ها را از هم جدا نگه می‌دارد (در وای‌فای مهمان، اداره، مدرسه و هتل رایج است). وصل کردن هر دو دستگاه به هات‌اسپات یک گوشی یا لپ‌تاپ معمولاً مشکل را حل می‌کند و به روتر نیازی ندارد.",
+  "diagHotspotLikelyFixFix": "برای راهنمای قدم‌به‌قدم «اتصال با هات‌اسپات» را بزنید، یا اگر نشانی دستگاه دیگر را می‌دانید از «افزودن با IP» استفاده کنید.",
+  "@diagHotspotLikelyFixFix": {
+    "description": "REVIEW: quotes UI button names (\"Rescan network\", \"Add by IP\" ...) that are not translated yet; align with their final Persian labels."
+  },
+  "diagMdnsOnlyTitle": "روش استاندارد پیدا کردن دستگاه‌ها کار می‌کند",
+  "diagMdnsOnlyDetail": "اعلام‌های خودِ LanDrop در این شبکه مسدود است، ولی روش استاندارد پیدا کردن دستگاه‌ها (mDNS / Bonjour) کار می‌کند. انتقال فایل انجام می‌شود.",
+  "diagMdnsVisibleUnreachableTitle": "دستگاه در شبکهٔ شماست، ولی LanDrop به آن دسترسی ندارد",
+  "diagMdnsVisibleUnreachableDetail": "دستگاه در شبکهٔ شماست و خودش را اعلام می‌کند، ولی پورت LanDrop در دسترس نیست: دیوار آتشِ آن دستگاه یا این دستگاه، یا بسته شدن برنامه. {reason}",
+  "@diagMdnsVisibleUnreachableDetail": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "diagMdnsVisibleUnreachableFix": "در هر دو دستگاه به LanDrop در دیوار آتش اجازه دهید، LanDrop را روی دستگاه دیگر باز نگه دارید و سپس «جست‌وجوی دوبارهٔ شبکه» را بزنید.",
+  "@diagMdnsVisibleUnreachableFix": {
+    "description": "REVIEW: quotes UI button names (\"Rescan network\", \"Add by IP\" ...) that are not translated yet; align with their final Persian labels."
+  },
+  "diagMdnsReasonTimeout": "روی پورت LanDrop پاسخی نیامد (پایان مهلت)؛ معمولاً یعنی دیوار آتش آن را مسدود می‌کند.",
+  "diagMdnsReasonRefused": "پورت اتصال را رد کرد؛ معمولاً یعنی LanDrop آنجا در حال بسته شدن است یا اجرا نمی‌شود.",
+  "diagMdnsReasonFingerprintMismatch": "چیزی پاسخ داد، ولی با کلید امنیتی متفاوتی از آنچه دستگاه اعلام کرده بود.",
+  "diagMdnsReasonOther": "اتصال یا بررسی هویت دستگاه ناموفق بود.",
+  "diagUdpOnlyNoMdnsTitle": "روش استاندارد پیدا کردن دستگاه‌ها (mDNS) مسدود است",
+  "diagUdpOnlyNoMdnsDetail": "دستگاه‌ها با اعلام‌های خودِ LanDrop پیدا شدند، ولی نه با روش استاندارد (mDNS / Bonjour). این برای LanDrop مشکلی نیست.",
+  "diagMdnsUnavailableTitle": "روش استاندارد پیدا کردن دستگاه‌ها شروع نشد",
+  "diagMdnsUnavailableDetail": "LanDrop نتوانست mDNS / Bonjour را روی این دستگاه راه‌اندازی کند، پس از اعلام‌های خودش استفاده می‌کند. ارسال با نشانی IP همچنان کار می‌کند.",
+  "diagMdnsUnavailableFix": "از «جست‌وجوی دوبارهٔ شبکه» یا «افزودن با IP» استفاده کنید.",
+  "@diagMdnsUnavailableFix": {
+    "description": "REVIEW: quotes UI button names (\"Rescan network\", \"Add by IP\" ...) that are not translated yet; align with their final Persian labels."
+  },
+  "diagMdnsUnavailableDetailBoth": "LanDrop نتوانست mDNS / Bonjour را روی این دستگاه راه‌اندازی کند، پس از اعلام‌های خودش استفاده می‌کند. آن‌ها هم کار نکردند، پس دستگاه‌ها خودبه‌خود نمایش داده نمی‌شوند. ارسال با نشانی IP همچنان کار می‌کند.",
+  "diagAllGoodTitle": "مشکلی پیدا نشد",
+  "diagAllGoodDetail": "این دستگاه به شبکهٔ محلی وصل است و برای ارسال و دریافت آماده است.",
+  "diagAllGoodFix": "اگر دستگاهی هنوز دیده نمی‌شود، مطمئن شوید LanDrop روی آن باز است، سپس از «جست‌وجوی دوبارهٔ شبکه» یا «افزودن با IP» استفاده کنید.",
+  "@diagAllGoodFix": {
+    "description": "REVIEW: quotes UI button names (\"Rescan network\", \"Add by IP\" ...) that are not translated yet; align with their final Persian labels."
+  },
+  "diagNetworkTitle": "شبکهٔ شما",
+  "diagNetworkDetail": "نشانی‌های این دستگاه، برای مراجعه.",
+  "diagSearchFailedTitle": "جست‌وجو ناموفق بود"
+}

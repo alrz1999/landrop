@@ -291,6 +291,38 @@ void main() {
     expect(asked, isFalse);
   });
 
+  test('sendFiles sets a stable errorCode next to the English error',
+      () async {
+    final src = File('${tmp.path}/x.txt')..writeAsStringSync('hello');
+    answerB(false);
+    final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+    final declined = await a.sendFiles(peer, [SendItem(src.path)]);
+    expect(declined.ok, isFalse);
+    expect(declined.error, 'declined');
+    expect(declined.errorCode, SendErrorCode.declined);
+
+    final fake = DeviceInfo(
+        alias: 'Bob',
+        deviceType: 'desktop',
+        fingerprint: 'ab' * 32,
+        ip: '127.0.0.1',
+        port: b.self.port);
+    final wrongFp = await a.sendFiles(fake, [SendItem(src.path)]);
+    expect(wrongFp.ok, isFalse);
+    expect(wrongFp.errorCode, SendErrorCode.fingerprintMismatch);
+
+    final missing =
+        await a.sendFiles(peer, [SendItem('${tmp.path}/does-not-exist')]);
+    expect(missing.ok, isFalse);
+    expect(missing.errorCode, isNotNull);
+
+    await autoAnswer!.cancel();
+    answerB(true);
+    final ok = await a.sendFiles(peer, [SendItem(src.path)]);
+    expect(ok.ok, isTrue);
+    expect(ok.errorCode, isNull);
+  });
+
   test('path-traversal file names are sanitized; tokens are enforced',
       () async {
     answerB(true);
