@@ -39,6 +39,9 @@ class FakeCore implements LanDropCore {
   /// so concurrent sends can get their session ids out of order.
   final Map<String, Duration> acceptDelays = {};
 
+  /// Test hook: sends to these peers (by fingerprint) fail with the code.
+  final Map<String, SendErrorCode> failSends = {};
+
   /// Test hook: value of [discoveryError] (null = discovery is fine).
   @override
   String? discoveryError;
@@ -58,6 +61,24 @@ class FakeCore implements LanDropCore {
       fingerprint: 'bb22',
       ip: '192.168.1.34',
     ),
+  ];
+
+  /// Mixed-direction sample data for Persian (RTL) tests (UX.md 6, risks):
+  /// a Persian alias, an IP, and file names mixing Persian and Latin.
+  static const DeviceInfo persianPeer = DeviceInfo(
+    alias: 'لپ‌تاپ سارا',
+    deviceType: 'desktop',
+    deviceModel: 'Windows',
+    fingerprint: 'fa77',
+    ip: '192.168.1.42',
+    addresses: ['192.168.1.42', '169.254.10.20'],
+  );
+
+  static const List<FileOffer> mixedFiles = [
+    FileOffer('m1', 'گزارش-final-نسخه-نهایی-2024.pdf', 3250585,
+        'application/pdf'),
+    FileOffer('m2', 'عکس‌ها/holiday-کیش.jpg', 2400000, 'image/jpeg'),
+    FileOffer('m3', 'notes.txt', 2048, 'text/plain'),
   ];
 
   @override
@@ -244,6 +265,11 @@ class FakeCore implements LanDropCore {
         if (f.existsSync()) size = f.lengthSync();
       } catch (_) {}
       files.add(('file${files.length}', size, base));
+    }
+    final failure = failSends[to.fingerprint];
+    if (failure != null) {
+      await Future<void>.delayed(simulateDelay);
+      return SendResult(ok: false, error: failure.name, errorCode: failure);
     }
     final sid = 'out-${++_session}';
     await Future<void>.delayed(acceptDelays[to.fingerprint] ?? Duration.zero);

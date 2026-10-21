@@ -351,4 +351,810 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagSearchFailedTitle => 'The search failed';
+
+  @override
+  String get commonTryAgain => 'Try again';
+
+  @override
+  String get commonDismiss => 'Dismiss';
+
+  @override
+  String get commonClose => 'Close';
+
+  @override
+  String get commonShow => 'Show';
+
+  @override
+  String get commonStop => 'Stop';
+
+  @override
+  String get commonDecline => 'Decline';
+
+  @override
+  String get commonAccept => 'Accept';
+
+  @override
+  String get commonSave => 'Save';
+
+  @override
+  String get deviceKindPhone => 'Phone';
+
+  @override
+  String get deviceKindComputer => 'Computer';
+
+  @override
+  String get deviceKindBrowser => 'Browser';
+
+  @override
+  String get selfStatusReady => 'Visible to nearby devices';
+
+  @override
+  String get selfStatusStarting => 'Getting ready…';
+
+  @override
+  String get selfStatusStopped => 'Stopped';
+
+  @override
+  String get selfStatusError => 'Can\'t receive right now.';
+
+  @override
+  String get selfRename => 'Rename device';
+
+  @override
+  String selfAddress(String ip, String port) {
+    return '$ip · port $port';
+  }
+
+  @override
+  String selfAddressUnknown(String port) {
+    return 'IP unknown · port $port';
+  }
+
+  @override
+  String get peerDetails => 'Details';
+
+  @override
+  String get detailsAddress => 'Address';
+
+  @override
+  String get detailsConnection => 'Connection';
+
+  @override
+  String get detailsCableLink => 'Direct cable link';
+
+  @override
+  String get detailsOtherAddresses => 'Other addresses';
+
+  @override
+  String get detailsModel => 'Model';
+
+  @override
+  String get securityCode => 'Security code';
+
+  @override
+  String get securityCodeHint =>
+      'Compare this code with the other device to be sure it\'s really yours.';
+
+  @override
+  String get emptyTitle => 'No devices found yet';
+
+  @override
+  String get emptyBody =>
+      'Make sure LanDrop is open on the other device and both are on the same Wi-Fi.';
+
+  @override
+  String get emptyWhy => 'Why can\'t I see my device?';
+
+  @override
+  String get connectHotspotTitle => 'Connect without Wi-Fi / router';
+
+  @override
+  String get connectHotspotSub =>
+      'Use a hotspot from a phone or laptop, step by step';
+
+  @override
+  String get connectCableTitle => 'Connect with a cable';
+
+  @override
+  String get connectCableSub =>
+      'Ethernet cable between two computers, or USB tethering';
+
+  @override
+  String get connectWifiDirectTitle => 'Connect with Wi-Fi Direct';
+
+  @override
+  String get connectWifiDirectSub =>
+      'Phone to phone without a router (Android)';
+
+  @override
+  String get connectWifiJoinTitle => 'Join a hotspot by QR';
+
+  @override
+  String get connectWifiJoinSub =>
+      'Scan the QR code of another phone\'s LanDrop hotspot';
+
+  @override
+  String get qrForLanDrop => 'For another LanDrop app';
+
+  @override
+  String get addressNotAvailable => 'Address not available yet';
+
+  @override
+  String get qrSelfSemantics => 'QR code with this device\'s address';
+
+  @override
+  String transferSummary(int done, int total) {
+    final intl.NumberFormat doneNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String doneString = doneNumberFormat.format(done);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return '$doneString of $totalString files';
+  }
+
+  @override
+  String transferDeclined(String name) {
+    return 'Declined by $name';
+  }
+
+  @override
+  String transferFailed(String reason) {
+    return 'Failed: $reason';
+  }
+
+  @override
+  String get transferFailedPlain => 'Failed';
+
+  @override
+  String get transferDone => 'Done';
+
+  @override
+  String transferWaiting(String name) {
+    return 'Waiting for $name to accept…';
+  }
+
+  @override
+  String get transferRunning => 'Transferring';
+
+  @override
+  String transferFrom(String name) {
+    return 'From $name';
+  }
+
+  @override
+  String transferTo(String name) {
+    return 'To $name';
+  }
+
+  @override
+  String transferSavedTo(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String incomingTitle(String name, int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return '$name wants to send you $_temp0';
+  }
+
+  @override
+  String incomingFromBrowser(String ip) {
+    return 'Web browser at $ip';
+  }
+
+  @override
+  String incomingFromBrowserModel(String ip, String model) {
+    return 'Web browser at $ip · $model';
+  }
+
+  @override
+  String fileCount(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String incomingTotal(String size) {
+    return 'Total: $size';
+  }
+
+  @override
+  String incomingSavesTo(String folder) {
+    return 'Saves to $folder';
+  }
+
+  @override
+  String get pairingTitle => 'Allow a browser to send you files?';
+
+  @override
+  String get pairingCodeLabel => 'Code shown in the browser';
+
+  @override
+  String pairingCodeSemantics(String digits) {
+    return 'Pairing code $digits';
+  }
+
+  @override
+  String get pairingBody =>
+      'Approve only if the browser shows the same code. For the next hour it can then offer you files; you still accept every transfer.';
+
+  @override
+  String get pairingApprove => 'Approve';
+
+  @override
+  String get addByIpTitle => 'Add device by IP';
+
+  @override
+  String get addByIpLabel => 'IP address';
+
+  @override
+  String addByIpHint(String example, String exampleWithPort) {
+    return '$example or $exampleWithPort';
+  }
+
+  @override
+  String addByIpInvalid(String example) {
+    return 'Enter an IPv4 address, e.g. $example';
+  }
+
+  @override
+  String get addByIpAdd => 'Add';
+
+  @override
+  String addByIpAdded(String name) {
+    return 'Added $name';
+  }
+
+  @override
+  String addByIpNoAnswer(String address) {
+    return 'No LanDrop device answered at $address.';
+  }
+
+  @override
+  String addByIpError(String address, String error) {
+    return 'Could not reach $address — $error';
+  }
+
+  @override
+  String get addFailedTitle => 'Device not found';
+
+  @override
+  String get addFailedDiagnose => 'Diagnose this IP';
+
+  @override
+  String get pickerEmpty => 'No devices found yet.';
+
+  @override
+  String get pickerHelp => 'Help me connect';
+
+  @override
+  String sendPickerTitleFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return 'Send $_temp0 to…';
+  }
+
+  @override
+  String sendPickerTitleFolder(String name) {
+    return 'Send folder \"$name\" to…';
+  }
+
+  @override
+  String get aliasLabel => 'Name shown to others';
+
+  @override
+  String get settingsDeviceName => 'Device name';
+
+  @override
+  String get homeSend => 'Send';
+
+  @override
+  String get homeNearbyDevices => 'Nearby devices';
+
+  @override
+  String get homeRescan => 'Rescan network';
+
+  @override
+  String get homeAddByIp => 'Add by IP';
+
+  @override
+  String get homeDiscoveryOff => 'Automatic search is off on this device.';
+
+  @override
+  String get homeHelp => 'Help';
+
+  @override
+  String homeHotspotBanner(String ssid) {
+    return 'Sharing hotspot \"$ssid\"';
+  }
+
+  @override
+  String get homeActivity => 'Activity';
+
+  @override
+  String get homeClearFinished => 'Clear finished';
+
+  @override
+  String get homeShareLink => 'Share link';
+
+  @override
+  String homeActiveShares(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString links',
+      one: '1 link',
+    );
+    return 'Sharing $_temp0';
+  }
+
+  @override
+  String homeReceiving(int count, String name) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return 'Receiving $_temp0 from $name';
+  }
+
+  @override
+  String homeScanFinished(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString devices',
+      one: '1 device',
+    );
+    return 'Scan finished: $_temp0 found';
+  }
+
+  @override
+  String homeScanFailed(String error) {
+    return 'Scan failed: $error';
+  }
+
+  @override
+  String get sendSheetTitle => 'What do you want to send?';
+
+  @override
+  String get sendSheetFiles => 'Files';
+
+  @override
+  String get sendSheetFolder => 'Folder';
+
+  @override
+  String sendSent(String name) {
+    return 'Sent to $name.';
+  }
+
+  @override
+  String sendDeclined(String name) {
+    return '$name declined.';
+  }
+
+  @override
+  String sendFailed(String name) {
+    return 'Couldn\'t reach $name. Is LanDrop still open there?';
+  }
+
+  @override
+  String errorFilePicker(String error) {
+    return 'Could not open file picker: $error';
+  }
+
+  @override
+  String errorFolderPicker(String error) {
+    return 'Could not open folder picker: $error';
+  }
+
+  @override
+  String errorPicker(String error) {
+    return 'Could not open the picker: $error';
+  }
+
+  @override
+  String get sharesTitle => 'Shares';
+
+  @override
+  String get shareSendLinkTitle => 'Send a link';
+
+  @override
+  String get shareSendLinkBody =>
+      'Anyone on this Wi-Fi with the link can download the files from a browser.';
+
+  @override
+  String get shareFiles => 'Share files';
+
+  @override
+  String get shareFolder => 'Share folder';
+
+  @override
+  String get shareNothingShared =>
+      'Nothing shared. A share gives you a link and QR code that opens in any browser on this network, no app needed.';
+
+  @override
+  String get browserSectionTitle => 'Use from a browser';
+
+  @override
+  String get browserSectionBody =>
+      'Open this address on another phone or computer to send files here. Nothing to install.';
+
+  @override
+  String get shareLessThanMinute => 'less than a minute';
+
+  @override
+  String get shareTtl1h => '1 hour';
+
+  @override
+  String get shareTtl24h => '24 hours';
+
+  @override
+  String get shareTtlNone => 'Until I stop';
+
+  @override
+  String get shareUnlimited => 'Unlimited';
+
+  @override
+  String get shareLinkWorksFor => 'Link works for';
+
+  @override
+  String get shareDownloadsAllowed => 'Downloads allowed';
+
+  @override
+  String get shareOptionsNote =>
+      'Anyone on this network who has the link can download while it works. Playing a video counts as one download.';
+
+  @override
+  String get shareConfirm => 'Share';
+
+  @override
+  String shareOptionsTitleFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return 'Share $_temp0';
+  }
+
+  @override
+  String shareOptionsTitleFolder(String name) {
+    return 'Share folder \"$name\"';
+  }
+
+  @override
+  String shareCreatedFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return 'Sharing $_temp0. Open the link on the other device.';
+  }
+
+  @override
+  String shareCreatedFolder(String name) {
+    return 'Sharing folder \"$name\". Open the link on the other device.';
+  }
+
+  @override
+  String errorShare(String error) {
+    return 'Could not share: $error';
+  }
+
+  @override
+  String get shareUntilStopped => 'Until you stop it';
+
+  @override
+  String get shareExpired => 'Expired';
+
+  @override
+  String shareEndsIn(String time) {
+    return 'Ends in $time';
+  }
+
+  @override
+  String get shareUnlimitedDownloads => 'Unlimited downloads';
+
+  @override
+  String get shareLimitReached => 'Download limit reached';
+
+  @override
+  String shareDownloadsLeft(int left, int max) {
+    final intl.NumberFormat leftNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String leftString = leftNumberFormat.format(left);
+    final intl.NumberFormat maxNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String maxString = maxNumberFormat.format(max);
+
+    return '$leftString of $maxString downloads left';
+  }
+
+  @override
+  String shareTitleMore(String first, int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return '$first and $countString more';
+  }
+
+  @override
+  String get shareQrSemantics => 'QR code for the share link';
+
+  @override
+  String get shareHttpWarning => 'Plain HTTP link: not encrypted.';
+
+  @override
+  String get shareLinkCopied => 'Link copied';
+
+  @override
+  String get shareCopyLink => 'Copy link';
+
+  @override
+  String get shareStop => 'Stop sharing';
+
+  @override
+  String get browsersTitle => 'Connected browsers';
+
+  @override
+  String get browsersNone =>
+      'No browser is paired. A paired browser can send you files until it signs out, you disconnect it, or an hour passes.';
+
+  @override
+  String browserSessionSubtitle(String ip, String time, String ago) {
+    return '$ip · paired $time · last seen $ago';
+  }
+
+  @override
+  String get agoJustNow => 'just now';
+
+  @override
+  String agoMinutes(String minutes) {
+    return '$minutes min ago';
+  }
+
+  @override
+  String agoHours(String hours) {
+    return '$hours h ago';
+  }
+
+  @override
+  String browserDisconnected(String name) {
+    return '$name disconnected';
+  }
+
+  @override
+  String get browserDisconnect => 'Disconnect';
+
+  @override
+  String get webQrCaption => 'For any phone camera or browser';
+
+  @override
+  String get webQrSemantics => 'QR code for the browser address';
+
+  @override
+  String get webHttpOnNote =>
+      'Plain HTTP is on (Settings): no warning, but not encrypted. Secure address:';
+
+  @override
+  String get webWarningTitle => 'The browser shows a warning?';
+
+  @override
+  String get webWarningBody =>
+      'The browser will first warn that the connection is not private. That is expected: LanDrop uses its own certificate instead of one bought from a certificate company. Choose \"Advanced\" then \"Proceed\" (Chrome, Edge), or \"Show details\" then \"visit this website\" (Safari). Then tap \"Pair this browser\" and approve here if both show the same code.';
+
+  @override
+  String get settingsSectionDevice => 'This device';
+
+  @override
+  String get settingsSaveFolder => 'Save received files to';
+
+  @override
+  String get settingsNotSet => 'Not set';
+
+  @override
+  String get settingsUseDefaultFolder => 'Use default folder';
+
+  @override
+  String get settingsPrivateFolder => 'Only visible inside LanDrop.';
+
+  @override
+  String get settingsUseDownloads => 'Use Downloads';
+
+  @override
+  String get settingsSectionConnect => 'Connecting';
+
+  @override
+  String get settingsConnectHelp => 'Can\'t find the other device?';
+
+  @override
+  String get settingsConnectHelpSub =>
+      'Check the connection and see what to do';
+
+  @override
+  String get settingsShares => 'Shares and browsers';
+
+  @override
+  String get settingsSharesSub =>
+      'Links you share and browsers that can send you files';
+
+  @override
+  String get settingsSectionApp => 'App';
+
+  @override
+  String get settingsBackground => 'Keep running in background';
+
+  @override
+  String get settingsBackgroundSub =>
+      'Stays reachable with the screen off. Shows a notification.';
+
+  @override
+  String get settingsQuit => 'Quit LanDrop';
+
+  @override
+  String get settingsQuitSub => 'Stops receiving and closes the app';
+
+  @override
+  String get settingsAdvanced => 'Advanced';
+
+  @override
+  String get settingsAdvancedSub =>
+      'Address, security code, connection methods';
+
+  @override
+  String get advancedSectionAddress => 'Address';
+
+  @override
+  String get advancedRestart => 'Restart LanDrop service';
+
+  @override
+  String get serviceRunning => 'Running';
+
+  @override
+  String get serviceStarting => 'Starting…';
+
+  @override
+  String get serviceStopped => 'Stopped';
+
+  @override
+  String get serviceError => 'Not running';
+
+  @override
+  String get advancedSectionBrowsers => 'Browsers';
+
+  @override
+  String get webHttpTitle => 'Allow browsers without a warning (not encrypted)';
+
+  @override
+  String get webHttpSub =>
+      'Off is safer. When on, browser traffic is not encrypted: anyone on this network can see the files and pairing codes. Only for networks you trust.';
+
+  @override
+  String get webHttpUrlTitle => 'Browser address (plain HTTP)';
+
+  @override
+  String get webHttpConfirmTitle => 'Turn on plain HTTP for browsers?';
+
+  @override
+  String get webHttpConfirmBody =>
+      'Browsers will open LanDrop without a certificate warning, but nothing is encrypted: anyone on this Wi-Fi can read the files, share links and pairing codes, and could pretend to be this device. Use it only on a network you trust, such as your home Wi-Fi, never on public or work networks.';
+
+  @override
+  String get webHttpConfirmOn => 'Turn on';
+
+  @override
+  String errorWebHttp(String error) {
+    return 'Could not change plain HTTP: $error';
+  }
+
+  @override
+  String get keepSharesTitle => 'Keep share links after restart';
+
+  @override
+  String get keepSharesSub =>
+      'Share links keep working after LanDrop restarts, as long as they have not expired and the files are unchanged. The list of shared files is stored on this device. Off deletes it.';
+
+  @override
+  String get advancedSectionTroubleshoot => 'Troubleshooting';
+
+  @override
+  String get advancedReport => 'Connection report';
+
+  @override
+  String get advancedReportSub => 'Find out why devices cannot connect';
+
+  @override
+  String get advancedSectionMethods => 'All connection methods';
+
+  @override
+  String get diagActionHotspot => 'Connect with a hotspot';
+
+  @override
+  String get diagTitle => 'Connection check';
+
+  @override
+  String diagTitleTarget(String target) {
+    return 'Checking $target';
+  }
+
+  @override
+  String get diagRunning => 'Checking the network…';
+
+  @override
+  String diagError(String error) {
+    return 'Could not run the check: $error';
+  }
+
+  @override
+  String get diagReportCopied => 'Report copied';
+
+  @override
+  String get diagCopyReport => 'Copy report';
+
+  @override
+  String get diagRunAgain => 'Run again';
+
+  @override
+  String get diagDetails => 'Details';
+
+  @override
+  String get diagReportNote =>
+      'This report is in English so support can read it.';
 }

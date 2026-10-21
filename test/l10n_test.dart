@@ -12,6 +12,8 @@ import 'package:landrop/ui/digits.dart';
 import 'package:landrop/ui/fake_core.dart';
 import 'package:landrop/ui/finding_text.dart';
 import 'package:landrop/ui/format.dart';
+import 'package:landrop/ui/dialogs.dart' show shortFolder;
+import 'package:landrop/ui/l10n.dart' show BidiL10n;
 import 'package:landrop/ui/ltr_text.dart';
 
 import 'helpers/pump_localized.dart';
@@ -45,16 +47,30 @@ List<Finding> _sampleFindings() => diagnose(const DiagnosisInput(
     ));
 
 Future<void> _openSettings(WidgetTester t) async {
-  await t.tap(find.byTooltip('Settings'));
+  // The tooltip is translated ("Settings" / "تنظیمات"); the icon is not.
+  await t.tap(find.byIcon(Icons.settings_outlined));
   await t.pumpAndSettle();
 }
 
-Future<void> _openDiagnosis(WidgetTester t) async {
+Future<void> _tapKey(WidgetTester t, String key) async {
+  final f = find.byKey(Key(key));
+  if (f.evaluate().isEmpty) {
+    await t.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first);
+  }
+  await t.ensureVisible(f);
+  await t.pumpAndSettle();
+  await t.tap(f);
+  await t.pumpAndSettle();
+}
+
+Future<void> _openAdvanced(WidgetTester t) async {
   await _openSettings(t);
-  await t.ensureVisible(find.byKey(const Key('diagnoseSettings')));
-  await t.pumpAndSettle();
-  await t.tap(find.byKey(const Key('diagnoseSettings')));
-  await t.pumpAndSettle();
+  await _tapKey(t, 'advancedSettings');
+}
+
+Future<void> _openDiagnosis(WidgetTester t) async {
+  await _openAdvanced(t);
+  await _tapKey(t, 'diagnoseSettings');
 }
 
 void main() {
@@ -202,7 +218,10 @@ void main() {
         expect(find.text(fa.diagWhatToDo(fa.diagVpnActiveFix)),
             findsOneWidget);
         expect(find.text('A VPN is on'), findsNothing);
-        // Technical details stay English.
+        // Technical details stay English, collapsed under "Details".
+        expect(find.textContaining('TCP connect to 192.168.1.20:53317'),
+            findsNothing);
+        await _tapKey(t, 'findingDetails-probe-timeout');
         expect(find.textContaining('TCP connect to 192.168.1.20:53317'),
             findsOneWidget);
         expect(find.byKey(const Key('copyReport')), findsOneWidget);
@@ -300,6 +319,255 @@ void main() {
     });
   });
 
+  group('Persian screens (UX.md 6: L2, L3, R1)', () {
+    // English texts of every plain (placeholder-free) message that has a
+    // different Persian text: none may show up on a Persian screen.
+    final englishOnly = () {
+      final enArb = _arb('en'), faArb = _arb('fa');
+      return {
+        for (final k in enArb.keys)
+          if (!k.startsWith('@') &&
+              !(enArb[k] as String).contains('{') &&
+              enArb[k] != faArb[k])
+            enArb[k] as String
+      };
+    }();
+
+    /// Every visible text on screen (Text, RichText-based Text,
+    /// SelectableText).
+    List<String> visibleTexts(WidgetTester t) => [
+          for (final w in t.widgetList<Text>(find.byType(Text)))
+            w.data ?? w.textSpan?.toPlainText() ?? '',
+          for (final w
+              in t.widgetList<SelectableText>(find.byType(SelectableText)))
+            w.data ?? w.textSpan?.toPlainText() ?? '',
+        ];
+
+    void expectNoEnglish(WidgetTester t, String where) {
+      final leaked = [
+        for (final s in visibleTexts(t))
+          if (englishOnly.contains(s)) s
+      ];
+      expect(leaked, isEmpty, reason: 'English on $where');
+    }
+
+    void expectLtrValue(WidgetTester t, Key key) {
+      final f = find.descendant(
+          of: find.byKey(key),
+          matching: find.byWidgetPredicate(
+              (w) => w is Text || w is SelectableText));
+      final w = t.widget(f.first);
+      final dir = w is Text ? w.textDirection : (w as SelectableText).textDirection;
+      expect(dir, TextDirection.ltr, reason: '$key');
+      expect(Directionality.of(t.element(f.first)), TextDirection.ltr,
+          reason: '$key');
+    }
+
+    FakeCore persianCore({List<DeviceInfo>? peers}) => FakeCore(
+        simulateDelay: const Duration(milliseconds: 10),
+        initialPeers:
+            peers ?? [FakeCore.persianPeer, FakeCore.defaultPeers.first]);
+
+    for (final width in [375.0, 1000.0]) {
+      final w = width.toInt();
+
+      testWidgets('home with devices, empty, transfers, incoming at $w px',
+          (t) async {
+        final core = persianCore();
+        await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, core: core);
+        expectRtl(t);
+        expect(find.text(fa.homeNearbyDevices), findsOneWidget);
+        expect(find.text(fa.selfStatusReady), findsOneWidget);
+        expect(find.text('لپ‌تاپ سارا'), findsOneWidget);
+        expect(find.text('${fa.deviceKindComputer} · ${iso('Windows')}'),
+            findsOneWidget);
+        expect(find.text('Send'), findsNothing);
+        expect(find.text(fa.homeSend), findsNWidgets(3)); // FAB + 2 rows
+        expectNoEnglish(t, 'home');
+        // IP and port stay left to right inside the Persian line.
+        final addr = t.widget<SelectableText>(
+            find.byKey(const Key('selfAddress')));
+        expect(addr.data, fa.selfAddress(ltr('192.168.1.10'), ltr('53317')));
+        // A Latin name keeps its own direction, aligned to the RTL start.
+        final pixel = t.widget<Text>(find.text('Pixel 9'));
+        expect(pixel.textDirection, TextDirection.ltr);
+        expect(pixel.textAlign, TextAlign.right);
+        expect(t.widget<Text>(find.text('لپ‌تاپ سارا')).textDirection,
+            TextDirection.rtl);
+        // The Send button sits on the left in RTL.
+        expect(t.getCenter(find.byKey(const Key('sendFab'))).dx,
+            lessThan(width / 2));
+        expect(t.takeException(), isNull);
+
+        // Details sheet: Persian labels, address left to right.
+        await t.tap(find.byKey(const Key('details-fa77')));
+        await t.pumpAndSettle();
+        expect(find.text(fa.securityCode), findsOneWidget);
+        expect(find.text(fa.detailsCableLink), findsNothing); // Wi-Fi IP
+        expectLtrValue(t, const Key('peerAddress'));
+        expectLtrValue(t, const Key('peerSecurityCode'));
+        expectNoEnglish(t, 'details sheet');
+        expect(t.takeException(), isNull);
+        await t.tapAt(const Offset(10, 10));
+        await t.pumpAndSettle();
+
+        // Incoming dialog with a Persian sender and mixed file names.
+        core.simulateIncoming(
+            from: FakeCore.persianPeer,
+            files: FakeCore.mixedFiles,
+            autoProgress: false);
+        await t.pumpAndSettle();
+        expect(find.text(fa.incomingTitle(iso('لپ‌تاپ سارا'), 3)),
+            findsOneWidget);
+        expect(find.text('${fa.deviceKindComputer} · ${iso('Windows')}'),
+            findsNWidgets(2)); // dialog + device row
+        final pdf = t.widget<Text>(find.text(FakeCore.mixedFiles[0].fileName));
+        expect(pdf.textDirection, TextDirection.rtl); // starts with Persian
+        expect(find.text('عکس‌ها/'), findsOneWidget);
+        expect(find.text(fa.fileCount(1)), findsOneWidget);
+        expect(fa.fileCount(1), '۱ فایل');
+        expect(find.text('۳٫۱ مگابایت'), findsOneWidget); // Persian digits
+        expect(find.text(fa.incomingSavesTo(ltr('/tmp/landrop-test'))),
+            findsOneWidget);
+        expectNoEnglish(t, 'incoming dialog');
+        expect(t.takeException(), isNull);
+        await t.tap(find.text(fa.commonAccept));
+        await t.pumpAndSettle();
+        core.emitProgress(const TransferProgress('in-1', 'm1', 1000, 3250585,
+            fileName: 'گزارش-final-نسخه-نهایی-2024.pdf'));
+        await t.pump();
+        await t.pump();
+        expect(find.text(fa.homeActivity), findsOneWidget);
+        expect(find.text(fa.transferFrom(iso('لپ‌تاپ سارا'))), findsOneWidget);
+        expect(find.textContaining('مگابایت'), findsWidgets);
+        expectNoEnglish(t, 'transfers');
+        expect(t.takeException(), isNull);
+        await t.pumpAndSettle();
+
+        // Empty state.
+        core.setPeers(const []);
+        await t.pumpAndSettle();
+        expect(find.text(fa.emptyTitle), findsOneWidget);
+        expect(find.text(fa.emptyWhy), findsOneWidget);
+        expectNoEnglish(t, 'empty home');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('send sheet and device picker in fa at $w px', (t) async {
+        await pumpLocalized(t,
+            locale: const Locale('fa'),
+            width: width,
+            core: persianCore(),
+            pickFiles: () async => ['/x/a.txt', '/x/b.txt']);
+        await t.tap(find.byKey(const Key('sendFab')));
+        await t.pumpAndSettle();
+        expect(find.text(fa.sendSheetTitle), findsOneWidget);
+        expectNoEnglish(t, 'send sheet');
+        await t.tap(find.byKey(const Key('sendFiles')));
+        await t.pumpAndSettle();
+        expect(find.text(fa.sendPickerTitleFiles(2)), findsOneWidget);
+        expect(fa.sendPickerTitleFiles(2), 'ارسال ۲ فایل به…');
+        expectNoEnglish(t, 'device picker');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('Settings and Advanced in fa at $w px', (t) async {
+        await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, height: 900);
+        await _openSettings(t);
+        expectRtl(t);
+        expect(find.text(fa.settingsSectionDevice), findsOneWidget);
+        expect(find.text(fa.settingsAdvanced), findsOneWidget);
+        expectLtrValue(t, const Key('saveFolderPath'));
+        expectNoEnglish(t, 'Settings');
+        expect(t.takeException(), isNull);
+        await _tapKey(t, 'advancedSettings');
+        expect(find.text(fa.securityCode), findsOneWidget);
+        expect(find.text(fa.qrForLanDrop), findsOneWidget);
+        expectLtrValue(t, const Key('selfUrl'));
+        expectLtrValue(t, const Key('securityCodeValue'));
+        expect(find.text(fa.serviceRunning), findsOneWidget);
+        expectNoEnglish(t, 'Advanced (top)');
+        await t.scrollUntilVisible(find.byKey(const Key('cableSettings')), 200,
+            scrollable: find.byType(Scrollable).first);
+        await t.pumpAndSettle();
+        expect(find.text(fa.connectCableTitle), findsOneWidget);
+        expectNoEnglish(t, 'Advanced (bottom)');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('Shares page and share options in fa at $w px', (t) async {
+        final core = await pumpLocalized(t,
+            locale: const Locale('fa'),
+            width: width,
+            pickFiles: () async => ['/x/گزارش-final.pdf', '/x/notes.txt']);
+        await t.tap(find.byKey(const Key('sharesAction')));
+        await t.pumpAndSettle();
+        expectRtl(t);
+        expect(find.text(fa.sharesTitle), findsOneWidget);
+        expect(find.text(fa.shareSendLinkTitle), findsOneWidget);
+        expectNoEnglish(t, 'Shares page');
+        expect(t.takeException(), isNull);
+        await t.tap(find.byKey(const Key('shareFiles')));
+        await t.pumpAndSettle();
+        expect(find.text(fa.shareOptionsTitleFiles(2)), findsOneWidget);
+        expect(find.text('۱۵ دقیقه'), findsOneWidget);
+        expect(find.text('۵'), findsOneWidget);
+        expectNoEnglish(t, 'share options');
+        expect(t.takeException(), isNull);
+        await t.tap(find.byKey(const Key('ttl-15m')));
+        await t.tap(find.byKey(const Key('confirmShare')));
+        await t.pumpAndSettle();
+        final s = core.shares.single;
+        expect(find.textContaining('گزارش-final.pdf'), findsOneWidget);
+        expectLtrValue(t, Key('shareUrl-${s.id}'));
+        expect(find.textContaining('دیگر تمام می‌شود'), findsOneWidget);
+        await t.scrollUntilVisible(find.byKey(const Key('webUrl')), 200,
+            scrollable: find.byType(Scrollable).first);
+        await t.pumpAndSettle();
+        expectLtrValue(t, const Key('webUrl'));
+        expect(find.text(fa.browserSectionTitle), findsOneWidget);
+        expectNoEnglish(t, 'Shares page with a share');
+        expect(t.takeException(), isNull);
+      });
+    }
+
+    testWidgets('Add by IP: LTR field, Persian digits become Latin',
+        (t) async {
+      final core = await pumpLocalized(t,
+          locale: const Locale('fa'), width: 375);
+      await _tapKey(t, 'addByIp');
+      expect(find.text(fa.addByIpTitle), findsOneWidget);
+      final field = find.byKey(const Key('addByIpField'));
+      expect(t.widget<TextField>(field).textDirection, TextDirection.ltr);
+      await t.enterText(field, '۱۹۲٫۱۶۸٫۱٫۷');
+      await t.pump();
+      expect(t.widget<TextField>(field).controller!.text, '192.168.1.7');
+      await t.tap(find.text(fa.addByIpAdd));
+      await t.pumpAndSettle();
+      expect(core.started, isTrue);
+      expect(find.text('Device at 192.168.1.7'), findsOneWidget);
+    });
+
+    testWidgets('pairing dialog in fa keeps the code Latin and LTR',
+        (t) async {
+      final core = await pumpLocalized(t, locale: const Locale('fa'), width: 375);
+      core.simulatePairing();
+      await t.pumpAndSettle();
+      expect(find.text(fa.pairingTitle), findsOneWidget);
+      expect(find.text('4821'), findsOneWidget);
+      expectLtrValue(t, const Key('pairingCode'));
+      expectNoEnglish(t, 'pairing dialog');
+      expect(t.takeException(), isNull);
+    });
+
+    test('copied report stays English with one Persian line on top', () {
+      expect(fa.diagReportNote, contains('انگلیسی'));
+      expect(en.diagReportNote, isNot(fa.diagReportNote));
+    });
+  });
+
   group('formatters', () {
     test('English output is unchanged', () {
       expect(formatBytes(500), '500 B');
@@ -378,6 +646,51 @@ void main() {
       expect(ltr('10.0.0.8:5000'), '\u206610.0.0.8:5000\u2069');
       expect(iso('لپ‌تاپ Ali'), '\u2068لپ‌تاپ Ali\u2069');
       expect(stripIsolates('x ${ltr('1.2.3.4')} ${iso('a')}'), 'x 1.2.3.4 a');
+    });
+
+    test('ltrValue / isoName isolate only where needed; digits', () {
+      expect(en.ltrValue('10.0.0.8:5000'), '10.0.0.8:5000');
+      expect(fa.ltrValue('10.0.0.8:5000'), ltr('10.0.0.8:5000'));
+      expect(en.isoName('Pixel 9'), 'Pixel 9');
+      // A Persian name is isolated even inside English text.
+      expect(en.isoName('لپ‌تاپ سارا'), iso('لپ‌تاپ سارا'));
+      expect(fa.isoName('Pixel 9'), iso('Pixel 9'));
+      expect(en.digits(12), '12');
+      expect(fa.digits(12), '۱۲');
+      expect(fa.isRtl, isTrue);
+      expect(en.isRtl, isFalse);
+    });
+
+    test('firstStrongDirection and shortFolder', () {
+      expect(firstStrongDirection('گزارش-final.pdf'), TextDirection.rtl);
+      expect(firstStrongDirection('2024-گزارش.pdf'), TextDirection.rtl);
+      expect(firstStrongDirection('report-نهایی.pdf'), TextDirection.ltr);
+      expect(firstStrongDirection('2024.txt'), TextDirection.ltr);
+      expect(firstStrongDirection('123'), isNull);
+      expect(shortFolder('/storage/emulated/0/Download/LanDrop'),
+          'Download/LanDrop');
+      expect(shortFolder(r'C:\Users\sara\Downloads'), 'sara/Downloads');
+      expect(shortFolder('/tmp'), '/tmp');
+    });
+
+    testWidgets('AutoDirText: own direction, start of the outer layout, '
+        'middle ellipsis for file names', (t) async {
+      final long = 'holiday-in-kish-with-family-2024-final-version.jpg';
+      await t.pumpWidget(Directionality(
+        textDirection: TextDirection.rtl,
+        child: Column(children: [
+          const AutoDirText('Work Laptop', key: Key('latin')),
+          const AutoDirText('لپ‌تاپ سارا', key: Key('persian')),
+          AutoDirText(long, key: const Key('file'), fileName: true, maxChars: 20),
+        ]),
+      ));
+      Text text(String k) => t.widget<Text>(find.descendant(
+          of: find.byKey(Key(k)), matching: find.byType(Text)));
+      expect(text('latin').textDirection, TextDirection.ltr);
+      expect(text('latin').textAlign, TextAlign.right);
+      expect(text('persian').textDirection, TextDirection.rtl);
+      expect(text('file').data, middleEllipsis(long, max: 20));
+      expect(text('file').data, endsWith('.jpg'));
     });
 
     test('middleEllipsis keeps the extension visible', () {

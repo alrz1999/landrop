@@ -288,6 +288,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    // Connection methods live in Settings ▸ Advanced (UX.md U3).
+    await _tapVisible(tester, find.byKey(const Key('advancedSettings')));
     await _tapVisible(tester, find.byKey(const Key('hotspotSettings')));
     expect(find.byKey(const Key('hotspotWizard')), findsOneWidget);
   });

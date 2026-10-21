@@ -423,5 +423,1076 @@
   "diagSearchFailedTitle": "The search failed",
   "@diagSearchFailedTitle": {
     "description": "Hotspot wizard finding \"search-failed\": headline."
+  },
+  "commonTryAgain": "Try again",
+  "@commonTryAgain": {
+    "description": "Button: retry after an error."
+  },
+  "commonDismiss": "Dismiss",
+  "@commonDismiss": {
+    "description": "Button: hide a banner."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button: close a dialog."
+  },
+  "commonShow": "Show",
+  "@commonShow": {
+    "description": "Button: show more about a banner."
+  },
+  "commonStop": "Stop",
+  "@commonStop": {
+    "description": "Button: stop something (e.g. the hotspot)."
+  },
+  "commonDecline": "Decline",
+  "@commonDecline": {
+    "description": "Button: decline a request."
+  },
+  "commonAccept": "Accept",
+  "@commonAccept": {
+    "description": "Button: accept an incoming transfer."
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Button: save a dialog."
+  },
+  "deviceKindPhone": "Phone",
+  "@deviceKindPhone": {
+    "description": "Kind of device shown under its name."
+  },
+  "deviceKindComputer": "Computer",
+  "@deviceKindComputer": {
+    "description": "Kind of device shown under its name."
+  },
+  "deviceKindBrowser": "Browser",
+  "@deviceKindBrowser": {
+    "description": "Kind of device shown under its name (a web browser)."
+  },
+  "selfStatusReady": "Visible to nearby devices",
+  "@selfStatusReady": {
+    "description": "Home status line: this device can receive."
+  },
+  "selfStatusStarting": "Getting ready…",
+  "@selfStatusStarting": {
+    "description": "Home status line while starting."
+  },
+  "selfStatusStopped": "Stopped",
+  "@selfStatusStopped": {
+    "description": "Home status line when the service is stopped."
+  },
+  "selfStatusError": "Can't receive right now.",
+  "@selfStatusError": {
+    "description": "Home status line when the service failed; a Try again button follows."
+  },
+  "selfRename": "Rename device",
+  "@selfRename": {
+    "description": "Tooltip of the edit button next to the device name."
+  },
+  "selfAddress": "{ip} · port {port}",
+  "@selfAddress": {
+    "description": "Small muted line under the status: IP and port (technical, Latin digits).",
+    "placeholders": {
+      "ip": {
+        "type": "String"
+      },
+      "port": {
+        "type": "String"
+      }
+    }
+  },
+  "selfAddressUnknown": "IP unknown · port {port}",
+  "@selfAddressUnknown": {
+    "description": "Same line when the IP is not known.",
+    "placeholders": {
+      "port": {
+        "type": "String"
+      }
+    }
+  },
+  "peerDetails": "Details",
+  "@peerDetails": {
+    "description": "Tooltip / title: technical details of a device."
+  },
+  "detailsAddress": "Address",
+  "@detailsAddress": {
+    "description": "Device details: label of the IP address and port."
+  },
+  "detailsConnection": "Connection",
+  "@detailsConnection": {
+    "description": "Device details: label of how it is connected."
+  },
+  "detailsCableLink": "Direct cable link",
+  "@detailsCableLink": {
+    "description": "Device details: it is reached over a direct cable (169.254.x.x)."
+  },
+  "detailsOtherAddresses": "Other addresses",
+  "@detailsOtherAddresses": {
+    "description": "Device details: other addresses of the same device."
+  },
+  "detailsModel": "Model",
+  "@detailsModel": {
+    "description": "Device details: model or operating system."
+  },
+  "securityCode": "Security code",
+  "@securityCode": {
+    "description": "The certificate fingerprint, in plain words."
+  },
+  "securityCodeHint": "Compare this code with the other device to be sure it's really yours.",
+  "@securityCodeHint": {
+    "description": "Explains the security code."
+  },
+  "emptyTitle": "No devices found yet",
+  "@emptyTitle": {
+    "description": "Home, no devices: headline."
+  },
+  "emptyBody": "Make sure LanDrop is open on the other device and both are on the same Wi-Fi.",
+  "@emptyBody": {
+    "description": "Home, no devices: what to check."
+  },
+  "emptyWhy": "Why can't I see my device?",
+  "@emptyWhy": {
+    "description": "Home, no devices: main button, opens the connection check."
+  },
+  "connectHotspotTitle": "Connect without Wi-Fi / router",
+  "@connectHotspotTitle": {
+    "description": "Opens the hotspot wizard."
+  },
+  "connectHotspotSub": "Use a hotspot from a phone or laptop, step by step",
+  "@connectHotspotSub": {
+    "description": "Subtitle of the hotspot wizard entry."
+  },
+  "connectCableTitle": "Connect with a cable",
+  "@connectCableTitle": {
+    "description": "Opens the cable wizard; also a diagnosis button."
+  },
+  "connectCableSub": "Ethernet cable between two computers, or USB tethering",
+  "@connectCableSub": {
+    "description": "Subtitle of the cable wizard entry."
+  },
+  "connectWifiDirectTitle": "Connect with Wi-Fi Direct",
+  "@connectWifiDirectTitle": {
+    "description": "Opens the Wi-Fi Direct page (Android)."
+  },
+  "connectWifiDirectSub": "Phone to phone without a router (Android)",
+  "@connectWifiDirectSub": {
+    "description": "Subtitle of the Wi-Fi Direct entry."
+  },
+  "connectWifiJoinTitle": "Join a hotspot by QR",
+  "@connectWifiJoinTitle": {
+    "description": "Opens the join-by-QR page (Android)."
+  },
+  "connectWifiJoinSub": "Scan the QR code of another phone's LanDrop hotspot",
+  "@connectWifiJoinSub": {
+    "description": "Subtitle of the join-by-QR entry."
+  },
+  "qrForLanDrop": "For another LanDrop app",
+  "@qrForLanDrop": {
+    "description": "Caption of the QR with this device address (only LanDrop can use it)."
+  },
+  "addressNotAvailable": "Address not available yet",
+  "@addressNotAvailable": {
+    "description": "Shown instead of a QR code before the address is known."
+  },
+  "qrSelfSemantics": "QR code with this device's address",
+  "@qrSelfSemantics": {
+    "description": "Screen reader label of the QR code."
+  },
+  "transferSummary": "{done} of {total} files",
+  "@transferSummary": {
+    "description": "Transfer card with many files: files finished so far.",
+    "placeholders": {
+      "done": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "total": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "transferDeclined": "Declined by {name}",
+  "@transferDeclined": {
+    "description": "Transfer card status: the receiver declined.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferFailed": "Failed: {reason}",
+  "@transferFailed": {
+    "description": "Transfer card status with the reason.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "transferFailedPlain": "Failed",
+  "@transferFailedPlain": {
+    "description": "Transfer card status without a reason."
+  },
+  "transferDone": "Done",
+  "@transferDone": {
+    "description": "Transfer card status."
+  },
+  "transferWaiting": "Waiting for {name} to accept…",
+  "@transferWaiting": {
+    "description": "Transfer card status before the receiver accepted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferRunning": "Transferring",
+  "@transferRunning": {
+    "description": "Transfer card status."
+  },
+  "transferFrom": "From {name}",
+  "@transferFrom": {
+    "description": "Transfer card title, incoming.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferTo": "To {name}",
+  "@transferTo": {
+    "description": "Transfer card title, outgoing.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferSavedTo": "Saved to {path}",
+  "@transferSavedTo": {
+    "description": "Where received files were saved (path stays left to right).",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingTitle": "{name} wants to send you {count, plural, =1{1 file} other{{count} files}}",
+  "@incomingTitle": {
+    "description": "Incoming request dialog title.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "incomingFromBrowser": "Web browser at {ip}",
+  "@incomingFromBrowser": {
+    "description": "Incoming request from a browser: its IP.",
+    "placeholders": {
+      "ip": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingFromBrowserModel": "Web browser at {ip} · {model}",
+  "@incomingFromBrowserModel": {
+    "description": "Incoming request from a browser: IP and browser name.",
+    "placeholders": {
+      "ip": {
+        "type": "String"
+      },
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "fileCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@fileCount": {
+    "description": "A number of files.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "incomingTotal": "Total: {size}",
+  "@incomingTotal": {
+    "description": "Incoming dialog: total size.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingSavesTo": "Saves to {folder}",
+  "@incomingSavesTo": {
+    "description": "Incoming dialog: the folder files will be saved in.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingTitle": "Allow a browser to send you files?",
+  "@pairingTitle": {
+    "description": "Browser pairing dialog title."
+  },
+  "pairingCodeLabel": "Code shown in the browser",
+  "@pairingCodeLabel": {
+    "description": "Label above the pairing code."
+  },
+  "pairingCodeSemantics": "Pairing code {digits}",
+  "@pairingCodeSemantics": {
+    "description": "Screen reader label: the pairing code digit by digit.",
+    "placeholders": {
+      "digits": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingBody": "Approve only if the browser shows the same code. For the next hour it can then offer you files; you still accept every transfer.",
+  "@pairingBody": {
+    "description": "Browser pairing dialog explanation."
+  },
+  "pairingApprove": "Approve",
+  "@pairingApprove": {
+    "description": "Button: approve a browser."
+  },
+  "addByIpTitle": "Add device by IP",
+  "@addByIpTitle": {
+    "description": "Add by IP dialog title."
+  },
+  "addByIpLabel": "IP address",
+  "@addByIpLabel": {
+    "description": "Add by IP text field label."
+  },
+  "addByIpHint": "{example} or {exampleWithPort}",
+  "@addByIpHint": {
+    "description": "Add by IP hint with two example addresses.",
+    "placeholders": {
+      "example": {
+        "type": "String"
+      },
+      "exampleWithPort": {
+        "type": "String"
+      }
+    }
+  },
+  "addByIpInvalid": "Enter an IPv4 address, e.g. {example}",
+  "@addByIpInvalid": {
+    "description": "Add by IP: the text is not an address.",
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "addByIpAdd": "Add",
+  "@addByIpAdd": {
+    "description": "Add by IP: confirm button."
+  },
+  "addByIpAdded": "Added {name}",
+  "@addByIpAdded": {
+    "description": "Snackbar: a device was added by IP.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addByIpNoAnswer": "No LanDrop device answered at {address}.",
+  "@addByIpNoAnswer": {
+    "description": "Add by IP failed: nothing answered.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "addByIpError": "Could not reach {address} — {error}",
+  "@addByIpError": {
+    "description": "Add by IP failed with an error (technical, English).",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addFailedTitle": "Device not found",
+  "@addFailedTitle": {
+    "description": "Add by IP failed: dialog title."
+  },
+  "addFailedDiagnose": "Diagnose this IP",
+  "@addFailedDiagnose": {
+    "description": "Add by IP failed: button that runs the connection check for the address."
+  },
+  "pickerEmpty": "No devices found yet.",
+  "@pickerEmpty": {
+    "description": "Choose device dialog without devices."
+  },
+  "pickerHelp": "Help me connect",
+  "@pickerHelp": {
+    "description": "Choose device dialog without devices: opens the connection check."
+  },
+  "sendPickerTitleFiles": "Send {count, plural, =1{1 file} other{{count} files}} to…",
+  "@sendPickerTitleFiles": {
+    "description": "Choose device dialog title.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "sendPickerTitleFolder": "Send folder \"{name}\" to…",
+  "@sendPickerTitleFolder": {
+    "description": "Choose device dialog title for a folder.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aliasLabel": "Name shown to others",
+  "@aliasLabel": {
+    "description": "Device name dialog: text field label."
+  },
+  "settingsDeviceName": "Device name",
+  "@settingsDeviceName": {
+    "description": "Settings row and dialog title."
+  },
+  "homeSend": "Send",
+  "@homeSend": {
+    "description": "The main Send button and the Send button of each device."
+  },
+  "homeNearbyDevices": "Nearby devices",
+  "@homeNearbyDevices": {
+    "description": "Home section title."
+  },
+  "homeRescan": "Rescan network",
+  "@homeRescan": {
+    "description": "Home button: search the network again."
+  },
+  "homeAddByIp": "Add by IP",
+  "@homeAddByIp": {
+    "description": "Home button: add a device by its address."
+  },
+  "homeDiscoveryOff": "Automatic search is off on this device.",
+  "@homeDiscoveryOff": {
+    "description": "Banner when automatic discovery could not start."
+  },
+  "homeHelp": "Help",
+  "@homeHelp": {
+    "description": "Button: opens the connection check."
+  },
+  "homeHotspotBanner": "Sharing hotspot \"{ssid}\"",
+  "@homeHotspotBanner": {
+    "description": "Banner while this phone shares a hotspot (name stays as is).",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "homeActivity": "Activity",
+  "@homeActivity": {
+    "description": "Home section title: transfers."
+  },
+  "homeClearFinished": "Clear finished",
+  "@homeClearFinished": {
+    "description": "Button: remove finished transfers from the list."
+  },
+  "homeShareLink": "Share link",
+  "@homeShareLink": {
+    "description": "App bar: opens the Shares page."
+  },
+  "homeActiveShares": "Sharing {count, plural, =1{1 link} other{{count} links}}",
+  "@homeActiveShares": {
+    "description": "Home row while links are shared; opens the Shares page.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "homeReceiving": "Receiving {count, plural, =1{1 file} other{{count} files}} from {name}",
+  "@homeReceiving": {
+    "description": "Snackbar after accepting a transfer.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeScanFinished": "Scan finished: {count, plural, =1{1 device} other{{count} devices}} found",
+  "@homeScanFinished": {
+    "description": "Snackbar after Rescan network.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "homeScanFailed": "Scan failed: {error}",
+  "@homeScanFailed": {
+    "description": "Snackbar when Rescan network failed (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sendSheetTitle": "What do you want to send?",
+  "@sendSheetTitle": {
+    "description": "Send sheet title."
+  },
+  "sendSheetFiles": "Files",
+  "@sendSheetFiles": {
+    "description": "Send sheet: send files."
+  },
+  "sendSheetFolder": "Folder",
+  "@sendSheetFolder": {
+    "description": "Send sheet: send a folder."
+  },
+  "sendSent": "Sent to {name}.",
+  "@sendSent": {
+    "description": "Snackbar: the transfer finished.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sendDeclined": "{name} declined.",
+  "@sendDeclined": {
+    "description": "Snackbar: the receiver declined.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sendFailed": "Couldn't reach {name}. Is LanDrop still open there?",
+  "@sendFailed": {
+    "description": "Snackbar: the send failed; a Help button follows.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorFilePicker": "Could not open file picker: {error}",
+  "@errorFilePicker": {
+    "description": "Error snackbar (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorFolderPicker": "Could not open folder picker: {error}",
+  "@errorFolderPicker": {
+    "description": "Error snackbar (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorPicker": "Could not open the picker: {error}",
+  "@errorPicker": {
+    "description": "Error snackbar (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sharesTitle": "Shares",
+  "@sharesTitle": {
+    "description": "Shares page title."
+  },
+  "shareSendLinkTitle": "Send a link",
+  "@shareSendLinkTitle": {
+    "description": "Shares page: section where others download from this device."
+  },
+  "shareSendLinkBody": "Anyone on this Wi-Fi with the link can download the files from a browser.",
+  "@shareSendLinkBody": {
+    "description": "Shares page: explains Send a link."
+  },
+  "shareFiles": "Share files",
+  "@shareFiles": {
+    "description": "Button: share files as a link."
+  },
+  "shareFolder": "Share folder",
+  "@shareFolder": {
+    "description": "Button: share a folder as a link."
+  },
+  "shareNothingShared": "Nothing shared. A share gives you a link and QR code that opens in any browser on this network, no app needed.",
+  "@shareNothingShared": {
+    "description": "Shares page when nothing is shared."
+  },
+  "browserSectionTitle": "Use from a browser",
+  "@browserSectionTitle": {
+    "description": "Shares page: section where browsers send files to this device."
+  },
+  "browserSectionBody": "Open this address on another phone or computer to send files here. Nothing to install.",
+  "@browserSectionBody": {
+    "description": "Shares page: explains Use from a browser."
+  },
+  "shareLessThanMinute": "less than a minute",
+  "@shareLessThanMinute": {
+    "description": "Remaining time of a share."
+  },
+  "shareTtl1h": "1 hour",
+  "@shareTtl1h": {
+    "description": "Share option: link works for 1 hour."
+  },
+  "shareTtl24h": "24 hours",
+  "@shareTtl24h": {
+    "description": "Share option: link works for 24 hours."
+  },
+  "shareTtlNone": "Until I stop",
+  "@shareTtlNone": {
+    "description": "Share option: no expiry."
+  },
+  "shareUnlimited": "Unlimited",
+  "@shareUnlimited": {
+    "description": "Share option: any number of downloads."
+  },
+  "shareLinkWorksFor": "Link works for",
+  "@shareLinkWorksFor": {
+    "description": "Share options: label of the time choices."
+  },
+  "shareDownloadsAllowed": "Downloads allowed",
+  "@shareDownloadsAllowed": {
+    "description": "Share options: label of the download limit choices."
+  },
+  "shareOptionsNote": "Anyone on this network who has the link can download while it works. Playing a video counts as one download.",
+  "@shareOptionsNote": {
+    "description": "Share options: note under the choices."
+  },
+  "shareConfirm": "Share",
+  "@shareConfirm": {
+    "description": "Share options: confirm button."
+  },
+  "shareOptionsTitleFiles": "Share {count, plural, =1{1 file} other{{count} files}}",
+  "@shareOptionsTitleFiles": {
+    "description": "Share options dialog title.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "shareOptionsTitleFolder": "Share folder \"{name}\"",
+  "@shareOptionsTitleFolder": {
+    "description": "Share options dialog title for a folder.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareCreatedFiles": "Sharing {count, plural, =1{1 file} other{{count} files}}. Open the link on the other device.",
+  "@shareCreatedFiles": {
+    "description": "Snackbar after creating a share.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "shareCreatedFolder": "Sharing folder \"{name}\". Open the link on the other device.",
+  "@shareCreatedFolder": {
+    "description": "Snackbar after sharing a folder.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "errorShare": "Could not share: {error}",
+  "@errorShare": {
+    "description": "Error snackbar (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "shareUntilStopped": "Until you stop it",
+  "@shareUntilStopped": {
+    "description": "Share card: no expiry."
+  },
+  "shareExpired": "Expired",
+  "@shareExpired": {
+    "description": "Share card: the link expired."
+  },
+  "shareEndsIn": "Ends in {time}",
+  "@shareEndsIn": {
+    "description": "Share card: remaining time.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "shareUnlimitedDownloads": "Unlimited downloads",
+  "@shareUnlimitedDownloads": {
+    "description": "Share card: no download limit."
+  },
+  "shareLimitReached": "Download limit reached",
+  "@shareLimitReached": {
+    "description": "Share card: no downloads left."
+  },
+  "shareDownloadsLeft": "{left} of {max} downloads left",
+  "@shareDownloadsLeft": {
+    "description": "Share card: downloads left.",
+    "placeholders": {
+      "left": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "max": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "shareTitleMore": "{first} and {count} more",
+  "@shareTitleMore": {
+    "description": "Share card title with several files.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "shareQrSemantics": "QR code for the share link",
+  "@shareQrSemantics": {
+    "description": "Screen reader label of the share QR code."
+  },
+  "shareHttpWarning": "Plain HTTP link: not encrypted.",
+  "@shareHttpWarning": {
+    "description": "Share card warning when plain HTTP is on."
+  },
+  "shareLinkCopied": "Link copied",
+  "@shareLinkCopied": {
+    "description": "Snackbar after copying a link."
+  },
+  "shareCopyLink": "Copy link",
+  "@shareCopyLink": {
+    "description": "Share card button."
+  },
+  "shareStop": "Stop sharing",
+  "@shareStop": {
+    "description": "Share card button."
+  },
+  "browsersTitle": "Connected browsers",
+  "@browsersTitle": {
+    "description": "Title of the connected browsers card."
+  },
+  "browsersNone": "No browser is paired. A paired browser can send you files until it signs out, you disconnect it, or an hour passes.",
+  "@browsersNone": {
+    "description": "Connected browsers card when empty."
+  },
+  "browserSessionSubtitle": "{ip} · paired {time} · last seen {ago}",
+  "@browserSessionSubtitle": {
+    "description": "Connected browser: address, pairing time, last activity.",
+    "placeholders": {
+      "ip": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "ago": {
+        "type": "String"
+      }
+    }
+  },
+  "agoJustNow": "just now",
+  "@agoJustNow": {
+    "description": "Relative time."
+  },
+  "agoMinutes": "{minutes} min ago",
+  "@agoMinutes": {
+    "description": "Relative time in minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "agoHours": "{hours} h ago",
+  "@agoHours": {
+    "description": "Relative time in hours.",
+    "placeholders": {
+      "hours": {
+        "type": "String"
+      }
+    }
+  },
+  "browserDisconnected": "{name} disconnected",
+  "@browserDisconnected": {
+    "description": "Snackbar after disconnecting a browser.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "browserDisconnect": "Disconnect",
+  "@browserDisconnect": {
+    "description": "Button: disconnect a browser."
+  },
+  "webQrCaption": "For any phone camera or browser",
+  "@webQrCaption": {
+    "description": "Caption of the browser address QR (any camera can open it)."
+  },
+  "webQrSemantics": "QR code for the browser address",
+  "@webQrSemantics": {
+    "description": "Screen reader label of the browser QR code."
+  },
+  "webHttpOnNote": "Plain HTTP is on (Settings): no warning, but not encrypted. Secure address:",
+  "@webHttpOnNote": {
+    "description": "Note between the plain HTTP and the secure address."
+  },
+  "webWarningTitle": "The browser shows a warning?",
+  "@webWarningTitle": {
+    "description": "Collapsed help about the certificate warning."
+  },
+  "webWarningBody": "The browser will first warn that the connection is not private. That is expected: LanDrop uses its own certificate instead of one bought from a certificate company. Choose \"Advanced\" then \"Proceed\" (Chrome, Edge), or \"Show details\" then \"visit this website\" (Safari). Then tap \"Pair this browser\" and approve here if both show the same code.",
+  "@webWarningBody": {
+    "description": "Steps for the certificate warning, per browser."
+  },
+  "settingsSectionDevice": "This device",
+  "@settingsSectionDevice": {
+    "description": "Settings section title."
+  },
+  "settingsSaveFolder": "Save received files to",
+  "@settingsSaveFolder": {
+    "description": "Settings row: received files folder."
+  },
+  "settingsNotSet": "Not set",
+  "@settingsNotSet": {
+    "description": "Settings: no folder chosen."
+  },
+  "settingsUseDefaultFolder": "Use default folder",
+  "@settingsUseDefaultFolder": {
+    "description": "Tooltip: go back to the default folder."
+  },
+  "settingsPrivateFolder": "Only visible inside LanDrop.",
+  "@settingsPrivateFolder": {
+    "description": "Android: received files are in the app own folder."
+  },
+  "settingsUseDownloads": "Use Downloads",
+  "@settingsUseDownloads": {
+    "description": "Android: button that asks for \"All files access\" to save in Downloads."
+  },
+  "settingsSectionConnect": "Connecting",
+  "@settingsSectionConnect": {
+    "description": "Settings section title."
+  },
+  "settingsConnectHelp": "Can't find the other device?",
+  "@settingsConnectHelp": {
+    "description": "Settings row: opens the connection check."
+  },
+  "settingsConnectHelpSub": "Check the connection and see what to do",
+  "@settingsConnectHelpSub": {
+    "description": "Subtitle of the row above."
+  },
+  "settingsShares": "Shares and browsers",
+  "@settingsShares": {
+    "description": "Settings row: opens the Shares page."
+  },
+  "settingsSharesSub": "Links you share and browsers that can send you files",
+  "@settingsSharesSub": {
+    "description": "Subtitle of the row above."
+  },
+  "settingsSectionApp": "App",
+  "@settingsSectionApp": {
+    "description": "Settings section title (Android)."
+  },
+  "settingsBackground": "Keep running in background",
+  "@settingsBackground": {
+    "description": "Android switch."
+  },
+  "settingsBackgroundSub": "Stays reachable with the screen off. Shows a notification.",
+  "@settingsBackgroundSub": {
+    "description": "Subtitle of the switch above."
+  },
+  "settingsQuit": "Quit LanDrop",
+  "@settingsQuit": {
+    "description": "Android: quit the app."
+  },
+  "settingsQuitSub": "Stops receiving and closes the app",
+  "@settingsQuitSub": {
+    "description": "Subtitle of the row above."
+  },
+  "settingsAdvanced": "Advanced",
+  "@settingsAdvanced": {
+    "description": "Settings row and Advanced page title."
+  },
+  "settingsAdvancedSub": "Address, security code, connection methods",
+  "@settingsAdvancedSub": {
+    "description": "Subtitle of the Advanced row."
+  },
+  "advancedSectionAddress": "Address",
+  "@advancedSectionAddress": {
+    "description": "Advanced section: this device address and QR."
+  },
+  "advancedRestart": "Restart LanDrop service",
+  "@advancedRestart": {
+    "description": "Advanced row: restart the service."
+  },
+  "serviceRunning": "Running",
+  "@serviceRunning": {
+    "description": "Service status."
+  },
+  "serviceStarting": "Starting…",
+  "@serviceStarting": {
+    "description": "Service status; also shown while an address is not ready."
+  },
+  "serviceStopped": "Stopped",
+  "@serviceStopped": {
+    "description": "Service status."
+  },
+  "serviceError": "Not running",
+  "@serviceError": {
+    "description": "Service status after an error."
+  },
+  "advancedSectionBrowsers": "Browsers",
+  "@advancedSectionBrowsers": {
+    "description": "Advanced section title."
+  },
+  "webHttpTitle": "Allow browsers without a warning (not encrypted)",
+  "@webHttpTitle": {
+    "description": "Plain HTTP switch title."
+  },
+  "webHttpSub": "Off is safer. When on, browser traffic is not encrypted: anyone on this network can see the files and pairing codes. Only for networks you trust.",
+  "@webHttpSub": {
+    "description": "Plain HTTP switch subtitle."
+  },
+  "webHttpUrlTitle": "Browser address (plain HTTP)",
+  "@webHttpUrlTitle": {
+    "description": "Row with the plain HTTP address."
+  },
+  "webHttpConfirmTitle": "Turn on plain HTTP for browsers?",
+  "@webHttpConfirmTitle": {
+    "description": "Confirmation dialog title."
+  },
+  "webHttpConfirmBody": "Browsers will open LanDrop without a certificate warning, but nothing is encrypted: anyone on this Wi-Fi can read the files, share links and pairing codes, and could pretend to be this device. Use it only on a network you trust, such as your home Wi-Fi, never on public or work networks.",
+  "@webHttpConfirmBody": {
+    "description": "Confirmation dialog text."
+  },
+  "webHttpConfirmOn": "Turn on",
+  "@webHttpConfirmOn": {
+    "description": "Confirmation dialog button."
+  },
+  "errorWebHttp": "Could not change plain HTTP: {error}",
+  "@errorWebHttp": {
+    "description": "Error snackbar (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "keepSharesTitle": "Keep share links after restart",
+  "@keepSharesTitle": {
+    "description": "Switch title."
+  },
+  "keepSharesSub": "Share links keep working after LanDrop restarts, as long as they have not expired and the files are unchanged. The list of shared files is stored on this device. Off deletes it.",
+  "@keepSharesSub": {
+    "description": "Switch subtitle."
+  },
+  "advancedSectionTroubleshoot": "Troubleshooting",
+  "@advancedSectionTroubleshoot": {
+    "description": "Advanced section title."
+  },
+  "advancedReport": "Connection report",
+  "@advancedReport": {
+    "description": "Advanced row: runs the connection check."
+  },
+  "advancedReportSub": "Find out why devices cannot connect",
+  "@advancedReportSub": {
+    "description": "Subtitle of the row above."
+  },
+  "advancedSectionMethods": "All connection methods",
+  "@advancedSectionMethods": {
+    "description": "Advanced section title."
+  },
+  "diagActionHotspot": "Connect with a hotspot",
+  "@diagActionHotspot": {
+    "description": "Diagnosis finding button: opens the hotspot wizard."
+  },
+  "diagTitle": "Connection check",
+  "@diagTitle": {
+    "description": "Diagnosis dialog title."
+  },
+  "diagTitleTarget": "Checking {target}",
+  "@diagTitleTarget": {
+    "description": "Diagnosis dialog title for one address.",
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "diagRunning": "Checking the network…",
+  "@diagRunning": {
+    "description": "Diagnosis dialog while running."
+  },
+  "diagError": "Could not run the check: {error}",
+  "@diagError": {
+    "description": "Diagnosis failed (technical error, English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "diagReportCopied": "Report copied",
+  "@diagReportCopied": {
+    "description": "Snackbar after Copy report."
+  },
+  "diagCopyReport": "Copy report",
+  "@diagCopyReport": {
+    "description": "Diagnosis dialog button; the report itself stays English."
+  },
+  "diagRunAgain": "Run again",
+  "@diagRunAgain": {
+    "description": "Diagnosis dialog button."
+  },
+  "diagDetails": "Details",
+  "@diagDetails": {
+    "description": "Collapsed technical details of a finding."
+  },
+  "diagReportNote": "This report is in English so support can read it.",
+  "@diagReportNote": {
+    "description": "First line of the copied report in Persian only."
   }
 }

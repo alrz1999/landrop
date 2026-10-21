@@ -97,7 +97,8 @@ class TransferSession {
   final DateTime started = DateTime.now();
 
   bool? result; // outgoing: send() result
-  String? error; // outgoing: why send() failed
+  String? error; // outgoing: why send() failed (English, technical)
+  SendErrorCode? errorCode; // outgoing: why send() failed, for the UI
 
   /// Incoming: every file finished. Outgoing: send() returned (files appear
   /// one at a time as the core starts them, so they cannot tell).
@@ -409,6 +410,19 @@ class AppController extends ChangeNotifier {
     if (status != CoreStatus.stopped) await restart();
   }
 
+  /// Android: received files go to the app's own folder (only visible inside
+  /// LanDrop) because "All files access" was not granted.
+  bool get savesToPrivateFolder =>
+      Platform.isAndroid && !_customDir && _saveDir != androidPublicDir;
+
+  /// Android: asks for "All files access" and, when granted, moves received
+  /// files to Downloads/LanDrop. Returns whether it is granted.
+  Future<bool> useDownloadsFolder() async {
+    if (!await ensureStorageAccess()) return false;
+    await resetSaveDir();
+    return true;
+  }
+
   /// Android: keep the server reachable while the app is in the background.
   Future<void> setBackground(bool on) async {
     if (on == _background) return;
@@ -580,8 +594,13 @@ class AppController extends ChangeNotifier {
   }
 
   /// Sends files and/or folders; progress shows up in [sessions], keyed by
-  /// the session id the core reports. Returns the core result.
-  Future<bool> send(DeviceInfo to, List<String> paths) async {
+  /// the session id the core reports. Returns whether it succeeded.
+  Future<bool> send(DeviceInfo to, List<String> paths) async =>
+      (await sendWithResult(to, paths)).ok;
+
+  /// [send] with the core's [SendResult], so the UI can tell "declined"
+  /// from "failed" ([SendResult.errorCode]).
+  Future<SendResult> sendWithResult(DeviceInfo to, List<String> paths) async {
     final s = TransferSession(
       sessionId: '',
       incoming: false,
@@ -589,7 +608,7 @@ class AppController extends ChangeNotifier {
     );
     sessions.insert(0, s);
     _notify();
-    bool ok;
+    SendResult res;
     try {
       final r = await core.sendFiles(
         to,
@@ -599,17 +618,20 @@ class AppController extends ChangeNotifier {
           _notify();
         },
       );
-      ok = r.ok;
+      res = r;
       s.error = r.error;
+      s.errorCode = r.ok ? null : r.errorCode;
       if (r.sessionId != null && s.sessionId.isEmpty) _bind(s, r.sessionId!);
     } catch (e) {
-      ok = false;
+      res = SendResult(
+          ok: false, error: '$e', errorCode: SendErrorCode.unknown);
       s.error = '$e';
+      s.errorCode = SendErrorCode.unknown;
       lastError = '$e';
     }
-    s.result = ok;
+    s.result = res.ok;
     _notify();
-    return ok;
+    return res;
   }
 
   /// Gives [s] its session id and applies progress that arrived before.

@@ -1,36 +1,29 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:math';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'cable_wizard.dart';
+import 'finding_text.dart';
 import 'hotspot_wizard.dart';
+import 'l10n.dart';
+import 'pickers.dart';
 import 'settings_page.dart';
 import 'shares.dart';
 import 'widgets.dart';
 
-/// Picks files to send. Overridable for tests.
-typedef FilesPicker = Future<List<String>> Function();
+export 'pickers.dart';
 
-Future<List<String>> defaultPickFiles() async {
-  final files = await FilePicker.pickFiles(dialogTitle: 'Choose files to send');
-  return [
-    for (final f in files)
-      if (f.path != null) f.path!,
-  ];
-}
+/// What the Send sheet offers (UX.md 3.3).
+enum SendKind { files, folder }
 
-/// Picks a folder to send. Overridable for tests.
-typedef FolderPicker = Future<String?> Function();
-
-Future<String?> defaultPickFolder() =>
-    FilePicker.getDirectoryPath(dialogTitle: 'Choose a folder to send');
-
+/// Home (UX.md 3.2, step U1): who I am, nearby devices, activity, and one
+/// "Send" button that asks "Files or folder?". Sharing links and browser
+/// access live on the Shares page (app bar), the address in Settings ▸
+/// Advanced.
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -80,11 +73,13 @@ class _HomePageState extends State<HomePage> {
       }
       final req = next as IncomingRequest;
       if (req.decision.isCompleted) continue; // e.g. timed out by core
-      final ok = await showIncomingDialog(context, req);
+      final c = AppScope.read(context);
+      final ok = await showIncomingDialog(context, req, saveDir: c.saveDir);
       if (!mounted) break;
-      AppScope.read(context).respond(req, ok);
+      c.respond(req, ok);
       if (ok) {
-        _snack('Receiving ${req.files.length} file(s) from ${req.sender.alias}');
+        final l = context.l;
+        _snack(l.homeReceiving(req.files.length, l.isoName(req.sender.alias)));
       }
     }
     _dialogOpen = false;
@@ -97,14 +92,53 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void _snack(String msg, {bool error = false}) {
+  void _snack(String msg, {bool error = false, SnackBarAction? action}) {
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
       backgroundColor: error ? scheme.error : null,
+      action: action,
     ));
   }
+
+  /// The FAB: "What do you want to send?" Files / Folder, then the device.
+  Future<void> _sendSheet() async {
+    final kind = await showSendSheet(context);
+    if (kind == null || !mounted) return;
+    await (kind == SendKind.folder ? _sendFolderFlow() : _sendFlow());
+  }
+
+  /// Tells the user how a send ended: sent, declined, or why it failed
+  /// (UX.md 3.3, quick win 4).
+  void _sendResult(DeviceInfo peer, SendResult r) {
+    final l = context.l;
+    final name = l.isoName(peer.alias);
+    if (r.ok) {
+      _snack(l.sendSent(name));
+      return;
+    }
+    final message = switch (r.errorCode) {
+      SendErrorCode.declined => l.sendDeclined(name),
+      null ||
+      SendErrorCode.unreachable ||
+      SendErrorCode.timeout ||
+      SendErrorCode.unknown =>
+        l.sendFailed(name),
+      final code => localizeSendError(l, code),
+    };
+    _snack(message,
+        error: r.errorCode != SendErrorCode.declined,
+        action: r.errorCode == SendErrorCode.declined
+            ? null
+            : SnackBarAction(
+                label: l.homeHelp,
+                onPressed: () => showDiagnosisDialog(context)));
+  }
+
+  Future<DeviceInfo?> _pickPeer(String title) => showPeerPicker(
+      context, AppScope.read(context).peers,
+      title: title, onHelp: () => showDiagnosisDialog(context));
 
   Future<void> _sendFlow({DeviceInfo? to}) async {
     final c = AppScope.read(context);
@@ -112,19 +146,15 @@ class _HomePageState extends State<HomePage> {
     try {
       paths = await widget.pickFiles();
     } catch (e) {
-      _snack('Could not open file picker: $e', error: true);
+      if (mounted) _snack(context.l.errorFilePicker('$e'), error: true);
       return;
     }
     if (paths.isEmpty || !mounted) return;
-    final peer = to ?? await showPeerPicker(context, c.peers, paths.length);
-    if (peer == null) return;
-    final ok = await c.send(peer, paths);
-    _snack(
-      ok
-          ? 'Sent ${paths.length} file(s) to ${peer.alias}'
-          : 'Sending to ${peer.alias} failed or was declined',
-      error: !ok,
-    );
+    final peer =
+        to ?? await _pickPeer(context.l.sendPickerTitleFiles(paths.length));
+    if (peer == null || !mounted) return;
+    final r = await c.sendWithResult(peer, paths);
+    if (mounted) _sendResult(peer, r);
   }
 
   Future<void> _sendFolderFlow({DeviceInfo? to}) async {
@@ -133,74 +163,38 @@ class _HomePageState extends State<HomePage> {
     try {
       dir = await widget.pickFolder();
     } catch (e) {
-      _snack('Could not open folder picker: $e', error: true);
+      if (mounted) _snack(context.l.errorFolderPicker('$e'), error: true);
       return;
     }
     if (dir == null || dir.isEmpty || !mounted) return;
     final name = dir
         .split(RegExp(r'[\\/]'))
         .lastWhere((s) => s.isNotEmpty, orElse: () => dir!);
-    final peer = to ??
-        await showPeerPicker(context, c.peers, 1, label: 'folder "$name"');
-    if (peer == null) return;
-    final ok = await c.send(peer, [dir]);
-    _snack(
-      ok
-          ? 'Sent folder $name to ${peer.alias}'
-          : 'Sending to ${peer.alias} failed or was declined',
-      error: !ok,
-    );
-  }
-
-  /// "Share" button: choose files or a folder, then the normal share flow.
-  Future<void> _shareSheet() async {
-    final folder = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          key: const Key('shareSheet'),
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              key: const Key('shareSheetFiles'),
-              leading: const Icon(Icons.ios_share),
-              title: const Text('Share files'),
-              subtitle: const Text('Get a link any browser can open'),
-              onTap: () => Navigator.pop(ctx, false),
-            ),
-            ListTile(
-              key: const Key('shareSheetFolder'),
-              leading: const Icon(Icons.folder_shared_outlined),
-              title: const Text('Share folder'),
-              onTap: () => Navigator.pop(ctx, true),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (folder == null || !mounted) return;
-    await startShareFlow(context,
-        pickFiles: widget.pickFiles,
-        pickFolder: widget.pickFolder,
-        folder: folder);
+    final l = context.l;
+    final peer =
+        to ?? await _pickPeer(l.sendPickerTitleFolder(l.isoName(name)));
+    if (peer == null || !mounted) return;
+    final r = await c.sendWithResult(peer, [dir]);
+    if (mounted) _sendResult(peer, r);
   }
 
   Future<void> _addByIp() async {
     final c = AppScope.read(context);
     final res = await showAddByIpDialog(context);
-    if (res == null) return;
+    if (res == null || !mounted) return;
     final (ip, port) = res;
+    final l = context.l;
+    final address = l.ltrValue('$ip:$port');
     String? failure;
     try {
       final d = await c.addPeerByIp(ip, port: port);
       if (d != null) {
-        _snack('Added ${d.alias}');
+        _snack(l.addByIpAdded(l.isoName(d.alias)));
       } else {
-        failure = 'No LanDrop device answered at $ip:$port.';
+        failure = l.addByIpNoAnswer(address);
       }
     } catch (e) {
-      failure = 'Could not reach $ip:$port — $e';
+      failure = l.addByIpError(address, '$e');
     }
     if (failure != null && mounted) {
       final diagnose = await showAddFailedDialog(context, failure);
@@ -214,9 +208,9 @@ class _HomePageState extends State<HomePage> {
     final c = AppScope.read(context);
     try {
       await c.rescan();
-      _snack('Scan finished: ${c.peers.length} device(s) found');
+      if (mounted) _snack(context.l.homeScanFinished(c.peers.length));
     } catch (e) {
-      _snack('Scan failed: $e', error: true);
+      if (mounted) _snack(context.l.homeScanFailed('$e'), error: true);
     }
   }
 
@@ -229,28 +223,34 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
+    final l = context.l;
     final discoveryError = c.discoveryError;
     final peersSection = <Widget>[
+      // One plain line; the raw error is in the connection check (Help).
       if (discoveryError != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsetsDirectional.only(top: 8),
           child: MaterialBanner(
             key: const Key('discoveryBanner'),
             leading: const Icon(Icons.wifi_off),
-            content: Text('Automatic discovery is unavailable: '
-                '$discoveryError. Use Rescan or Add by IP.'),
+            content: Text(l.homeDiscoveryOff),
             actions: [
+              TextButton(
+                key: const Key('discoveryHelp'),
+                onPressed: () => showDiagnosisDialog(context),
+                child: Text(l.homeHelp),
+              ),
               TextButton(
                 key: const Key('dismissDiscoveryBanner'),
                 onPressed: c.dismissDiscoveryError,
-                child: const Text('Dismiss'),
+                child: Text(l.commonDismiss),
               ),
             ],
           ),
         ),
-      const SectionHeader('Nearby devices'),
+      SectionHeader(l.homeNearbyDevices),
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsetsDirectional.symmetric(horizontal: 8),
         child: Wrap(spacing: 4, children: [
           TextButton.icon(
             key: const Key('rescan'),
@@ -261,32 +261,32 @@ class _HomePageState extends State<HomePage> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.refresh),
-            label: const Text('Rescan network'),
+            label: Text(l.homeRescan),
           ),
           TextButton.icon(
             key: const Key('addByIp'),
             onPressed: _addByIp,
             icon: const Icon(Icons.add_link),
-            label: const Text('Add by IP'),
+            label: Text(l.homeAddByIp),
           ),
         ]),
       ),
       if (c.hotspot != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsetsDirectional.only(top: 8),
           child: MaterialBanner(
             key: const Key('hotspotBanner'),
             leading: const Icon(Icons.wifi_tethering),
-            content: Text('Sharing hotspot "${c.hotspot!.ssid}"'),
+            content: Text(l.homeHotspotBanner(l.ltrValue(c.hotspot!.ssid))),
             actions: [
               TextButton(
                 onPressed: () => openHotspotWizard(context),
-                child: const Text('Show'),
+                child: Text(l.commonShow),
               ),
               TextButton(
                 key: const Key('bannerStopHotspot'),
                 onPressed: c.stopHotspot,
-                child: const Text('Stop'),
+                child: Text(l.commonStop),
               ),
             ],
           ),
@@ -306,88 +306,80 @@ class _HomePageState extends State<HomePage> {
     ];
     final transfersSection = <Widget>[
       if (c.sessions.isNotEmpty) ...[
-        SectionHeader('Transfers',
+        SectionHeader(l.homeActivity,
             trailing: TextButton(
-                onPressed: c.clearFinished, child: const Text('Clear done'))),
+                key: const Key('clearFinished'),
+                onPressed: c.clearFinished,
+                child: Text(l.homeClearFinished))),
         for (final s in c.sessions) TransferSessionCard(session: s),
       ],
     ];
-    final sharesSection = SharesSection(
-        pickFiles: widget.pickFiles, pickFolder: widget.pickFolder);
+    final activeShares =
+        c.shares.where((s) => !s.expired && !s.exhausted).length;
+    final sharesRow = <Widget>[
+      // Active links as one compact row; the Shares page has the rest.
+      if (activeShares > 0)
+        Card(
+          child: ListTile(
+            key: const Key('activeSharesRow'),
+            leading: const Icon(Icons.link),
+            title: Text(l.homeActiveShares(activeShares)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openShares,
+          ),
+        ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('LanDrop'),
+        title: Text(l.appTitle),
         actions: [
+          // A text label where there is room (UX.md 3.1), an icon on phones.
+          if (MediaQuery.sizeOf(context).width >= 840)
+            TextButton.icon(
+              key: const Key('sharesAction'),
+              onPressed: _openShares,
+              icon: const Icon(Icons.ios_share),
+              label: Text(l.homeShareLink),
+            )
+          else
+            IconButton(
+              key: const Key('sharesAction'),
+              tooltip: l.homeShareLink,
+              icon: const Icon(Icons.ios_share),
+              onPressed: _openShares,
+            ),
           IconButton(
-            key: const Key('sharesAction'),
-            tooltip: 'Shares',
-            icon: const Icon(Icons.ios_share),
+            tooltip: l.settingsTitle,
+            icon: const Icon(Icons.settings_outlined),
             onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => SharesPage(
+                    builder: (_) => SettingsPage(
                         pickFiles: widget.pickFiles,
                         pickFolder: widget.pickFolder))),
           ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsPage())),
-          ),
         ],
       ),
-      // Kept inside the screen minus the FAB margins, so on a phone the
-      // buttons wrap instead of running off the left edge.
-      floatingActionButton: ConstrainedBox(
-        constraints: BoxConstraints(
-            maxWidth: max(0, MediaQuery.sizeOf(context).width - 32)),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.end,
-          children: [
-            FloatingActionButton.extended(
-              key: const Key('shareFab'),
-              heroTag: 'share',
-              onPressed: _shareSheet,
-              icon: const Icon(Icons.ios_share),
-              label: const Text('Share'),
-            ),
-            FloatingActionButton.extended(
-              key: const Key('sendFolderFab'),
-              heroTag: 'sendFolder',
-              onPressed: _sendFolderFlow,
-              icon: const Icon(Icons.drive_folder_upload),
-              label: const Text('Send folder'),
-            ),
-            FloatingActionButton.extended(
-              key: const Key('sendFab'),
-              heroTag: 'sendFiles',
-              onPressed: _sendFlow,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Send files'),
-            ),
-          ],
-        ),
+      // One primary action (UX.md 2.1); "Files" or "Folder" in its sheet.
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('sendFab'),
+        heroTag: 'send',
+        onPressed: _sendSheet,
+        icon: const Icon(Icons.upload),
+        label: Text(l.homeSend),
       ),
       body: LayoutBuilder(builder: (context, box) {
         final wide = box.maxWidth >= 840;
         if (!wide) {
           return ListView(
-            // Room for the buttons, which wrap to two rows on phones.
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 168),
+            // Room for the one FAB.
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 12, 96),
             children: [
               SelfCard(onEditAlias: _editAlias),
               ...peersSection,
+              ...sharesRow,
               ...transfersSection,
-              sharesSection,
-              const SectionHeader('Use from a browser'),
-              const WebAccessCard(),
-              const ConnectedBrowsersCard(),
-              const SectionHeader('Connect manually'),
-              const QrCard(),
             ],
           );
         }
@@ -396,25 +388,20 @@ class _HomePageState extends State<HomePage> {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 96),
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 96),
                 children: [
                   ...peersSection,
+                  ...sharesRow,
                   ...transfersSection,
-                  sharesSection,
                 ],
               ),
             ),
             SizedBox(
               width: 360,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(8, 8, 16, 96),
+                padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 16, 96),
                 children: [
                   SelfCard(onEditAlias: _editAlias),
-                  const SectionHeader('Connect manually'),
-                  const QrCard(),
-                  const SectionHeader('Use from a browser'),
-                  const WebAccessCard(),
-                  const ConnectedBrowsersCard(),
                 ],
               ),
             ),
@@ -423,4 +410,49 @@ class _HomePageState extends State<HomePage> {
       }),
     );
   }
+
+  void _openShares() => Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => SharesPage(
+              pickFiles: widget.pickFiles, pickFolder: widget.pickFolder)));
+}
+
+/// "What do you want to send?" with Files and Folder (UX.md 3.3). Returns
+/// null when dismissed.
+Future<SendKind?> showSendSheet(BuildContext context) {
+  return showModalBottomSheet<SendKind>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) {
+      final l = ctx.l;
+      return SafeArea(
+        child: Column(
+          key: const Key('sendSheet'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(24, 0, 24, 8),
+              child: Text(l.sendSheetTitle,
+                  style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            ListTile(
+              key: const Key('sendFiles'),
+              leading: const Icon(Icons.upload_file),
+              title: Text(l.sendSheetFiles),
+              onTap: () => Navigator.pop(ctx, SendKind.files),
+            ),
+            ListTile(
+              key: const Key('sendFolder'),
+              leading: const Icon(Icons.drive_folder_upload),
+              title: Text(l.sendSheetFolder),
+              onTap: () => Navigator.pop(ctx, SendKind.folder),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    },
+  );
 }

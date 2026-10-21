@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/api.dart';
+import 'digits.dart';
 import 'format.dart';
+import 'l10n.dart';
+import 'ltr_text.dart';
+import 'widgets.dart' show deviceKindLabel;
+
+/// The last two parts of [path] ("Download/LanDrop"), for showing where
+/// files are saved without the whole path.
+String shortFolder(String path) {
+  final parts =
+      path.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
+  if (parts.length <= 2) return path;
+  return parts.sublist(parts.length - 2).join('/');
+}
 
 /// One row of the incoming dialog: a loose file, or a top-level folder with
 /// the number and total size of the files below it.
@@ -30,70 +44,93 @@ List<IncomingEntry> summarizeOffers(List<FileOffer> files) {
 }
 
 /// Accept/Decline dialog for an incoming request. Returns true on accept.
-Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req) async {
+/// The line under the title is the sender's kind ("Phone"), not its address
+/// or security code; only browsers show their IP (UX.md 7, quick win 2).
+/// With [saveDir] the dialog says where the files will go.
+Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req,
+    {String? saveDir}) async {
   final total = req.files.fold<int>(0, (a, f) => a + f.size);
   final res = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      icon: const Icon(Icons.download),
-      title: Text('${req.sender.alias} wants to send you '
-          '${req.files.length} file${req.files.length == 1 ? '' : 's'}'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              req.sender.deviceType == 'web'
-                  ? 'Web browser at ${req.sender.ip}'
-                      '${req.sender.deviceModel == null ? '' : ' · ${req.sender.deviceModel}'}'
-                  : '${req.sender.ip} · fingerprint ${shortFingerprint(req.sender.fingerprint)}',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 320),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final e in summarizeOffers(req.files))
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(e.isFolder
-                            ? Icons.folder_outlined
-                            : Icons.insert_drive_file_outlined),
-                        title: Text(e.isFolder ? '${e.name}/' : e.name,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: e.isFolder
-                            ? Text('${e.files} file${e.files == 1 ? '' : 's'}')
-                            : null,
-                        trailing: Text(formatBytes(e.bytes)),
-                      ),
-                  ],
+    builder: (ctx) {
+      final l = ctx.l;
+      final t = Theme.of(ctx).textTheme;
+      final sender = req.sender;
+      final name = l.isoName(sender.alias);
+      return AlertDialog(
+        key: const Key('incomingDialog'),
+        icon: const Icon(Icons.download),
+        title: Text(l.incomingTitle(name, req.files.length)),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                sender.deviceType == 'web'
+                    ? (sender.deviceModel == null
+                        ? l.incomingFromBrowser(l.ltrValue(sender.ip))
+                        : l.incomingFromBrowserModel(l.ltrValue(sender.ip),
+                            l.isoName(sender.deviceModel!)))
+                    : [
+                        deviceKindLabel(l, sender.deviceType),
+                        if (sender.deviceModel != null)
+                          l.isoName(sender.deviceModel!),
+                      ].join(' · '),
+                key: const Key('incomingSender'),
+                style: t.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final e in summarizeOffers(req.files))
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(e.isFolder
+                              ? Icons.folder_outlined
+                              : Icons.insert_drive_file_outlined),
+                          title: AutoDirText(
+                              e.isFolder ? '${e.name}/' : e.name,
+                              fileName: !e.isFolder,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          subtitle: e.isFolder
+                              ? Text(l.fileCount(e.files))
+                              : null,
+                          trailing: Text(formatBytes(e.bytes, l)),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const Divider(),
-            Text('Total: ${formatBytes(total)}',
-                style: Theme.of(ctx).textTheme.labelLarge),
-          ],
+              const Divider(),
+              Text(l.incomingTotal(formatBytes(total, l)),
+                  style: t.labelLarge),
+              if (saveDir != null && saveDir.isNotEmpty)
+                Text(l.incomingSavesTo(l.ltrValue(shortFolder(saveDir))),
+                    key: const Key('incomingSavesTo'), style: t.bodySmall),
+            ],
+          ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Decline'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Accept'),
-        ),
-      ],
-    ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.commonDecline),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l.commonAccept),
+          ),
+        ],
+      );
+    },
   );
   return res ?? false;
 }
@@ -136,36 +173,35 @@ class _PairingDialogState extends State<_PairingDialog> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = context.l;
     final r = widget.req;
     return AlertDialog(
       key: const Key('pairingDialog'),
       icon: const Icon(Icons.public),
-      title: const Text('Allow a browser to send you files?'),
+      title: Text(l.pairingTitle),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${r.userAgent} · ${r.remoteIp}', style: t.bodyMedium),
+            Text('${l.isoName(r.userAgent)} · ${l.ltrValue(r.remoteIp)}',
+                style: t.bodyMedium),
             const SizedBox(height: 12),
-            Text('Code shown in the browser', style: t.labelMedium),
+            Text(l.pairingCodeLabel, style: t.labelMedium),
+            // The code stays Latin digits and left to right: it is compared
+            // with the browser (UX.md 4.6).
             Semantics(
-              label: 'Pairing code ${r.code.split('').join(' ')}',
+              label: l.pairingCodeSemantics(r.code.split('').join(' ')),
               child: ExcludeSemantics(
-                child: Text(r.code,
+                child: LtrText(r.code,
                     key: const Key('pairingCode'),
                     style: t.displaySmall?.copyWith(
                         letterSpacing: 8, fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              'Approve only if the browser shows the same code. For the next '
-              'hour it can then offer you files; you still accept every '
-              'transfer.',
-              style: t.bodySmall,
-            ),
+            Text(l.pairingBody, style: t.bodySmall),
           ],
         ),
       ),
@@ -173,12 +209,12 @@ class _PairingDialogState extends State<_PairingDialog> {
         TextButton(
           key: const Key('declinePairing'),
           onPressed: () => _close(false),
-          child: const Text('Decline'),
+          child: Text(l.commonDecline),
         ),
         FilledButton(
           key: const Key('approvePairing'),
           onPressed: () => _close(true),
-          child: const Text('Approve'),
+          child: Text(l.pairingApprove),
         ),
       ],
     );
@@ -206,12 +242,14 @@ class _AddByIpDialogState extends State<_AddByIpDialog> {
   static final _re = RegExp(r'^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$');
 
   void _submit() {
-    final m = _re.firstMatch(_ctrl.text.trim());
+    // Persian/Arabic-Indic digits typed on a Persian keyboard count too.
+    final m = _re.firstMatch(normalizeDigits(_ctrl.text).trim());
     final octetsOk = m != null &&
         m.group(1)!.split('.').every((o) => int.parse(o) <= 255);
     final port = m?.group(2) == null ? 53317 : int.parse(m!.group(2)!);
     if (!octetsOk || port < 1 || port > 65535) {
-      setState(() => _error = 'Enter an IPv4 address, e.g. 192.168.1.20');
+      setState(() =>
+          _error = context.l.addByIpInvalid(context.l.ltrValue('192.168.1.20')));
       return;
     }
     Navigator.pop(context, (m.group(1)!, port));
@@ -225,15 +263,22 @@ class _AddByIpDialogState extends State<_AddByIpDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l;
     return AlertDialog(
-      title: const Text('Add device by IP'),
+      title: Text(l.addByIpTitle),
       content: TextField(
+        key: const Key('addByIpField'),
         controller: _ctrl,
         autofocus: true,
         keyboardType: TextInputType.url,
+        // An address is typed and read left to right, with Latin digits
+        // (UX.md 4.5 rule 5, 4.6).
+        textDirection: TextDirection.ltr,
+        inputFormatters: [latinDigitsFormatter],
         decoration: InputDecoration(
-          labelText: 'IP address',
-          hintText: '192.168.1.20 or 192.168.1.20:53317',
+          labelText: l.addByIpLabel,
+          hintText: l.addByIpHint('192.168.1.20', '192.168.1.20:53317'),
+          hintTextDirection: TextDirection.ltr,
           errorText: _error,
         ),
         onSubmitted: (_) => _submit(),
@@ -241,86 +286,125 @@ class _AddByIpDialogState extends State<_AddByIpDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Add')),
+            child: Text(l.commonCancel)),
+        FilledButton(onPressed: _submit, child: Text(l.addByIpAdd)),
       ],
     );
   }
 }
 
+/// Turns Persian/Arabic-Indic digits into Latin ones while typing, for
+/// technical fields (IP, port, pairing code). Keeps the length, so the
+/// cursor stays where it was.
+final latinDigitsFormatter = TextInputFormatter.withFunction(
+    (oldValue, newValue) =>
+        newValue.copyWith(text: normalizeDigits(newValue.text)));
+
 /// Shown when Add by IP found nothing. Returns true for "Diagnose this IP".
 Future<bool> showAddFailedDialog(BuildContext context, String message) async {
   final res = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      key: const Key('addFailedDialog'),
-      icon: const Icon(Icons.link_off),
-      title: const Text('Device not found'),
-      content: Text(message),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Close')),
-        FilledButton(
-          key: const Key('diagnoseIp'),
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Diagnose this IP'),
-        ),
-      ],
-    ),
+    builder: (ctx) {
+      final l = ctx.l;
+      return AlertDialog(
+        key: const Key('addFailedDialog'),
+        icon: const Icon(Icons.link_off),
+        title: Text(l.addFailedTitle),
+        content: Text(message),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l.commonClose)),
+          FilledButton(
+            key: const Key('diagnoseIp'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l.addFailedDiagnose),
+          ),
+        ],
+      );
+    },
   );
   return res ?? false;
 }
 
-/// Lets the user choose a peer. Returns null when cancelled.
+/// Lets the user choose a peer. Returns null when cancelled. [title] is the
+/// dialog title ("Send 2 files to…"). With no peers it offers [onHelp]
+/// ("Help me connect") instead of a dead end.
 Future<DeviceInfo?> showPeerPicker(
-    BuildContext context, List<DeviceInfo> peers, int fileCount,
-    {String? label}) {
-  return showDialog<DeviceInfo>(
+    BuildContext context, List<DeviceInfo> peers,
+    {required String title, VoidCallback? onHelp}) async {
+  var help = false;
+  final picked = await showDialog<DeviceInfo>(
     context: context,
-    builder: (ctx) => SimpleDialog(
-      title: Text(
-          'Send ${label ?? '$fileCount file${fileCount == 1 ? '' : 's'}'} to…'),
-      children: [
-        if (peers.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('No devices found yet. Try "Rescan" or "Add by IP".'),
-          ),
-        for (final p in peers)
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, p),
-            child: ListTile(
-              leading: Icon(deviceIcon(p.deviceType)),
-              title: Text(p.alias),
-              subtitle: Text('${p.ip}:${p.port}'),
+    builder: (ctx) {
+      final l = ctx.l;
+      return SimpleDialog(
+        key: const Key('peerPicker'),
+        title: Text(title),
+        children: [
+          if (peers.isEmpty) ...[
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(24, 12, 24, 8),
+              child: Text(l.pickerEmpty),
             ),
-          ),
-      ],
-    ),
+            if (onHelp != null)
+              Padding(
+                padding: const EdgeInsetsDirectional.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const Key('pickerHelp'),
+                    onPressed: () {
+                      help = true;
+                      Navigator.pop(ctx);
+                    },
+                    icon: const Icon(Icons.troubleshoot),
+                    label: Text(l.pickerHelp),
+                  ),
+                ),
+              ),
+          ],
+          for (final p in peers)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, p),
+              child: ListTile(
+                leading: Icon(deviceIcon(p.deviceType)),
+                title: AutoDirText(p.alias,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(deviceKindLabel(l, p.deviceType)),
+              ),
+            ),
+        ],
+      );
+    },
   );
+  if (help) onHelp?.call();
+  return picked;
 }
 
 Future<String?> showAliasDialog(BuildContext context, String current) {
   final ctrl = TextEditingController(text: current);
   return showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Device name'),
-      content: TextField(
-        controller: ctrl,
-        autofocus: true,
-        maxLength: 40,
-        decoration: const InputDecoration(labelText: 'Name shown to others'),
-        onSubmitted: (v) => Navigator.pop(ctx, v),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: const Text('Save')),
-      ],
-    ),
+    builder: (ctx) {
+      final l = ctx.l;
+      return AlertDialog(
+        title: Text(l.settingsDeviceName),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 40,
+          decoration: InputDecoration(labelText: l.aliasLabel),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(l.commonCancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: Text(l.commonSave)),
+        ],
+      );
+    },
   );
 }

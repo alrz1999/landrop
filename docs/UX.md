@@ -1032,7 +1032,8 @@ Rules for every step: keep every existing `Key` (move it with the widget it iden
 English copy byte-identical until a step explicitly changes copy, and update the matching
 `find.text` assertions in the same PR; `flutter analyze` clean; all tests green (212 before the
 l10n work; 235 after L1/L5/R1-infra: +22 in `test/l10n_test.dart`, +1 send error-code test in
-`test/core_test.dart`; the suite total also includes tests added by parallel steps).
+`test/core_test.dart`; the suite total also includes tests added by parallel steps; 262 after
+the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1070,7 +1071,7 @@ A unit test checks that `app_fa.arb` has every key of `app_en.arb` and the same 
 
 **L7 implemented:** `web_assets.dart` has a `T = {en, fa}` dictionary, `t()`/`tr()`/`tn()` lookups, `fmtNum` (Persian digits in fa), a visible `EN / فا` toggle persisted in `localStorage` (try/catch), `<html lang dir>` updates, logical CSS, `<bdi>`/`dir="auto"`/`unicode-bidi: isolate` for names, addresses and the (Latin) pairing code. Language switches live without a reload. Uncertain Persian wording is marked `REVIEW:` in the script. `test/web_test.dart` group "page i18n" checks key parity and usage.
 
-| **R1** | RTL pass: `EdgeInsetsDirectional`, `LtrText`, `ltr()`/`iso()` isolates, middle ellipsis, LTR inputs, Persian-digit input normalising | M | all `lib/ui/*` | `l10n_test.dart` at 375/1000. **Partially implemented (infrastructure only):** `lib/ui/ltr_text.dart` (`LtrText`, `ltr`, `iso`, `stripIsolates`, `middleEllipsis`), `lib/ui/digits.dart` (`localizeDigits`, `normalizeDigits`), locale-aware `formatBytes`/`formatSpeed`/`formatDuration` in `format.dart`. Screens are not converted yet (no `EdgeInsetsDirectional`, LTR inputs or digit normalising at call sites) |
+| **R1** | RTL pass: `EdgeInsetsDirectional`, `LtrText`, `ltr()`/`iso()` isolates, middle ellipsis, LTR inputs, Persian-digit input normalising | M | all `lib/ui/*` | `l10n_test.dart` at 375/1000. **Partially implemented (infrastructure only):** `lib/ui/ltr_text.dart` (`LtrText`, `ltr`, `iso`, `stripIsolates`, `middleEllipsis`), `lib/ui/digits.dart` (`localizeDigits`, `normalizeDigits`), locale-aware `formatBytes`/`formatSpeed`/`formatDuration` in `format.dart`. Home, dialogs, Settings, Advanced, Shares and the diagnosis dialog are converted (see "R1 implemented" below); the wizards and Wi-Fi pages are not yet |
 | **R2** | Vazirmatn font for fa, line height, `StatusColors` extension | S | `assets/fonts/`, `pubspec.yaml`, `app.dart` | +~0.2-0.4 MB |
 | **U1** | Home simplification: one Send FAB + Send sheet (Files/Folder), remove `QrCard`/`WebAccessCard`/`ConnectedBrowsersCard`/`SharesSection` from home, status line, device subtitles without IP | M | `home_page.dart`, `widgets.dart`, `ui_test.dart` | keep `sendFab`; `sendFolderFab` → sheet item key `sendFolder`; update tests that tap `shareFab`/`sendFolderFab` |
 | **U2** | Share page with "Send a link" / "Use from a browser" (keeps `sharesAction`, `shareFiles`, `shareFolder`, `webAccessCard`, `connectedBrowsersCard`, `confirmShare`…) | M | `shares.dart` | |
@@ -1082,6 +1083,87 @@ A unit test checks that `app_fa.arb` has every key of `app_en.arb` and the same 
 | **U8** | Onboarding (3 screens) + just-in-time permission pre-prompts; stop calling `ensureStorageAccess()` from `init()` | M | new `onboarding.dart`, `app_controller.dart`, `storage_access.dart` | tests start with `onboarded: true` in `MemorySettingsStore` |
 | **U9** | Desktop drag and drop; recent devices | M | `home_page.dart`, `app_controller.dart`, `pubspec.yaml` | |
 | **U10** | Android share-target intent (later: iOS share extension) | L | `AndroidManifest.xml`, `MainActivity.kt`, `app.dart` | native, CI-only build |
+
+**Quick wins (section 7) implemented:** 1 (status line "Visible to nearby devices" in `bodyMedium`
+with an icon, `IP · port` below in muted `bodySmall`, `selfAddress` kept), 2 (incoming dialog shows
+the sender's kind, e.g. "Phone · Google", key `incomingSender`; IP only for browsers; "Saves to
+{folder}" with the last two path parts, key `incomingSavesTo`), 3 (short empty state, see U1),
+4 (`AppController.sendWithResult` returns the core `SendResult`; `TransferSession.errorCode`;
+"{name} declined." vs "Couldn't reach {name}. Is LanDrop still open there?" with a Help action;
+the transfer card says "Declined by {name}"), 5 (see U5), 6 (Android only:
+`AppController.savesToPrivateFolder` shows "Only visible inside LanDrop. [Use Downloads]",
+`useDownloadsFolder()` asks for the permission and resets the folder; not testable off Android),
+7 (`QrCard` "For another LanDrop app", `WebAccessCard` "For any phone camera or browser"),
+8 (superseded by U1's Send sheet), 9 (Advanced: "Restart LanDrop service" with "Running" /
+"Starting…" / "Stopped" / "Not running", plain-HTTP title "Allow browsers without a warning (not
+encrypted)").
+
+**U1 implemented:** one `sendFab` ("Send") opens `showSendSheet` ("What do you want to send?",
+items `sendFiles` / `sendFolder`, key `sendSheet`); `shareFab`, `sendFolderFab` and the share sheet
+(`shareSheet`, `shareSheetFiles`, `shareSheetFolder`) are removed. Home body = `SelfCard`, discovery
+banner (one line "Automatic search is off on this device." + `discoveryHelp` opening the connection
+check; the raw error is no longer shown), "Nearby devices" with `rescan` / `addByIp`, hotspot banner,
+devices or `EmptyPeersHelp`, an `activeSharesRow` ("Sharing N links", opens the Shares page) and
+"Activity" (transfers, "Clear finished"). `QrCard`, `WebAccessCard`, `ConnectedBrowsersCard` and
+`SharesSection` left home. `PeerTile` subtitle = kind + model, no IP; a `details-<fp>` info button
+and long press open `showPeerDetails` (`peerDetailsSheet`: address `peerAddress`, other addresses,
+direct cable link, model, security code `peerSecurityCode`). `EmptyPeersHelp`: "No devices found
+yet", one sentence, `whyNoDevices` as the only filled button, `hotspotHelp` / `cableHelp` as text
+buttons. The peer picker shows the kind instead of `ip:port` and, without devices, a `pickerHelp`
+button to the connection check. App bar: `sharesAction` is a labelled "Share link" button at
+>= 840 px, an icon below. Wide layout: devices + activity left, `SelfCard` right. Transfer icons are
+`download` / `upload`. Pickers moved to `lib/ui/pickers.dart` (re-exported by `home_page.dart`).
+*Gaps:* no drop zone (U9), no "Recent" devices, no device-kind "trusted" (U7), the "searching"
+state A is not separate from state C, `addByIp` stays on home (the helper U4 does not exist yet).
+
+**U3 implemented:** Settings sections "This device" (`aliasSettings`, `saveFolderSettings` with a
+`resetFolder` "Use default folder" button instead of the separate row, Android private-folder hint,
+`languageSettings`), "Connecting" (`connectHelpSettings` "Can't find the other device?" opens the
+connection check until U4 exists; `sharesSettings` opens the Shares page), Android "App"
+(background, quit), and `advancedSettings`. New `AdvancedSettingsPage` (`lib/ui/advanced_settings.dart`,
+`isAndroid` test seam): `QrCard` (`selfUrl`), `securityCode` (was "Certificate fingerprint"),
+`restartService` (+ the last technical error), `webHttpSwitch` / `confirmWebHttp` /
+`confirmWebHttpOn` / `webHttpUrlTile`, `keepSharesSwitch` ("Keep share links after restart"),
+`diagnoseSettings` ("Connection report") and all methods (`hotspotSettings`, `cableSettings`,
+`wifiDirectSettings`, `wifiJoinSettings`). Settings no longer shows `ConnectedBrowsersCard`.
+*Gaps:* no Theme row, no Trusted devices (U7).
+
+**U2 implemented:** `SharesPage` (title "Shares"; pickers now optional) has `sendLinkSection` ("Send
+a link", body from 3.9, `shareFiles` as a tonal button, `shareFolder`, share cards) and
+`browserSection` ("Use from a browser", body from 3.9, `webAccessCard`, `connectedBrowsersCard`).
+The certificate explanation is a collapsed `certWarningHelp` "The browser shows a warning?".
+Share options, `confirmShare`, `ttl-*`, `max-*` unchanged. *Gaps:* no system "Share…" button,
+no tabs (two sections in one list), one QR per share card as before.
+
+**U5 implemented:** `DiagnosisDialog` hides the `network` finding (`hiddenFindingCodes`; still in
+"Copy report"); each finding shows title, detail, "What to do", its action button, then the
+technical text collapsed in `findingDetails-<code>` "Details" (LTR, English). Warning colour is a
+theme-aware constant (`#7A4F00` / `#FFB960`) instead of `Colors.orange.shade800`. The copied report
+stays English; in fa it starts with one Persian line. *Gaps:* findings are still all listed (not
+one at a time), the other info-only codes of 4.10 are still shown, no `StatusColors` extension (R2).
+
+**L2 + L3 implemented for** `home_page.dart`, `widgets.dart`, `dialogs.dart`, `settings_page.dart`,
+`advanced_settings.dart`, `shares.dart`, `diagnosis_dialog.dart`: about 195 new keys (en + fa,
+ICU plurals for counts with `decimalPattern`, so fa shows Persian digits); English is unchanged
+except where this document gives new copy (U1/U3/U2/U5 and quick wins) and where plurals replace
+`file(s)` ("Receiving 2 files from …", "Scan finished: 1 device found"). Uncertain Persian is marked
+`REVIEW:` in `app_fa.arb`. *Gaps:* the system file-picker titles in `pickers.dart` (no
+`BuildContext`), `AppController.lastError` / `hotspotError` texts (technical, shown only in Advanced
+and the wizard), and the wizards, onboarding and connect helper (L4 and later steps).
+
+**R1 implemented for the same screens:** `EdgeInsetsDirectional` / `AlignmentDirectional`
+everywhere; `LtrText` for `selfUrl`, `webUrl`, `webHttpUrl`, `shareUrl-*`, the save folder,
+security codes, the pairing code, peer addresses and technical diagnosis text; `ltrValue()`
+(isolate in fa only, so English stays byte-identical) for IPs, ports, paths and SSIDs inside
+sentences; `isoName()` for aliases, browser names and file names inside sentences (also in English
+when the name contains RTL letters); new `AutoDirText` (first-strong direction, aligned to the
+layout start, optional `middleEllipsis` for file names) for standalone aliases and file names;
+Add by IP field is LTR with `latinDigitsFormatter` (`normalizeDigits`) and also normalises on
+submit; counts/sizes/times use the fa digit helpers. Tests: `test/l10n_test.dart` group "Persian
+screens" (home with devices / empty / transfers / incoming dialog / details sheet, send sheet and
+picker, Settings, Advanced, Shares page, share options, pairing, Add by IP; 375 and 1000 px; RTL,
+no English for any extracted plain message, LTR technical values, no overflow); `FakeCore.persianPeer`
+(«لپ‌تاپ سارا», `192.168.1.42` + a `169.254` address) and `FakeCore.mixedFiles`.
 
 Order: L1 → L2 → L3 → L5 → L4 → L6 → L7 → R1 → R2 → U1 → U3 → U2 → U5 → U4 → U6 → U7 → U8 → U9 →
 U10. L4 is after L5 because the wizards show `FindingTile`. Each step is a separate PR and can ship.

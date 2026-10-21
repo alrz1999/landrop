@@ -35,6 +35,54 @@ String middleEllipsis(String name, {int max = 32}) {
   return '${chars.take(head)}…${chars.skip(chars.length - tail)}';
 }
 
+final _firstStrong = RegExp(
+    '[A-Za-zÀ-ɏͰ-֏֐-ࣿיִ-﷿ﹰ-﻿]');
+
+/// Direction of the first strong character of [s] (UX.md 4.5 rule 3); null
+/// when there is none (digits and punctuation only).
+TextDirection? firstStrongDirection(String s) {
+  final m = _firstStrong.firstMatch(s);
+  if (m == null) return null;
+  final c = m[0]!.codeUnitAt(0);
+  return c >= 0x0590 ? TextDirection.rtl : TextDirection.ltr;
+}
+
+/// A user-generated name (device alias, file name, browser) shown on its
+/// own: it takes the direction of its first strong character, so `لپ‌تاپ
+/// Ali` and `report-final.pdf` both read correctly in either layout, and
+/// stays aligned to the start of the surrounding layout. With [fileName]
+/// a long name is shortened in the middle, keeping the extension.
+class AutoDirText extends StatelessWidget {
+  const AutoDirText(this.data,
+      {super.key,
+      this.style,
+      this.maxLines,
+      this.overflow,
+      this.fileName = false,
+      this.maxChars = 40});
+
+  final String data;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final bool fileName;
+  final int maxChars;
+
+  @override
+  Widget build(BuildContext context) {
+    final outer = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final own = firstStrongDirection(data) ?? outer;
+    final text = fileName ? middleEllipsis(data, max: maxChars) : data;
+    return Text(text,
+        style: style,
+        maxLines: maxLines,
+        overflow: overflow,
+        textDirection: own,
+        textAlign:
+            outer == TextDirection.rtl ? TextAlign.right : TextAlign.left);
+  }
+}
+
 /// A technical value (IP, URL, fingerprint, pairing code, path) that must
 /// always read left to right, aligned to the start of the surrounding layout
 /// (right in RTL, left in LTR).

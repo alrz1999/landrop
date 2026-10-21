@@ -21,15 +21,17 @@ Future<void> pumpApp(WidgetTester t, Widget app,
 LanDropApp localizedApp(
     {Locale? locale = const Locale('en'),
     FakeCore? core,
-    MemorySettingsStore? store}) {
+    MemorySettingsStore? store,
+    Future<List<String>> Function()? pickFiles,
+    Future<String?> Function()? pickFolder}) {
   return LanDropApp(
     core: core ?? FakeCore(simulateDelay: const Duration(milliseconds: 10)),
     store: store ??
         MemorySettingsStore({'locale': locale?.languageCode ?? 'system'}),
     initialSaveDir: '/tmp/landrop-test',
     initialAlias: 'Tester',
-    pickFiles: () async => <String>[],
-    pickFolder: () async => null,
+    pickFiles: pickFiles ?? () async => <String>[],
+    pickFolder: pickFolder ?? () async => null,
   );
 }
 
@@ -38,9 +40,17 @@ Future<FakeCore> pumpLocalized(WidgetTester t,
     {Locale locale = const Locale('en'),
     double width = 1000,
     double height = 800,
-    FakeCore? core}) async {
+    FakeCore? core,
+    Future<List<String>> Function()? pickFiles,
+    Future<String?> Function()? pickFolder}) async {
   core ??= FakeCore(simulateDelay: const Duration(milliseconds: 10));
-  await pumpApp(t, localizedApp(locale: locale, core: core),
+  await pumpApp(
+      t,
+      localizedApp(
+          locale: locale,
+          core: core,
+          pickFiles: pickFiles,
+          pickFolder: pickFolder),
       width: width, height: height);
   return core;
 }

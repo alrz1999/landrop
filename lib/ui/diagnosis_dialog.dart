@@ -6,6 +6,7 @@ import 'cable_wizard.dart';
 import 'finding_text.dart';
 import 'hotspot_wizard.dart';
 import 'l10n.dart';
+import 'ltr_text.dart';
 import 'widgets.dart';
 
 /// Runs the guided diagnosis (optionally probing [targetIp]) and shows the
@@ -31,11 +32,22 @@ Future<void> showDiagnosisDialog(BuildContext context,
 }
 
 /// Button label for a [Finding.action] the UI knows, else null.
-String? findingActionLabel(String? action) => switch (action) {
-      hotspotWizardAction => 'Connect with a hotspot',
-      cableWizardAction => 'Connect with a cable',
+String? findingActionLabel(AppLocalizations l, String? action) =>
+    switch (action) {
+      hotspotWizardAction => l.diagActionHotspot,
+      cableWizardAction => l.connectCableTitle,
       _ => null,
     };
+
+/// Findings kept out of the dialog's list: the "Your network" summary is
+/// only for support, so it stays in "Copy report" (UX.md 7, quick win 5).
+const hiddenFindingCodes = {'network'};
+
+/// Warning color with enough contrast in both themes (UX.md 5).
+Color warningColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFFFFB960)
+        : const Color(0xFF7A4F00);
 
 /// Pops with the finding's action (see [showDiagnosisDialog]).
 class DiagnosisDialog extends StatefulWidget {
@@ -76,35 +88,44 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
   Future<void> _copy() async {
     final f = _findings;
     if (f == null) return;
-    final text =
+    final l = context.l;
+    // The report stays English for support (UX.md 4.10); in Persian one
+    // translated line on top says so.
+    final report =
         formatDiagnosisReport(f, at: DateTime.now(), target: widget.target);
+    final text = l.isRtl ? '${l.diagReportNote}\n\n$report' : report;
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
       ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(const SnackBar(content: Text('Report copied')));
+          ?.showSnackBar(SnackBar(content: Text(l.diagReportCopied)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final findings = _findings;
+    final l = context.l;
+    final shown = [
+      for (final f in findings ?? const <Finding>[])
+        if (!hiddenFindingCodes.contains(f.code)) f
+    ];
     return AlertDialog(
       key: const Key('diagnosisDialog'),
       title: Text(widget.target == null
-          ? 'Connection check'
-          : 'Checking ${widget.target}'),
+          ? l.diagTitle
+          : l.diagTitleTarget(l.ltrValue(widget.target!))),
       content: SizedBox(
         width: 480,
         child: _running && findings == null
-            ? const Padding(
-                padding: EdgeInsets.all(24),
+            ? Padding(
+                padding: const EdgeInsets.all(24),
                 child: Row(children: [
-                  SizedBox(
+                  const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 16),
-                  Expanded(child: Text('Checking the network…')),
+                  const SizedBox(width: 16),
+                  Expanded(child: Text(l.diagRunning)),
                 ]),
               )
             : SingleChildScrollView(
@@ -113,11 +134,11 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_error != null)
-                      Text('Could not run the check: $_error',
+                      Text(l.diagError(_error!),
                           style: TextStyle(
                               color: Theme.of(context).colorScheme.error)),
                     if (_running) const LinearProgressIndicator(),
-                    for (final f in findings ?? const <Finding>[])
+                    for (final f in shown)
                       FindingTile(
                           finding: f,
                           onAction: (a) => Navigator.pop(context, a)),
@@ -129,16 +150,16 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
         TextButton(
           key: const Key('copyReport'),
           onPressed: findings == null ? null : _copy,
-          child: const Text('Copy report'),
+          child: Text(l.diagCopyReport),
         ),
         TextButton(
           key: const Key('runAgain'),
           onPressed: _running ? null : _run,
-          child: const Text('Run again'),
+          child: Text(l.diagRunAgain),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: Text(l.commonClose),
         ),
       ],
     );
@@ -164,7 +185,7 @@ class FindingTile extends StatelessWidget {
     final text = localizeFinding(l, f);
     final (icon, color) = switch (f.severity) {
       Severity.problem => (Icons.error_outline, scheme.error),
-      Severity.warn => (Icons.warning_amber_rounded, Colors.orange.shade800),
+      Severity.warn => (Icons.warning_amber_rounded, warningColor(context)),
       Severity.info => (
           f.code == 'all-good' || f.code == 'probe-ok'
               ? Icons.check_circle_outline
@@ -172,6 +193,9 @@ class FindingTile extends StatelessWidget {
           scheme.primary
         ),
     };
+    final actionLabel = findingActionLabel(l, f.action);
+    // Plain first (title, what it means, what to do, the button); the
+    // technical text is collapsed under "Details" and never translated.
     return Padding(
       key: Key('finding-${f.code}'),
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -194,14 +218,7 @@ class FindingTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(l.diagWhatToDo(text.fix), style: t.bodyMedium),
                 ],
-                if (f.technical != null && f.technical!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  SelectableText(f.technical!,
-                      style: t.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-                if (onAction != null &&
-                    findingActionLabel(f.action) != null) ...[
+                if (onAction != null && actionLabel != null) ...[
                   const SizedBox(height: 4),
                   OutlinedButton.icon(
                     key: Key('findingAction-${f.code}'),
@@ -211,9 +228,30 @@ class FindingTile extends StatelessWidget {
                             ? Icons.cable
                             : Icons.wifi_tethering,
                         size: 18),
-                    label: Text(findingActionLabel(f.action)!),
+                    label: Text(actionLabel),
                   ),
                 ],
+                if (f.technical != null && f.technical!.isNotEmpty)
+                  Theme(
+                    data: Theme.of(context)
+                        .copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: Key('findingDetails-${f.code}'),
+                      tilePadding: EdgeInsets.zero,
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      title: Text(l.diagDetails,
+                          style: t.labelLarge
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                      children: [
+                        LtrText(f.technical!,
+                            selectable: true,
+                            style: t.bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

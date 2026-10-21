@@ -408,7 +408,8 @@ void main() {
         await c.init();
         await tester.pumpWidget(MaterialApp(
             home: AppScope(
-                controller: c, child: SettingsPage(isAndroid: android))));
+                controller: c,
+                child: AdvancedSettingsPage(isAndroid: android))));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('wifiJoinSettings'), skipOffstage: false),
             android ? findsOneWidget : findsNothing);

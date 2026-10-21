@@ -309,7 +309,8 @@ void main() {
       await c.init();
       await tester.pumpWidget(MaterialApp(
           home: AppScope(
-              controller: c, child: SettingsPage(isAndroid: android))));
+              controller: c,
+              child: AdvancedSettingsPage(isAndroid: android))));
       await tester.pumpAndSettle();
     }
 
