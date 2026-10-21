@@ -212,6 +212,39 @@ bool isVpnInterface(String name) {
       .any(n.startsWith);
 }
 
+/// Virtual or internal interfaces that are not a network another device can
+/// be on: Docker/LXC/libvirt/VirtualBox/VMware bridges, Hyper-V "vEthernet",
+/// Apple Wireless Direct Link (`awdl`, `llw`), the macOS Thunderbolt/internal
+/// bridge and `anpi` ports. Their "link-local" or private addresses must not
+/// count as a LAN. USB tether adapters (`rndis*`, `usb*`, `enx*`, `enN`),
+/// Ethernet (`eth*`, `enp*`, `Ethernet`) and Wi-Fi (`wlan*`, `en0`) are real.
+bool isVirtualInterface(String name) {
+  final n = name.toLowerCase();
+  if (n == 'lo' || n.startsWith('lo0')) return true;
+  return [
+    'docker',
+    'br-',
+    'veth',
+    'vmnet',
+    'vboxnet',
+    'virbr',
+    'lxcbr',
+    'lxdbr',
+    'awdl',
+    'llw',
+    'bridge',
+    'anpi',
+  ].any(n.startsWith);
+}
+
+/// Interfaces LanDrop announces on, scans and advertises: not VPN, not
+/// virtual.
+bool isRealInterface(String name) =>
+    !isVpnInterface(name) && !isVirtualInterface(name);
+
+/// 169.254.0.0/16 (APIPA): what a direct cable or a network without DHCP gets.
+bool isLinkLocalIPv4(String ip) => ip.startsWith('169.254.');
+
 /// Usual address of the device sharing a hotspot: Android (classic),
 /// iPhone Personal Hotspot, macOS Internet Sharing, Windows Mobile hotspot.
 const commonHotspotGateways = [
@@ -221,38 +254,67 @@ const commonHotspotGateways = [
   '192.168.137.1',
 ];
 
+/// Usual address of a phone sharing its connection over USB: Android USB
+/// tethering (host 192.168.42.129, older versions 192.168.42.1) and the
+/// iPhone Personal Hotspot over USB.
+const commonTetherGateways = [
+  '192.168.42.129',
+  '192.168.42.1',
+  '172.20.10.1',
+];
+
 /// Addresses worth probing after joining a hotspot: [commonHotspotGateways]
-/// plus the `.1` of each of [ownAddresses]' /24 (the default gateway on a
-/// hotspot; newer Android picks a random subnet), minus [ownAddresses].
-List<String> hotspotProbeTargets(Iterable<String> ownAddresses) {
+/// plus [extraGateways] plus the `.1` of each of [ownAddresses]' /24 (the
+/// default gateway on a hotspot; newer Android picks a random subnet; not for
+/// 169.254.x.x, where there is no gateway), minus [ownAddresses].
+List<String> hotspotProbeTargets(Iterable<String> ownAddresses,
+    {Iterable<String> extraGateways = const []}) {
   final own = ownAddresses.toSet();
   final out = <String>{};
   for (final a in own) {
     final p = a.split('.');
+    if (isLinkLocalIPv4(a)) continue;
     if (p.length == 4 && p.every((x) => int.tryParse(x) != null)) {
       out.add('${p[0]}.${p[1]}.${p[2]}.1');
     }
   }
   out.addAll(commonHotspotGateways);
+  out.addAll(extraGateways);
   return out.where((a) => !own.contains(a)).toList();
 }
 
-/// Non-loopback, non-link-local IPv4 addresses of this host, private first.
-Future<List<InternetAddress>> localIPv4Addresses() async {
+/// The IPv4 addresses of [ifaces] ((interface name, addresses) pairs) that
+/// count as a network: not loopback, not on a VPN or virtual interface.
+/// Private (RFC 1918) first, then other addresses, link-local (169.254.x.x)
+/// last, so normal networks behave as before and a direct cable is used only
+/// when nothing else exists. The sort is stable (interface order is kept).
+List<InternetAddress> rankedIPv4(
+    Iterable<(String, List<InternetAddress>)> ifaces) {
   final out = <InternetAddress>[];
+  for (final (name, addrs) in ifaces) {
+    if (!isRealInterface(name)) continue;
+    for (final a in addrs) {
+      if (a.rawAddress.length == 4 && !a.isLoopback) out.add(a);
+    }
+  }
+  int rank(InternetAddress a) =>
+      _isPrivate(a) ? 0 : (isLinkLocalIPv4(a.address) ? 2 : 1);
+  final indexed = out.indexed.toList()
+    ..sort((x, y) {
+      final r = rank(x.$2) - rank(y.$2);
+      return r != 0 ? r : x.$1 - y.$1;
+    });
+  return [for (final e in indexed) e.$2];
+}
+
+/// Non-loopback IPv4 addresses of this host on real interfaces, private
+/// first, link-local last (see [rankedIPv4]).
+Future<List<InternetAddress>> localIPv4Addresses() async {
   try {
     final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4, includeLoopback: false);
-    for (final i in ifaces) {
-      if (isVpnInterface(i.name)) continue;
-      for (final a in i.addresses) {
-        final r = a.rawAddress;
-        if (r.length == 4 && !(r[0] == 169 && r[1] == 254) && !a.isLoopback) {
-          out.add(a);
-        }
-      }
-    }
-  } catch (_) {}
-  out.sort((x, y) => (_isPrivate(x) ? 0 : 1) - (_isPrivate(y) ? 0 : 1));
-  return out;
+    return rankedIPv4([for (final i in ifaces) (i.name, i.addresses)]);
+  } catch (_) {
+    return [];
+  }
 }

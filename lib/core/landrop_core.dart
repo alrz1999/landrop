@@ -453,8 +453,13 @@ class LanDropCoreImpl implements LanDropCore {
     ];
     final old = _self;
     if (old == null) return;
+    // Keep the current address, except a link-local one once a real
+    // (non-link-local) address exists.
+    final keepOld = lanAddrs.contains(old.ip) &&
+        !(isLinkLocalIPv4(old.ip) &&
+            lanAddrs.any((a) => !isLinkLocalIPv4(a)));
     final ip = options.advertiseIp ??
-        (lanAddrs.contains(old.ip) ? old.ip : null) ??
+        (keepOld ? old.ip : null) ??
         lanAddrs.firstOrNull ??
         '127.0.0.1';
     _capAddrs = {ip, ...lanAddrs}.toList();

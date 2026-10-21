@@ -1,11 +1,14 @@
 // Guided diagnosis (DESIGN.md 3.7): pure rules over what the core observed.
 // No I/O and no Flutter, so every rule is unit-testable with plain data.
-import 'util.dart' show isVpnInterface;
+import 'util.dart' show isLinkLocalIPv4, isVirtualInterface, isVpnInterface;
 
 enum Severity { info, warn, problem }
 
 /// [Finding.action] that opens the hotspot wizard ("Connect without Wi-Fi").
 const hotspotWizardAction = 'hotspot-wizard';
+
+/// [Finding.action] that opens the cable wizard ("Connect with a cable").
+const cableWizardAction = 'cable-wizard';
 
 class Finding {
   final Severity severity;
@@ -41,6 +44,9 @@ class InterfaceObservation {
   final List<String> addresses; // IPv4, dotted
   const InterfaceObservation(this.name, this.addresses);
   bool get isVpn => isVpnInterface(name);
+
+  /// Docker/VM bridge, AWDL and similar: never counts as a network.
+  bool get isVirtual => isVirtualInterface(name);
 }
 
 enum TcpOutcome { connected, refused, timeout, unreachable }
@@ -138,12 +144,20 @@ String? _slash24(String ip) {
   return b == null ? null : '${b[0]}.${b[1]}.${b[2]}';
 }
 
-/// Private IPv4 addresses on real (non-VPN) interfaces.
+/// Private IPv4 addresses on real (non-VPN, non-virtual) interfaces.
 List<String> lanAddresses(DiagnosisInput i) => [
       for (final f in i.interfaces)
-        if (!f.isVpn)
+        if (!f.isVpn && !f.isVirtual)
           for (final a in f.addresses)
             if (isPrivateIPv4(a)) a
+    ];
+
+/// 169.254.x.x addresses on real interfaces (direct cable, no DHCP).
+List<String> linkLocalAddresses(DiagnosisInput i) => [
+      for (final f in i.interfaces)
+        if (!f.isVpn && !f.isVirtual)
+          for (final a in f.addresses)
+            if (isLinkLocalIPv4(a)) a
     ];
 
 String shortFp(String? fp) {
@@ -180,19 +194,37 @@ List<Finding> ruleDiscoveryFailed(DiagnosisInput i) => i.discoveryError == null
             technical: i.discoveryError),
       ];
 
-List<Finding> ruleNoLan(DiagnosisInput i) => lanAddresses(i).isNotEmpty
+List<Finding> ruleNoLan(DiagnosisInput i) =>
+    lanAddresses(i).isNotEmpty || linkLocalAddresses(i).isNotEmpty
     ? const []
     : [
         Finding(Severity.problem, 'no-lan', 'Not connected to Wi-Fi or a LAN',
             'This device has no local network address, so it cannot reach '
                 'other devices nearby.',
-            fix: 'Connect to the same Wi-Fi as the other device, or turn on a '
-                'hotspot on one device and join it from the other.',
+            fix: 'Connect to the same Wi-Fi as the other device, plug in an '
+                'Ethernet cable, or turn on a hotspot on one device and join '
+                'it from the other.',
             technical: i.interfaces.isEmpty
                 ? 'no IPv4 interfaces'
                 : 'no private IPv4 on a non-VPN interface',
             action: hotspotWizardAction),
       ];
+
+/// Only 169.254.x.x addresses: a direct cable between two computers, or a
+/// network without DHCP. Works, but both ends must be connected to each other.
+List<Finding> ruleLinkLocalOnly(DiagnosisInput i) {
+  if (lanAddresses(i).isNotEmpty) return const [];
+  final ll = linkLocalAddresses(i);
+  if (ll.isEmpty) return const [];
+  return [
+    Finding(Severity.info, 'link-local-only', 'Direct cable or no DHCP',
+        'This looks like a direct cable or a network without DHCP. LanDrop '
+            'works, but both devices must be connected to each other; give '
+            'both devices a moment to get addresses.',
+        technical: ll.join(', '),
+        action: cableWizardAction),
+  ];
+}
 
 List<Finding> ruleVpnActive(DiagnosisInput i) {
   final vpns = [
@@ -379,6 +411,7 @@ const List<DiagnosisRule> diagnosisRules = [
   ruleServerNotListening,
   ruleDiscoveryFailed,
   ruleNoLan,
+  ruleLinkLocalOnly,
   ruleVpnActive,
   ruleProbeRefused,
   ruleProbeTimeout,
@@ -396,7 +429,9 @@ const List<DiagnosisRule> diagnosisRules = [
 List<Finding> diagnose(DiagnosisInput input) {
   final out = [for (final r in diagnosisRules) ...r(input)];
   if (!out.any((f) =>
-      f.severity != Severity.info || f.code == 'hotspot-likely-fix')) {
+      f.severity != Severity.info ||
+      f.code == 'hotspot-likely-fix' ||
+      f.code == 'link-local-only')) {
     out.add(const Finding(Severity.info, 'all-good', 'No problems found',
         'This device is on a local network and ready to send and receive.',
         fix: 'If a device is still missing, make sure LanDrop is open on it, '
@@ -417,7 +452,7 @@ List<Finding> diagnose(DiagnosisInput input) {
 Finding networkSummary(DiagnosisInput i) {
   final lines = [
     for (final f in i.interfaces)
-      '${f.name}${f.isVpn ? ' (VPN)' : ''}: '
+      '${f.name}${f.isVpn ? ' (VPN)' : f.isVirtual ? ' (virtual)' : ''}: '
           '${f.addresses.isEmpty ? '-' : f.addresses.join(', ')}',
     if (i.interfaces.isEmpty) 'no network interfaces',
     i.serverListening

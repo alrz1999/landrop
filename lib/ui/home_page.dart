@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
+import 'cable_wizard.dart';
 import 'hotspot_wizard.dart';
 import 'settings_page.dart';
 import 'shares.dart';
@@ -293,7 +294,8 @@ class _HomePageState extends State<HomePage> {
       if (c.peers.isEmpty)
         EmptyPeersHelp(
             onDiagnose: () => showDiagnosisDialog(context),
-            onHotspot: () => openHotspotWizard(context))
+            onHotspot: () => openHotspotWizard(context),
+            onCable: () => openCableWizard(context))
       else
         Card(
           child: Column(children: [

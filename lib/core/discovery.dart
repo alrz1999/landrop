@@ -44,7 +44,7 @@ class MulticastDiscoveryTransport implements DiscoveryTransport {
       final ifaces = await NetworkInterface.list(
           type: InternetAddressType.IPv4, includeLoopback: false);
       for (final iface in ifaces) {
-        if (isVpnInterface(iface.name)) continue;
+        if (!isRealInterface(iface.name)) continue;
         try {
           socket.joinMulticast(group, iface);
           joined = true;
@@ -90,24 +90,20 @@ class MulticastDiscoveryTransport implements DiscoveryTransport {
     } catch (_) {}
     var sentOnIface = false;
     try {
-      final ifaces = await NetworkInterface.list(
-          type: InternetAddressType.IPv4, includeLoopback: false);
-      for (final iface in ifaces) {
-        if (isVpnInterface(iface.name)) continue;
-        for (final a in iface.addresses) {
-          final r = a.rawAddress;
-          if (r.length != 4 || (r[0] == 169 && r[1] == 254)) continue;
-          try {
-            s.setRawOption(RawSocketOption(RawSocketOption.levelIPv4,
-                _multicastIfOption, Uint8List.fromList(r)));
-            s.send(data, group, port);
-            sentOnIface = true;
-          } catch (_) {}
-          try {
-            // Assumes a /24, which is what home networks use.
-            s.send(bdata, InternetAddress('${r[0]}.${r[1]}.${r[2]}.255'), port);
-          } catch (_) {}
-        }
+      // Real interfaces only (no VPN, no virtual bridges); link-local
+      // addresses (direct cable) included.
+      for (final a in await localIPv4Addresses()) {
+        final r = a.rawAddress;
+        try {
+          s.setRawOption(RawSocketOption(RawSocketOption.levelIPv4,
+              _multicastIfOption, Uint8List.fromList(r)));
+          s.send(data, group, port);
+          sentOnIface = true;
+        } catch (_) {}
+        try {
+          // Assumes a /24, which is what home networks use.
+          s.send(bdata, InternetAddress('${r[0]}.${r[1]}.${r[2]}.255'), port);
+        } catch (_) {}
       }
     } catch (_) {}
     if (!sentOnIface) {

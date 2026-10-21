@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation"/>
+    <!-- Wi-Fi Direct assist (WifiDirectManager.kt); same permissions as the hotspot. -->
+    <uses-feature android:name="android.hardware.wifi.direct" android:required="false"/>
     <application
         android:label="landrop"
         android:name="${applicationName}"

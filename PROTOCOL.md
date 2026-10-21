@@ -38,8 +38,9 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
       "transports": [ { "id": "lan-https", "addrs": ["192.168.1.103", "192.168.43.1"], "port": 53317 },
                       { "id": "hotspot", "ssid": "AndroidShare_1234", "gateway": "192.168.43.1" } ],
       "features": ["resume", "folders", "browser-ui"] }
-    `addrs` = the advertised IP plus the non-VPN, non-link-local local IPv4 addresses (e.g. Wi-Fi
-    and hotspot interface); re-read when discovery restarts (after joining or starting a hotspot).
+    `addrs` = the advertised IP plus the local IPv4 addresses on real interfaces (not VPN, not
+    virtual such as Docker/VM bridges), ranked private first and link-local 169.254.x.x last
+    (a direct cable has only those); receivers just try each, so they can be unreachable; re-read when discovery restarts (after joining or starting a hotspot).
     `hotspot` is present only while this device shares a hotspot it started from LanDrop (Android
     local-only hotspot): `ssid` = its network name, `gateway` = this device's address on it (omitted
     when unknown). The password is never sent. Parsers must ignore unknown transports, fields and

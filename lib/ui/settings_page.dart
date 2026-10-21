@@ -7,12 +7,17 @@ import 'app_controller.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'format.dart';
+import 'cable_wizard.dart';
 import 'hotspot_wizard.dart';
+import 'wifi_direct_page.dart';
 import 'shares.dart';
 import 'widgets.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.isAndroid});
+
+  /// Test seam for the Android-only entries; default [Platform.isAndroid].
+  final bool? isAndroid;
 
   Future<void> _pickDir(BuildContext context, AppController c) async {
     String? dir;
@@ -151,6 +156,23 @@ class SettingsPage extends StatelessWidget {
                     'Use a hotspot from a phone or laptop, step by step'),
                 onTap: () => openHotspotWizard(context),
               ),
+              ListTile(
+                key: const Key('cableSettings'),
+                leading: const Icon(Icons.cable),
+                title: const Text('Connect with a cable'),
+                subtitle: const Text(
+                    'Ethernet cable between two computers, or USB tethering'),
+                onTap: () => openCableWizard(context),
+              ),
+              if (isAndroid ?? Platform.isAndroid)
+                ListTile(
+                  key: const Key('wifiDirectSettings'),
+                  leading: const Icon(Icons.wifi_find),
+                  title: const Text('Connect with Wi-Fi Direct'),
+                  subtitle: const Text(
+                      'Phone to phone without a router (Android)'),
+                  onTap: () => openWifiDirect(context),
+                ),
               ListTile(
                 leading: const Icon(Icons.restart_alt),
                 title: const Text('Restart service'),

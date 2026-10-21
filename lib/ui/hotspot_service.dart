@@ -35,6 +35,20 @@ class HotspotException implements Exception {
 /// Asks for [p]; true when granted.
 typedef HotspotPermissionRequest = Future<bool> Function(HotspotPermission p);
 
+/// Asks for [p] with permission_handler; true when granted. Shared by the
+/// hotspot and Wi-Fi Direct services.
+Future<bool> requestWifiPermission(HotspotPermission p) async {
+  final perm = p == HotspotPermission.nearbyWifiDevices
+      ? Permission.nearbyWifiDevices
+      : Permission.location;
+  try {
+    if (await perm.isGranted) return true;
+    return (await perm.request()).isGranted;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Escapes `\ ; , : "` with a backslash, as the `WIFI:` QR format requires.
 String escapeWifiQr(String s) =>
     s.replaceAllMapped(RegExp(r'[\\;,:"]'), (m) => '\\${m[0]}');
@@ -63,17 +77,8 @@ class HotspotService {
   /// Only Android can create a hotspot from the app.
   final bool supported;
 
-  static Future<bool> _defaultRequest(HotspotPermission p) async {
-    final perm = p == HotspotPermission.nearbyWifiDevices
-        ? Permission.nearbyWifiDevices
-        : Permission.location;
-    try {
-      if (await perm.isGranted) return true;
-      return (await perm.request()).isGranted;
-    } catch (_) {
-      return false;
-    }
-  }
+  static Future<bool> _defaultRequest(HotspotPermission p) =>
+      requestWifiPermission(p);
 
   /// Asks for the right permission, then starts the hotspot. Throws
   /// [HotspotException].

@@ -6,11 +6,16 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: HotspotManager? = null
+    private var wifiDirect: WifiDirectManager? = null
+
+    private fun wifiDirectManager(): WifiDirectManager =
+        wifiDirect ?: WifiDirectManager(this).also { wifiDirect = it }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -81,9 +86,47 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Wi-Fi Direct assist (wifi_direct_service.dart, WifiDirectManager.kt).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/wifidirect")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "sdkInt" -> result.success(Build.VERSION.SDK_INT)
+                    "supported" -> result.success(wifiDirectManager().supported())
+                    "discover" -> wifiDirectManager().discover(result)
+                    "stopDiscover" -> wifiDirectManager().stopDiscover(result)
+                    "connect" -> {
+                        val address = call.argument<String>("address")
+                        if (address.isNullOrEmpty()) {
+                            result.error("error", "address missing", null)
+                        } else {
+                            val intent = (call.argument<Any>("groupOwnerIntent") as? Number)?.toInt()
+                            wifiDirectManager().connect(address, intent, result)
+                        }
+                    }
+                    "createGroup" -> wifiDirectManager().createGroup(result)
+                    "disconnect" -> {
+                        wifiDirect?.disconnect()
+                        result.success(true)
+                    }
+                    "info" -> wifiDirectManager().info(result)
+                    else -> result.notImplemented()
+                }
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/wifidirect/events")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    wifiDirectManager().sink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    wifiDirect?.sink = null
+                }
+            })
     }
 
     override fun onDestroy() {
+        wifiDirect?.destroy()
+        wifiDirect = null
         multicastLock?.takeIf { it.isHeld }?.release()
         hotspot?.stop()
         hotspot = null

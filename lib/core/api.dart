@@ -5,7 +5,12 @@ import 'dart:async';
 import 'diagnosis.dart';
 
 export 'diagnosis.dart'
-    show Finding, Severity, formatDiagnosisReport, hotspotWizardAction;
+    show
+        Finding,
+        Severity,
+        formatDiagnosisReport,
+        hotspotWizardAction,
+        cableWizardAction;
 
 /// One way to reach a device, from its capability record (DESIGN.md 3.3).
 class TransportCapability {

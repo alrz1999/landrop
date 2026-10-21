@@ -129,6 +129,7 @@ class PeerTile extends StatelessWidget {
       title: Text(peer.alias),
       subtitle: Text([
         '${peer.ip}:${peer.port}',
+        if (peer.ip.startsWith('169.254.')) 'direct cable link',
         if (more > 0) '+$more more address${more == 1 ? '' : 'es'}',
         if (peer.deviceModel != null) peer.deviceModel!,
       ].join(' · ')),
@@ -143,13 +144,17 @@ class PeerTile extends StatelessWidget {
 }
 
 class EmptyPeersHelp extends StatelessWidget {
-  const EmptyPeersHelp({super.key, this.onDiagnose, this.onHotspot});
+  const EmptyPeersHelp(
+      {super.key, this.onDiagnose, this.onHotspot, this.onCable});
 
   /// Shows a "Why can't I see my device?" button when set.
   final VoidCallback? onDiagnose;
 
   /// Shows a "Connect without Wi-Fi / router" button when set.
   final VoidCallback? onHotspot;
+
+  /// Shows a "Connect with a cable" button when set.
+  final VoidCallback? onCable;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +193,15 @@ class EmptyPeersHelp extends StatelessWidget {
               onPressed: onHotspot,
               icon: const Icon(Icons.wifi_tethering),
               label: const Text('Connect without Wi-Fi / router'),
+            ),
+          ],
+          if (onCable != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('cableHelp'),
+              onPressed: onCable,
+              icon: const Icon(Icons.cable),
+              label: const Text('Connect with a cable'),
             ),
           ],
         ],

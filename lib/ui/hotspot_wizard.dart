@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/api.dart';
 import '../core/util.dart' show hotspotProbeTargets, localIPv4Addresses;
+import 'cable_wizard.dart' show openCableWizard;
 import 'diagnosis_dialog.dart' show FindingTile;
 import 'format.dart';
 import 'hotspot_service.dart';
@@ -126,89 +127,8 @@ class HotspotWizardPage extends StatefulWidget {
 
 class _HotspotWizardPageState extends State<HotspotWizardPage> {
   HotspotRole _role = HotspotRole.join;
-  bool _searching = false;
-  String? _phase;
-
-  /// Devices found by the last search (null: not searched yet).
-  List<DeviceInfo>? _found;
-
-  /// Diagnosis run when the last search found nothing.
-  List<Finding>? _findings;
 
   HotspotPlatform get _platform => widget.platform ?? currentHotspotPlatform();
-
-  static Future<List<String>> _defaultAddresses() async =>
-      [for (final a in await localIPv4Addresses()) a.address];
-
-  Future<void> _find() async {
-    final c = AppScope.read(context);
-    setState(() {
-      _searching = true;
-      _found = null;
-      _findings = null;
-      _phase = 'Looking at the new network…';
-    });
-    final byFp = <String, DeviceInfo>{};
-    try {
-      await c.restartDiscovery();
-      List<String> own = const [];
-      try {
-        own = await (widget.localAddresses ?? _defaultAddresses)();
-      } catch (_) {}
-      if (mounted) setState(() => _phase = 'Checking the usual hotspot addresses…');
-      for (final d in await c.probeAddresses(hotspotProbeTargets(own))) {
-        byFp[d.fingerprint] = d;
-      }
-      if (mounted) setState(() => _phase = 'Scanning the network…');
-      await c.rescan();
-      for (final d in c.peers) {
-        byFp.putIfAbsent(d.fingerprint, () => d);
-      }
-      List<Finding>? findings;
-      if (byFp.isEmpty) {
-        if (mounted) setState(() => _phase = 'Nothing found. Checking why…');
-        findings = await c.runDiagnosis();
-      }
-      if (!mounted) return;
-      setState(() {
-        _found = byFp.values.toList();
-        _findings = findings;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _found = byFp.values.toList();
-        _findings = [
-          Finding(Severity.problem, 'search-failed', 'The search failed', '$e')
-        ];
-      });
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
-  }
-
-  Widget _steps(List<String> steps, {required String keyPrefix}) {
-    final t = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (i, s) in steps.indexed)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(radius: 12, child: Text('${i + 1}', style: t.labelMedium)),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: Text(s,
-                        key: Key('$keyPrefix-$i'), style: t.bodyMedium)),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +182,7 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
                 onSelectionChanged: (s) => setState(() => _role = s.first),
               ),
               SectionHeader('On this device (${hotspotPlatformName(p)})'),
-              _steps(mine, keyPrefix: 'step'),
+              WizardSteps(mine, keyPrefix: 'step'),
               if (p == HotspotPlatform.android &&
                   _role == HotspotRole.share &&
                   c.hotspotService.supported)
@@ -284,75 +204,31 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
                           child: Text(hotspotPlatformName(op),
                               style: t.titleSmall),
                         ),
-                        _steps(hotspotSteps(op, other),
+                        WizardSteps(hotspotSteps(op, other),
                             keyPrefix: 'other-${op.name}'),
                       ],
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              FilledButton.icon(
-                key: const Key('findDevice'),
-                onPressed: _searching ? null : _find,
-                icon: _searching
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.search),
-                label: const Text("I'm connected, find the other device"),
+              FindDevicePanel(
+                label: "I'm connected, find the other device",
+                localAddresses: widget.localAddresses,
               ),
-              if (_searching && _phase != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_phase!, key: const Key('searchPhase')),
-                ),
-              ..._results(t),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                key: const Key('cableInstead'),
+                onPressed: () => openCableWizard(context,
+                    platform: widget.platform,
+                    localAddresses: widget.localAddresses),
+                icon: const Icon(Icons.cable),
+                label: const Text('Using a cable instead? Ethernet or USB'),
+              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  List<Widget> _results(TextTheme t) {
-    final found = _found;
-    if (found == null || _searching) return const [];
-    if (found.isNotEmpty) {
-      return [
-        SectionHeader('Found ${found.length} device${found.length == 1 ? '' : 's'}'),
-        Card(
-          child: Column(children: [
-            for (final d in found)
-              ListTile(
-                key: Key('found-${d.fingerprint}'),
-                leading: CircleAvatar(child: Icon(deviceIcon(d.deviceType))),
-                title: Text(d.alias),
-                subtitle: Text('${d.ip}:${d.port}'),
-              ),
-          ]),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton(
-          key: const Key('wizardDone'),
-          onPressed: () => Navigator.maybePop(context),
-          child: const Text('Back to devices'),
-        ),
-      ];
-    }
-    return [
-      const SizedBox(height: 16),
-      Text('No device found yet', key: const Key('nothingFound'),
-          style: t.titleMedium),
-      const SizedBox(height: 4),
-      Text(
-        'Check that both devices are on the same hotspot and LanDrop is open '
-        'on both. Then try again, or use "Add by IP" with the address shown '
-        'on the other device.',
-        style: t.bodyMedium,
-      ),
-      for (final f in _findings ?? const <Finding>[]) FindingTile(finding: f),
-    ];
   }
 }
 
@@ -440,3 +316,191 @@ class HotspotCard extends StatelessWidget {
 /// Opens the wizard.
 Future<void> openHotspotWizard(BuildContext context) => Navigator.push(
     context, MaterialPageRoute(builder: (_) => const HotspotWizardPage()));
+
+/// Numbered plain-language steps; step i has the key `'$keyPrefix-$i'`.
+class WizardSteps extends StatelessWidget {
+  const WizardSteps(this.steps, {super.key, required this.keyPrefix});
+  final List<String> steps;
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (i, s) in steps.indexed)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                    radius: 12, child: Text('${i + 1}', style: t.labelMedium)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text(s,
+                        key: Key('$keyPrefix-$i'), style: t.bodyMedium)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The "find the other device" button of the hotspot and cable wizards, with
+/// its progress line and results: re-reads the interfaces
+/// ([AppController.restartDiscovery]), probes the usual gateway addresses
+/// ([hotspotProbeTargets] plus [extraGateways]), scans the subnet, and runs
+/// the diagnosis when nothing is found.
+class FindDevicePanel extends StatefulWidget {
+  const FindDevicePanel({
+    super.key,
+    required this.label,
+    this.localAddresses,
+    this.extraGateways = const [],
+    this.phaseProbe = 'Checking the usual hotspot addresses…',
+    this.nothingFoundHint =
+        'Check that both devices are on the same hotspot and LanDrop is open '
+            'on both. Then try again, or use "Add by IP" with the address '
+            'shown on the other device.',
+  });
+
+  final String label;
+
+  /// Test seam: this device's LAN addresses; default [localIPv4Addresses].
+  final Future<List<String>> Function()? localAddresses;
+  final List<String> extraGateways;
+  final String phaseProbe;
+  final String nothingFoundHint;
+
+  @override
+  State<FindDevicePanel> createState() => _FindDevicePanelState();
+}
+
+class _FindDevicePanelState extends State<FindDevicePanel> {
+  bool _searching = false;
+  String? _phase;
+
+  /// Devices found by the last search (null: not searched yet).
+  List<DeviceInfo>? _found;
+
+  /// Diagnosis run when the last search found nothing.
+  List<Finding>? _findings;
+
+  static Future<List<String>> _defaultAddresses() async =>
+      [for (final a in await localIPv4Addresses()) a.address];
+
+  Future<void> _find() async {
+    final c = AppScope.read(context);
+    setState(() {
+      _searching = true;
+      _found = null;
+      _findings = null;
+      _phase = 'Looking at the new network…';
+    });
+    final byFp = <String, DeviceInfo>{};
+    try {
+      await c.restartDiscovery();
+      List<String> own = const [];
+      try {
+        own = await (widget.localAddresses ?? _defaultAddresses)();
+      } catch (_) {}
+      if (mounted) setState(() => _phase = widget.phaseProbe);
+      final targets =
+          hotspotProbeTargets(own, extraGateways: widget.extraGateways);
+      for (final d in await c.probeAddresses(targets)) {
+        byFp[d.fingerprint] = d;
+      }
+      if (mounted) setState(() => _phase = 'Scanning the network…');
+      await c.rescan();
+      for (final d in c.peers) {
+        byFp.putIfAbsent(d.fingerprint, () => d);
+      }
+      List<Finding>? findings;
+      if (byFp.isEmpty) {
+        if (mounted) setState(() => _phase = 'Nothing found. Checking why…');
+        findings = await c.runDiagnosis();
+      }
+      if (!mounted) return;
+      setState(() {
+        _found = byFp.values.toList();
+        _findings = findings;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _found = byFp.values.toList();
+        _findings = [
+          Finding(Severity.problem, 'search-failed', 'The search failed', '$e')
+        ];
+      });
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          key: const Key('findDevice'),
+          onPressed: _searching ? null : _find,
+          icon: _searching
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.search),
+          label: Text(widget.label),
+        ),
+        if (_searching && _phase != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_phase!, key: const Key('searchPhase')),
+          ),
+        ..._results(t),
+      ],
+    );
+  }
+
+  List<Widget> _results(TextTheme t) {
+    final found = _found;
+    if (found == null || _searching) return const [];
+    if (found.isNotEmpty) {
+      return [
+        SectionHeader(
+            'Found ${found.length} device${found.length == 1 ? '' : 's'}'),
+        Card(
+          child: Column(children: [
+            for (final d in found)
+              ListTile(
+                key: Key('found-${d.fingerprint}'),
+                leading: CircleAvatar(child: Icon(deviceIcon(d.deviceType))),
+                title: Text(d.alias),
+                subtitle: Text('${d.ip}:${d.port}'),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          key: const Key('wizardDone'),
+          onPressed: () => Navigator.maybePop(context),
+          child: const Text('Back to devices'),
+        ),
+      ];
+    }
+    return [
+      const SizedBox(height: 16),
+      Text('No device found yet',
+          key: const Key('nothingFound'), style: t.titleMedium),
+      const SizedBox(height: 4),
+      Text(widget.nothingFoundHint, style: t.bodyMedium),
+      for (final f in _findings ?? const <Finding>[]) FindingTile(finding: f),
+    ];
+  }
+}

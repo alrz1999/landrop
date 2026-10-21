@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/api.dart';
+import 'cable_wizard.dart';
 import 'hotspot_wizard.dart';
 import 'widgets.dart';
 
@@ -22,12 +23,15 @@ Future<void> showDiagnosisDialog(BuildContext context,
   );
   if (action == hotspotWizardAction && context.mounted) {
     await openHotspotWizard(context);
+  } else if (action == cableWizardAction && context.mounted) {
+    await openCableWizard(context);
   }
 }
 
 /// Button label for a [Finding.action] the UI knows, else null.
 String? findingActionLabel(String? action) => switch (action) {
       hotspotWizardAction => 'Connect with a hotspot',
+      cableWizardAction => 'Connect with a cable',
       _ => null,
     };
 
@@ -195,7 +199,11 @@ class FindingTile extends StatelessWidget {
                   OutlinedButton.icon(
                     key: Key('findingAction-${f.code}'),
                     onPressed: () => onAction!(f.action!),
-                    icon: const Icon(Icons.wifi_tethering, size: 18),
+                    icon: Icon(
+                        f.action == cableWizardAction
+                            ? Icons.cable
+                            : Icons.wifi_tethering,
+                        size: 18),
                     label: Text(findingActionLabel(f.action)!),
                   ),
                 ],
