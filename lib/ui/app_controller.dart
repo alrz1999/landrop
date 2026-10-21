@@ -7,6 +7,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
+import 'background_service.dart';
 import 'multicast_lock.dart';
 import 'storage_access.dart';
 
@@ -206,6 +207,7 @@ class AppController extends ChangeNotifier {
     _notify();
     try {
       await MulticastLock.acquire();
+      await BackgroundService.start();
       await core.start(alias: _alias, saveDir: _saveDir);
       status = CoreStatus.running;
     } catch (e) {
@@ -368,6 +370,7 @@ class AppController extends ChangeNotifier {
     _incomingCtrl.close();
     core.stop().catchError((_) {});
     MulticastLock.release();
+    BackgroundService.stop();
     super.dispose();
   }
 }
