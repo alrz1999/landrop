@@ -1,5 +1,6 @@
 // Nearby shares security tests (docs/NEARBY_PLAN.md section 5). Step 1 covers
 // the browser side: C1 (browser part), C17, plus Host and access gates.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -7,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:landrop/core/api.dart';
+import 'package:landrop/core/util.dart' show HttpStatusError;
 import 'package:landrop/core/landrop_core.dart';
 import 'package:landrop/core/web_server.dart' show webTokenKey;
 import 'package:pointycastle/asn1.dart';
@@ -582,5 +584,421 @@ void main() {
           .json!['ticket'],
       isNotNull,
     );
+  });
+
+  group('app client (step 3)', () {
+    Future<(LanDropCoreImpl, LanDropCoreImpl)> twoCores(
+        {DateTime Function()? clock}) async {
+      final a = await env.startCore(nearbyOpts(clock: clock), name: 'a');
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      a.setNearbyTrusted({b.self.fingerprint});
+      return (a, b);
+    }
+
+    Directory saveOf(String name) => Directory('${env.tmp.path}/$name-save');
+    List<String> names(Directory d) => [
+          for (final e in d.listSync(recursive: true, followLinks: false))
+            e.path.substring(d.path.length + 1),
+        ]..sort();
+
+    Future<List<TransferProgress>> download(
+        LanDropCoreImpl b, DeviceInfo peer, NearbyListing l) async {
+      final events = <TransferProgress>[];
+      final sub = b.progress.listen(events.add);
+      await b.downloadNearby(peer, l, [
+        for (final sh in l.shares)
+          for (final f in sh.files) (sh.id, f.id),
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await sub.cancel();
+      return events;
+    }
+
+    /// A spy peer (certificate of test identity 1) that lists [files] and
+    /// serves them as [serve] says (default: the listed bytes).
+    Future<SpyPeer> spyWith(
+      List<(String, String, int)> files, {
+      Future<void> Function(SpyPeer, HttpRequest)? file,
+    }) =>
+        SpyPeer.start(testIdentity(1), (spy, req, body) async {
+          final path = req.uri.path;
+          if (path.endsWith('/nearby/challenge')) {
+            return SpyPeer.reply(req, 200, '{"nonce":"spynonce","expiresIn":30}');
+          }
+          if (path.endsWith('/nearby/list')) {
+            return SpyPeer.reply(req, 200, SpyPeer.listing(files));
+          }
+          if (path.contains('/nearby/shares/') && file != null) {
+            return file(spy, req);
+          }
+          return SpyPeer.reply(req, 404, '{}');
+        });
+
+    test('C20 the client pins the peer certificate: a different one throws and receives no request',
+        () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      final rogue = await spyWith([('f1', 'a.txt', 1)]);
+      addTearDown(rogue.close);
+      // The peer is known by the fingerprint of identity 0, but identity 1
+      // answers at that address.
+      final peer = DeviceInfo(
+          alias: 'Spy',
+          deviceType: 'desktop',
+          fingerprint: id0.fingerprint,
+          ip: '127.0.0.1',
+          port: rogue.server.port);
+      await expectLater(
+          b.listNearbyShares(peer), throwsA(isA<HandshakeException>()));
+      expect(rogue.requests, isEmpty);
+      // The same for a download with a (stolen) ticket.
+      final listing = NearbyListing(
+          peerFingerprint: id0.fingerprint,
+          ticket: 'lt1.stolen',
+          shares: [
+            NearbyShare(id: 'share1', createdAt: DateTime(2026), files: const [
+              NearbyFile('f1', 'a.txt', 'text/plain', 1)
+            ])
+          ]);
+      final ev = await download(b, peer, listing);
+      expect(ev.where((e) => e.done).single.errorCode,
+          SendErrorCode.fingerprintMismatch);
+      expect(rogue.requests, isEmpty);
+      expect(names(saveOf('b')), isEmpty);
+    });
+
+    test('C21 downloaded names are sanitised, go through reserveUniqueFile, never through a symlink',
+        () async {
+      final (a, b) = await twoCores();
+      final bidi = env.file('x\u202Etxt.exe', [1, 2]);
+      final con = env.file('CON.txt', [3, 4]);
+      a.createShare([bidi.path, con.path], nearby: true);
+      final save = saveOf('b');
+      // Symlinks planted where the files and their .part files would go.
+      final victim = File('${env.tmp.path}/victim.txt')..writeAsStringSync('orig');
+      Link('${save.path}/_CON.txt').createSync(victim.path);
+      Link('${save.path}/._CON.txt.part').createSync(victim.path);
+      Link('${save.path}/xtxt.exe').createSync('${env.tmp.path}/nowhere.bin');
+      final l = await b.listNearbyShares(a.self);
+      expect(l.shares.single.files.map((f) => f.name).join(),
+          isNot(matches(RegExp('[\u202A-\u202E]'))));
+      final ev = await download(b, a.self, l);
+      final done = ev.where((e) => e.done).toList();
+      expect(done, hasLength(2));
+      expect(done.every((e) => e.error == null), isTrue);
+      expect(victim.readAsStringSync(), 'orig');
+      expect(File('${env.tmp.path}/nowhere.bin').existsSync(), isFalse);
+      final saved = {for (final e in done) e.savedPath!.split('/').last};
+      expect(saved, {'_CON (1).txt', 'xtxt (1).exe'});
+      for (final n in names(save)) {
+        expect(RegExp('[\u202A-\u202E]').hasMatch(n), isFalse);
+      }
+      for (final e in done) {
+        expect(FileSystemEntity.typeSync(e.savedPath!, followLinks: false),
+            FileSystemEntityType.file);
+      }
+    });
+
+    test('hostile folder-style names cannot leave the save folder', () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      final spy = await spyWith([
+        ('f1', '../../escape.txt', 2),
+        ('f2', r'a/..\..\b/../c.txt', 2),
+        ('f3', '/etc/abs.txt', 2),
+      ], file: (spy, req) async {
+        req.response.add([7, 7]);
+        await req.response.close();
+      });
+      addTearDown(spy.close);
+      final l = await b.listNearbyShares(spy.peer);
+      final ev = await download(b, spy.peer, l);
+      expect(ev.where((e) => e.done && e.error == null), hasLength(3));
+      for (final e in ev.where((e) => e.done)) {
+        expect(e.savedPath!.startsWith('${saveOf('b').absolute.path}/'), isTrue,
+            reason: e.savedPath);
+      }
+      expect(File('${env.tmp.path}/escape.txt').existsSync(), isFalse);
+      expect(File('${env.tmp.path}/a-save/escape.txt').existsSync(), isFalse);
+    });
+
+    test('malformed or hostile listing JSON is ignored without throwing', () {
+      NearbyListing p(Object? v) => LanDropCoreImpl.parseNearbyListing(
+          v is String ? utf8.encode(v) : utf8.encode(jsonEncode(v)), 'f' * 64);
+      Map<String, dynamic> share(Object? files, {Object? id = 's1'}) => {
+            'id': id,
+            'createdAt': '2026-10-22T10:00:00Z',
+            'expiresAt': null,
+            'downloadsLeft': null,
+            'truncated': false,
+            'files': files,
+          };
+      Map<String, dynamic> file({Object? id = 'f1', Object? name = 'a.txt', Object? size = 1}) =>
+          {'id': id, 'name': name, 'size': size, 'mime': 'text/plain'};
+      Map<String, dynamic> body(List shares, {Object? ticket = 'lt1.abc'}) =>
+          {'shares': shares, 'ticket': ticket, 'ticketExpiresIn': 600};
+
+      for (final junk in <Object?>[
+        'not json', '', '[]', '42', 'null', '{"shares": "x"}', '{"shares": [1,2,null]}',
+        '{"shares": [], "ticket": null}', '\u0000\u0001', '{"shares": {"a": 1}}',
+        List.generate(100, (i) => [i]), '{"shares":[{"id":5}],"ticket":"lt1.a"}',
+      ]) {
+        final l = p(junk);
+        expect(l.shares, isEmpty, reason: '$junk');
+        expect(l.ticket, isNull);
+      }
+      // Valid base case.
+      expect(p(body([share([file()])])).shares.single.files.single.name, 'a.txt');
+      // Bad ticket (header injection, spaces, too long, wrong type).
+      for (final t in ['lt1.a\r\nX: y', 'a b', 'x' * 300, 5, null, '']) {
+        expect(p(body([share([file()])], ticket: t)).shares, isEmpty, reason: '$t');
+      }
+      // Malformed shares and files are dropped, the good ones stay.
+      final l = p(body([
+        share([file(), file(id: '../x'), file(size: -1), file(size: '3'),
+            file(name: 5), file(id: 'f2', name: 'b.txt', size: 2)]),
+        share([file()], id: '../evil'),
+        share([file()], id: 7),
+        share([]),
+        share('x'),
+        {...share([file()]), 'createdAt': 'yesterday'},
+        {...share([file()]), 'downloadsLeft': 'many'},
+        {...share([file()]), 'expiresAt': 5},
+        'junk',
+        share([file()], id: 's2'),
+      ]));
+      expect(l.shares.map((s) => s.id), ['s1', 's2']);
+      expect(l.shares.first.files.map((f) => f.name), ['a.txt', 'b.txt']);
+      // At most 50 shares and 1000 files.
+      expect(p(body([for (var i = 0; i < 80; i++) share([file()], id: 's$i')])).shares,
+          hasLength(50));
+      expect(
+          p(body([share([for (var i = 0; i < 1500; i++) file(id: 'f$i')])]))
+              .shares.single.files,
+          hasLength(1000));
+      // Names are cleaned for display; control characters and bidi marks go.
+      final n = p(body([share([file(name: 'a\u202Eb\u0007c\n d.txt'), file(id: 'f9', name: '\u202E')])]));
+      expect(n.shares.single.files.first.name, 'ab c d.txt');
+      expect(n.shares.single.files.last.name, 'file');
+    });
+
+    test('a listing answer bigger than 4 MB is rejected', () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      for (final chunked in [false, true]) {
+        final spy = await SpyPeer.start(testIdentity(1), (spy, req, body) async {
+          if (req.uri.path.endsWith('/nearby/challenge')) {
+            return SpyPeer.reply(req, 200, '{"nonce":"n","expiresIn":30}');
+          }
+          final pad = ' ' * ((4 << 20) + 10);
+          final text = '{"shares":[],"ticket":null,"pad":"$pad"}';
+          req.response.headers.contentType = ContentType.json;
+          if (chunked) {
+            req.response.headers.chunkedTransferEncoding = true;
+            for (var i = 0; i < text.length; i += 65536) {
+              req.response.write(text.substring(i, min(text.length, i + 65536)));
+            }
+          } else {
+            req.response.write(text);
+          }
+          await req.response.close();
+        });
+        addTearDown(spy.close);
+        await expectLater(b.listNearbyShares(spy.peer),
+            throwsA(isA<HttpStatusError>().having((e) => e.status, 'status', 413)),
+            reason: 'chunked: $chunked');
+      }
+    });
+
+    test('the ticket is never in logs, sessions or history, and travels only in the header',
+        () async {
+      final (a, b) = await twoCores();
+      a.createShare([env.file('t.txt', [1, 2, 3]).path], nearby: true);
+      final log = <String>[];
+      late NearbyListing l;
+      late List<TransferProgress> ev;
+      await runZoned(() async {
+        l = await b.listNearbyShares(a.self);
+        ev = await download(b, a.self, l);
+        // Also a failing download.
+        await b.downloadNearby(a.self, l, [('nope', 'nope')]).catchError((_) {});
+      }, zoneSpecification: ZoneSpecification(
+          print: (self, parent, zone, line) => log.add(line)));
+      final ticket = l.ticket!;
+      expect(ev.where((e) => e.done).single.error, isNull);
+      expect(log.join('\n'), isNot(contains(ticket)));
+      for (final e in ev) {
+        expect('${e.error}${e.fileName}${e.savedPath}', isNot(contains(ticket)));
+      }
+      // Against a spy: the ticket and nonce are never in a URL or a body.
+      final spy = await spyWith([('f1', 'a.txt', 1)], file: (spy, req) async {
+        req.response.add([1]);
+        await req.response.close();
+      });
+      addTearDown(spy.close);
+      final sl = await b.listNearbyShares(spy.peer);
+      await download(b, spy.peer, sl);
+      final nearby = spy.nearbyRequests;
+      expect(nearby.map((r) => r.uri.path.split('/').last).toList(),
+          ['challenge', 'list', 'f1']);
+      for (final r in nearby) {
+        expect(r.uri.hasQuery, isFalse);
+        expect('${r.uri}', isNot(contains('lt1.')));
+        expect('${r.uri}', isNot(contains('spynonce')));
+      }
+      expect(nearby[0].body, isNot(contains('spynonce')));
+      expect(nearby[1].body, contains('spynonce')); // only to the list call
+      expect(nearby[2].headers['authorization'], 'LanDrop-Ticket lt1.spyticket');
+      expect(nearby[2].body, isEmpty);
+    });
+
+    test('no ticket or nonce goes to another host: redirects are not followed',
+        () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      final other = await SpyPeer.start(
+          testIdentity(0), (spy, req, body) => SpyPeer.reply(req, 200, 'x'));
+      addTearDown(other.close);
+      final spy = await spyWith([('f1', 'a.txt', 1)], file: (spy, req) async {
+        req.response.statusCode = 302;
+        req.response.headers
+            .set('location', 'https://127.0.0.1:${other.server.port}/steal');
+        await req.response.close();
+      });
+      addTearDown(spy.close);
+      final l = await b.listNearbyShares(spy.peer);
+      final ev = await download(b, spy.peer, l);
+      expect(ev.where((e) => e.done).single.error, isNotNull);
+      expect(other.requests, isEmpty);
+      expect(names(saveOf('b')), isEmpty);
+    });
+
+    test('more bytes than listed, or fewer, fail the file and leave nothing behind',
+        () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      final spy = await spyWith([
+        ('f1', 'long.bin', 10),
+        ('f2', 'short.bin', 10),
+        ('f3', 'ok.bin', 10),
+      ], file: (spy, req) async {
+        final id = req.uri.pathSegments.last;
+        req.response.headers.chunkedTransferEncoding = true;
+        req.response.add(List.filled(id == 'f1' ? 25 : (id == 'f2' ? 4 : 10), 9));
+        await req.response.close();
+      });
+      addTearDown(spy.close);
+      final l = await b.listNearbyShares(spy.peer);
+      final ev = await download(b, spy.peer, l);
+      final done = {for (final e in ev.where((e) => e.done)) e.fileName!: e};
+      expect(done['long.bin']!.error, isNotNull);
+      expect(done['short.bin']!.error, isNotNull);
+      expect(done['ok.bin']!.error, isNull);
+      expect(names(saveOf('b')), ['ok.bin']);
+    });
+
+    test('cancelSession during a download stops it and deletes the .part',
+        () async {
+      final (a, b) = await twoCores();
+      final big = List<int>.filled(40 << 20, 3);
+      a.createShare([env.file('huge.bin', big).path], nearby: true);
+      final l = await b.listNearbyShares(a.self);
+      final events = <TransferProgress>[];
+      var partSeen = false;
+      late StreamSubscription<TransferProgress> sub;
+      sub = b.progress.listen((e) {
+        events.add(e);
+        if (!e.done && e.sentBytes > 0 && !partSeen) {
+          partSeen = names(saveOf('b')).any((n) => n.endsWith('.part'));
+          b.cancelSession(e.sessionId);
+        }
+      });
+      await b.downloadNearby(a.self, l, [
+        (l.shares.single.id, l.shares.single.files.single.id),
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+      expect(partSeen, isTrue);
+      final last = events.last;
+      expect(last.done, isTrue);
+      expect(last.errorCode, SendErrorCode.cancelled);
+      expect(names(saveOf('b')), isEmpty);
+    });
+
+    test('a ticket 404 re-lists exactly once and retries with the new ticket',
+        () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      var lists = 0;
+      final spy = await SpyPeer.start(testIdentity(1), (spy, req, body) async {
+        final path = req.uri.path;
+        if (path.endsWith('/nearby/challenge')) {
+          return SpyPeer.reply(req, 200, '{"nonce":"n","expiresIn":30}');
+        }
+        if (path.endsWith('/nearby/list')) {
+          lists++;
+          return SpyPeer.reply(req, 200,
+              SpyPeer.listing([('f1', 'a.txt', 2), ('f2', 'b.txt', 2)], ticket: 'lt1.t$lists'));
+        }
+        if (path.contains('/nearby/shares/')) {
+          final ok = req.headers.value('authorization') == 'LanDrop-Ticket lt1.t2';
+          if (!ok) return SpyPeer.reply(req, 404, '{}');
+          req.response.add([5, 6]);
+          return req.response.close();
+        }
+        return SpyPeer.reply(req, 404, '{}');
+      });
+      addTearDown(spy.close);
+      final l = await b.listNearbyShares(spy.peer);
+      expect(lists, 1);
+      final ev = await download(b, spy.peer, l);
+      expect(lists, 2); // one re-list for both files
+      final done = ev.where((e) => e.done).toList();
+      expect(done, hasLength(2));
+      expect(done.every((e) => e.error == null), isTrue);
+      // The first file's retry used the new ticket; the second went straight on.
+      final used = [
+        for (final r in spy.requests.where((r) => r.uri.path.contains('/shares/')))
+          r.headers['authorization']
+      ];
+      expect(used, [
+        'LanDrop-Ticket lt1.t1',
+        'LanDrop-Ticket lt1.t2',
+        'LanDrop-Ticket lt1.t2',
+      ]);
+    });
+
+    test('a file that stays 404 fails as no longer shared after one re-list only',
+        () async {
+      final b = await env.startCore(nearbyOpts(), name: 'b');
+      var lists = 0;
+      final spy = await SpyPeer.start(testIdentity(1), (spy, req, body) async {
+        final path = req.uri.path;
+        if (path.endsWith('/nearby/challenge')) {
+          return SpyPeer.reply(req, 200, '{"nonce":"n","expiresIn":30}');
+        }
+        if (path.endsWith('/nearby/list')) {
+          lists++;
+          return SpyPeer.reply(req, 200,
+              SpyPeer.listing([('f1', 'a.txt', 2), ('f2', 'b.txt', 2)]));
+        }
+        return SpyPeer.reply(req, 404, '{}');
+      });
+      addTearDown(spy.close);
+      final l = await b.listNearbyShares(spy.peer);
+      final ev = await download(b, spy.peer, l);
+      expect(lists, 2);
+      final done = ev.where((e) => e.done).toList();
+      expect(done, hasLength(2));
+      expect(done.every((e) => e.errorCode == SendErrorCode.declined), isTrue);
+      expect(names(saveOf('b')), isEmpty);
+    });
+
+    test('a real expired ticket (clock +11 min) is renewed automatically',
+        () async {
+      var now = DateTime.now();
+      final (a, b) = await twoCores(clock: () => now);
+      a.createShare([env.file('e.txt', [4, 4]).path], nearby: true);
+      final l = await b.listNearbyShares(a.self);
+      now = now.add(const Duration(minutes: 11));
+      final ev = await download(b, a.self, l);
+      final done = ev.where((e) => e.done).single;
+      expect(done.error, isNull);
+      expect(File(done.savedPath!).readAsBytesSync(), [4, 4]);
+    });
   });
 }

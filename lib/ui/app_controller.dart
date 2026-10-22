@@ -673,6 +673,11 @@ class AppController extends ChangeNotifier {
 
   /// Devices the user accepted from, by fingerprint (persisted).
   final Map<String, TrustedDevice> _trusted = {};
+
+  /// Apps waiting for the owner to allow them to see the nearby shares,
+  /// oldest first (the core drops a prompt nobody answered after 60 s and
+  /// ignores a late answer).
+  final List<NearbyAccessRequest> _nearbyQueue = [];
   bool _autoAcceptLarge = false;
 
   /// Active shares (DESIGN.md 4.2 mode 2), newest last.
@@ -919,6 +924,11 @@ class AppController extends ChangeNotifier {
       webSessions = core.webSessions;
       _notify();
     }));
+    _subs.add(core.nearbyRequests.listen((r) {
+      if (_nearbyQueue.any((x) => x.id == r.id)) return;
+      _nearbyQueue.add(r);
+      _notify();
+    }));
 
     final s = await _store.load();
     if (s['alias'] is String && (s['alias'] as String).trim().isNotEmpty) {
@@ -972,6 +982,7 @@ class AppController extends ChangeNotifier {
       } catch (_) {}
     }
     _settingsLoaded = true;
+    _syncNearbyTrust();
     _notify();
     await _start();
   }
@@ -1244,6 +1255,7 @@ class AppController extends ChangeNotifier {
         t.alias = req.sender.alias;
         if (alwaysAccept) t.autoAccept = true;
       }
+      _syncNearbyTrust();
       unawaited(_persist());
     }
     _notify();
@@ -1352,8 +1364,110 @@ class AppController extends ChangeNotifier {
   /// Forgets a device: its next request asks again ("First time").
   Future<void> removeTrusted(String fingerprint) async {
     if (_trusted.remove(fingerprint) == null) return;
+    _syncNearbyTrust();
     await _persist();
     _notify();
+  }
+
+  // --------------------------------------------------------- nearby shares
+
+  /// Tells the core which devices may list this device's nearby shares: the
+  /// trusted devices (the store here is the source of truth).
+  void _syncNearbyTrust() {
+    try {
+      core.setNearbyTrusted(_trusted.keys.toSet());
+    } catch (_) {}
+  }
+
+  /// The app asking to see this device's nearby shares that the owner has
+  /// to answer now (with [answerNearbyRequest]), or null.
+  NearbyAccessRequest? get pendingNearbyRequest =>
+      _nearbyQueue.isEmpty ? null : _nearbyQueue.first;
+
+  /// Answers [id]. [NearbyDecision.alwaysAllow] also trusts the device
+  /// (without auto-accepting its transfers) and pushes the trusted set to
+  /// the core.
+  Future<void> answerNearbyRequest(String id, NearbyDecision decision) async {
+    final i = _nearbyQueue.indexWhere((r) => r.id == id);
+    final r = i < 0 ? null : _nearbyQueue.removeAt(i);
+    try {
+      core.respondNearbyAccess(id, decision);
+    } catch (_) {}
+    if (r != null &&
+        decision == NearbyDecision.alwaysAllow &&
+        !_trusted.containsKey(r.fingerprint)) {
+      final known = peers
+          .where((p) => p.fingerprint == r.fingerprint)
+          .map((p) => p.alias)
+          .firstOrNull;
+      final alias = r.alias.isNotEmpty
+          ? r.alias
+          : (known ?? 'Device ${r.fingerprint.substring(0, 8)}');
+      _trusted[r.fingerprint] = TrustedDevice(
+          fingerprint: r.fingerprint,
+          alias: alias,
+          trustedAt: _clock(),
+          autoAccept: false);
+      _syncNearbyTrust();
+      await _persist();
+    }
+    _notify();
+  }
+
+  /// What [peer] shows to this device (the ticket stays inside the
+  /// listing). Any failure, like "nothing shared", is an empty listing.
+  Future<NearbyListing> listNearby(DeviceInfo peer) async {
+    try {
+      return await core.listNearbyShares(peer);
+    } catch (_) {
+      return NearbyListing(peerFingerprint: peer.fingerprint, shares: const []);
+    }
+  }
+
+  /// Downloads [items] (share id, file id) from [peer] as one received
+  /// transfer: a card in [sessions], a history entry, Open actions.
+  Future<void> downloadNearby(DeviceInfo peer, NearbyListing listing,
+      List<(String shareId, String fileId)> items) async {
+    final s = TransferSession(
+      sessionId: '',
+      incoming: true,
+      peerAlias: peer.alias,
+      peerFingerprint: peer.fingerprint,
+      savedTo: _saveDir,
+      peer: peer,
+      senderAddress: peer.port > 0 ? '${peer.ip}:${peer.port}' : peer.ip,
+    );
+    for (final (shareId, fileId) in items) {
+      for (final sh in listing.shares.where((x) => x.id == shareId)) {
+        for (final f in sh.files.where((x) => x.id == fileId)) {
+          final key = '$shareId:$fileId';
+          s.files[key] = FileTransfer(key, f.name, f.size);
+        }
+      }
+    }
+    if (s.files.isEmpty) return;
+    sessions.insert(0, s);
+    _trimHistory();
+    _notify();
+    try {
+      await core.downloadNearby(peer, listing, items,
+          onSession: (sid) => _bind(s, sid));
+    } catch (_) {
+      // Not started (no ticket, nothing to download) or broken: end the
+      // card as failed instead of leaving it waiting.
+      if (s.sessionId.isEmpty) {
+        sessions.remove(s);
+      } else {
+        for (final f in s.files.values.where((f) => !f.done).toList()) {
+          _onProgress(TransferProgress(s.sessionId, f.fileId, f.sent, f.total,
+              done: true,
+              error: 'failed',
+              errorCode: SendErrorCode.unknown,
+              fileName: f.name));
+        }
+      }
+      _notify();
+    }
   }
 
   // ------------------------------------------------------------ transfers

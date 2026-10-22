@@ -564,6 +564,24 @@ abstract class LanDropCore {
   Stream<NearbyAccessRequest> get nearbyRequests;
   void respondNearbyAccess(String id, NearbyDecision decision);
 
+  /// Asks [peer] (an app, fingerprint pinned) which nearby shares it lists
+  /// for this device. A peer that does not trust this device answers like
+  /// one with nothing to show: an empty listing, never an error. Throws
+  /// [StateError] before the core has an identity, a handshake error when
+  /// the peer's certificate is not the pinned one, and network or HTTP
+  /// errors otherwise.
+  Future<NearbyListing> listNearbyShares(DeviceInfo peer);
+
+  /// Downloads [items] (share id, file id) of [listing] from [peer] into
+  /// the save folder, as one received transfer: progress events under one
+  /// session id (reported to [onSession] first; the peer is the sender),
+  /// [cancelSession] stops it. Failures of single files are reported as
+  /// final progress events, not thrown. Throws [ArgumentError] when no
+  /// item is part of [listing] or [listing] has no ticket.
+  Future<void> downloadNearby(DeviceInfo peer, NearbyListing listing,
+      List<(String shareId, String fileId)> items,
+      {void Function(String sessionId)? onSession});
+
   /// Whether shares are saved and restored across restarts (only when the
   /// core has a store, e.g. `LanDropCoreOptions.sharesStorePath`). Turning it
   /// off deletes the stored file; turning it on saves the current shares.

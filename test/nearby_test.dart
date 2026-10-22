@@ -2,12 +2,15 @@
 // browser side.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:landrop/core/api.dart';
 import 'package:landrop/core/landrop_core.dart';
 import 'package:landrop/l10n/app_localizations.dart';
+import 'package:landrop/ui/app_controller.dart';
+import 'package:landrop/ui/fake_core.dart';
 
 import 'helpers/nearby_harness.dart';
 import 'helpers/pump_localized.dart' as pl;
@@ -401,4 +404,313 @@ void main() {
       });
     });
   });
+
+  group('app client (step 3)', () {
+    Future<(LanDropCoreImpl, LanDropCoreImpl)> twoCores({
+      DateTime Function()? clock,
+      Future<int?> Function(String dir)? freeSpace,
+      bool trust = true,
+    }) async {
+      final a = await env.startCore(nearbyOpts(clock: clock), name: 'a');
+      final b = await env.startCore(nearbyOpts(freeSpace: freeSpace), name: 'b');
+      if (trust) a.setNearbyTrusted({b.self.fingerprint});
+      return (a, b);
+    }
+
+    Directory saveOf(String name) => Directory('${env.tmp.path}/$name-save');
+
+    List<String> names(Directory d) => [
+      for (final e in d.listSync(recursive: true, followLinks: false))
+        e.path.substring(d.path.length + 1),
+    ]..sort();
+
+    /// Downloads every file of [listing]; returns the session id and events.
+    Future<(String, List<TransferProgress>)> downloadAll(
+      LanDropCoreImpl b,
+      DeviceInfo peer,
+      NearbyListing listing,
+    ) async {
+      final events = <TransferProgress>[];
+      final sub = b.progress.listen(events.add);
+      String? sid;
+      await b.downloadNearby(peer, listing, [
+        for (final sh in listing.shares)
+          for (final f in sh.files) (sh.id, f.id),
+      ], onSession: (id) => sid = id);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await sub.cancel();
+      return (sid!, events.where((e) => e.sessionId == sid).toList());
+    }
+
+    test('N2 a trusted app lists the nearby shares (names, sizes, ticket)',
+        () async {
+      final (a, b) = await twoCores();
+      final s = a.createShare([
+        env.file('one.txt', [1, 2, 3]).path,
+        env.file('two.bin', List.filled(70000, 7)).path,
+      ], nearby: true);
+      a.createShare([env.file('private.txt', [9]).path]); // not nearby
+      final l = await b.listNearbyShares(a.self);
+      expect(l.peerFingerprint, a.self.fingerprint);
+      expect(l.ticket, isNotNull);
+      expect(l.ticket, startsWith('lt1.'));
+      expect(l.ticketExpires, isNotNull);
+      expect(l.shares, hasLength(1));
+      expect(l.shares.single.id, s.id);
+      expect(l.shares.single.truncated, isFalse);
+      final files = {for (final f in l.shares.single.files) f.name: f.size};
+      expect(files, {'one.txt': 3, 'two.bin': 70000});
+      expect(l.shares.single.files.map((f) => f.mime).toSet(),
+          contains('text/plain'));
+    });
+
+    test('listNearbyShares without an identity is a StateError', () async {
+      final c = LanDropCoreImpl(nearbyOpts());
+      addTearDown(c.dispose);
+      await expectLater(
+          c.listNearbyShares(const DeviceInfo(
+              alias: 'x',
+              deviceType: 'desktop',
+              fingerprint:
+                  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              ip: '127.0.0.1')),
+          throwsStateError);
+    });
+
+    test('N4 download via ticket: same bytes, progress, unique names, no .part',
+        () async {
+      final (a, b) = await twoCores();
+      final rnd = Random(4);
+      final big = List<int>.generate(1500000, (_) => rnd.nextInt(256));
+      final small = [1, 2, 3];
+      a.createShare([
+        env.file('big.bin', big).path,
+        env.file('small.txt', small).path,
+      ], nearby: true);
+      // A file with the same name already exists in B's save folder.
+      File('${saveOf('b').path}/small.txt').writeAsBytesSync([42]);
+      final l = await b.listNearbyShares(a.self);
+      final (sid, ev) = await downloadAll(b, a.self, l);
+      final done = ev.where((e) => e.done).toList();
+      expect(done, hasLength(2));
+      expect(done.every((e) => e.error == null), isTrue);
+      expect(ev.any((e) => !e.done && e.sentBytes > 0), isTrue);
+      expect(ev.every((e) => e.sessionId == sid), isTrue);
+      final saved = {
+        for (final e in done) e.fileName!: File(e.savedPath!).readAsBytesSync()
+      };
+      expect(saved['big.bin'], big);
+      expect(saved['small.txt'], small);
+      expect(File('${saveOf('b').path}/small.txt').readAsBytesSync(), [42]);
+      expect(names(saveOf('b')),
+          unorderedEquals(['big.bin', 'small.txt', 'small (1).txt']));
+      expect(names(saveOf('b')).where((n) => n.endsWith('.part')), isEmpty);
+    });
+
+    test('N4 folder-style names keep their structure; a second copy gets a new top folder',
+        () async {
+      final (a, b) = await twoCores();
+      final dir = Directory('${env.tmp.path}/Album/sub')..createSync(recursive: true);
+      File('${dir.path}/x.bin').writeAsBytesSync([1, 1]);
+      File('${env.tmp.path}/Album/y.bin').writeAsBytesSync([2]);
+      a.createShare(['${env.tmp.path}/Album'], nearby: true);
+      final l = await b.listNearbyShares(a.self);
+      expect(l.shares.single.files.map((f) => f.name),
+          unorderedEquals(['Album/sub/x.bin', 'Album/y.bin']));
+      await downloadAll(b, a.self, l);
+      expect(names(saveOf('b')), unorderedEquals([
+        'Album', 'Album/sub', 'Album/sub/x.bin', 'Album/y.bin',
+      ]));
+      expect(File('${saveOf('b').path}/Album/sub/x.bin').readAsBytesSync(), [1, 1]);
+      await downloadAll(b, a.self, await b.listNearbyShares(a.self));
+      expect(names(saveOf('b')).where((n) => n.startsWith('Album (1)')),
+          unorderedEquals(['Album (1)', 'Album (1)/sub', 'Album (1)/sub/x.bin', 'Album (1)/y.bin']));
+    });
+
+    test('N4 not enough free space: every file fails with diskError, nothing written',
+        () async {
+      final (a, b) = await twoCores(freeSpace: (_) async => 1000);
+      a.createShare([env.file('f.bin', [1, 2, 3]).path], nearby: true);
+      final l = await b.listNearbyShares(a.self);
+      final (_, ev) = await downloadAll(b, a.self, l);
+      final done = ev.where((e) => e.done).single;
+      expect(done.errorCode, SendErrorCode.diskError);
+      expect(names(saveOf('b')), isEmpty);
+    });
+
+    group('N7 owner prompt (client half)', () {
+      test('an untrusted app triggers one prompt and gets nothing; allowOnce then shows the share',
+          () async {
+        final (a, b) = await twoCores(trust: false);
+        a.createShare([env.file('p.txt', [1, 2]).path], nearby: true);
+        final asked = <NearbyAccessRequest>[];
+        final sub = a.nearbyRequests.listen(asked.add);
+        addTearDown(sub.cancel);
+        final first = await b.listNearbyShares(a.self);
+        expect(first.shares, isEmpty);
+        expect(first.ticket, isNull);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(asked, hasLength(1));
+        expect(asked.single.fingerprint, b.self.fingerprint);
+        expect(asked.single.alias, 'Core b');
+        // Still pending: still empty, no second prompt.
+        expect((await b.listNearbyShares(a.self)).shares, isEmpty);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(asked, hasLength(1));
+        a.respondNearbyAccess(asked.single.id, NearbyDecision.allowOnce);
+        final l = await b.listNearbyShares(a.self);
+        expect(l.shares, hasLength(1));
+        expect(l.ticket, isNotNull);
+      });
+    });
+
+    group('N8 controller', () {
+      Future<(AppController, MemorySettingsStore)> controller(
+          LanDropCore core,
+          {Map<String, dynamic>? stored,
+          String saveDir = '/tmp/landrop-test'}) async {
+        final store = MemorySettingsStore(stored);
+        final c = AppController(
+            core: core, store: store, initialSaveDir: saveDir);
+        addTearDown(c.dispose);
+        await c.init();
+        return (c, store);
+      }
+
+      final owner = NearbyAccessRequest(
+          id: 'r1',
+          fingerprint:
+              'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          alias: 'Laptop',
+          remoteIp: '10.0.0.2',
+          at: _t0);
+
+      test('stored trusted devices are pushed to the core after settings load',
+          () async {
+        final core = FakeCore(simulateDelay: Duration.zero);
+        await controller(core, stored: {
+          'trustedDevices': [
+            {
+              'fingerprint': 'aa11',
+              'alias': 'Pixel',
+              'trustedAt': '2026-10-01T10:00:00.000Z',
+              'autoAccept': false,
+            }
+          ]
+        });
+        expect(core.nearbyTrusted, {'aa11'});
+      });
+
+      test('alwaysAllow trusts the device and syncs; removeTrusted revokes',
+          () async {
+        final core = FakeCore(simulateDelay: Duration.zero);
+        final (c, store) = await controller(core);
+        expect(c.pendingNearbyRequest, isNull);
+        core.emitNearbyRequest(owner);
+        core.emitNearbyRequest(NearbyAccessRequest(
+            id: 'r2',
+            fingerprint: 'c' * 64,
+            alias: '',
+            remoteIp: '10.0.0.3',
+            at: owner.at));
+        await Future<void>.delayed(Duration.zero);
+        expect(c.pendingNearbyRequest!.id, 'r1');
+        await c.answerNearbyRequest('r1', NearbyDecision.alwaysAllow);
+        expect(core.nearbyAnswers, [('r1', NearbyDecision.alwaysAllow)]);
+        expect(c.pendingNearbyRequest!.id, 'r2'); // queue moves on
+        final t = c.trustedDevice(owner.fingerprint)!;
+        expect(t.alias, 'Laptop');
+        expect(t.autoAccept, isFalse);
+        expect(core.nearbyTrusted, {owner.fingerprint});
+        expect((store.stored['trustedDevices'] as List), hasLength(1));
+        // allowOnce and deny do not trust.
+        await c.answerNearbyRequest('r2', NearbyDecision.allowOnce);
+        expect(c.trustedDevice('c' * 64), isNull);
+        expect(core.nearbyTrusted, {owner.fingerprint});
+        expect(c.pendingNearbyRequest, isNull);
+        await c.removeTrusted(owner.fingerprint);
+        expect(core.nearbyTrusted, isEmpty);
+      });
+
+      test('with real cores: alwaysAllow lets the app list, removeTrusted stops it',
+          () async {
+        final a = LanDropCoreImpl(nearbyOpts());
+        env.cores.add(a);
+        final b = await env.startCore(nearbyOpts(), name: 'b');
+        final dir = await Directory('${env.tmp.path}/a-save').create();
+        final (c, _) = await controller(a, saveDir: dir.path);
+        a.createShare([env.file('z.txt', [1]).path], nearby: true);
+        expect((await b.listNearbyShares(a.self)).shares, isEmpty);
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        final req = c.pendingNearbyRequest!;
+        expect(req.fingerprint, b.self.fingerprint);
+        await c.answerNearbyRequest(req.id, NearbyDecision.alwaysAllow);
+        expect(c.trustedDevice(b.self.fingerprint), isNotNull);
+        expect((await b.listNearbyShares(a.self)).shares, hasLength(1));
+        await c.removeTrusted(b.self.fingerprint);
+        expect((await b.listNearbyShares(a.self)).shares, isEmpty);
+      });
+
+      test('downloadNearby shows a received transfer card and a history entry',
+          () async {
+        final (a, b) = await twoCores();
+        a.createShare([env.file('card.txt', [5, 5, 5]).path], nearby: true);
+        final store = MemorySettingsStore();
+        final c = AppController(
+            core: b, store: store, initialSaveDir: saveOf('b').path);
+        addTearDown(() {
+          // The controller must not stop the shared test core twice.
+          c.dispose();
+        });
+        await c.init();
+        final peer = a.self;
+        final l = await c.listNearby(peer);
+        expect(l.shares, hasLength(1));
+        await c.downloadNearby(peer, l, [(l.shares.single.id, l.shares.single.files.single.id)]);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final s = c.sessions.first;
+        expect(s.incoming, isTrue);
+        expect(s.peerAlias, 'Core a');
+        expect(s.state, TransferState.done);
+        expect(File(s.openPath!).readAsBytesSync(), [5, 5, 5]);
+        expect(c.history.first.incoming, isTrue);
+        expect(c.history.first.savedPath, s.openPath);
+        // The ticket is nowhere in what the controller keeps.
+        final ticket = l.ticket!;
+        expect(jsonEncode([for (final h in c.history) h.toJson()]), isNot(contains(ticket)));
+        expect(s.report(), isNot(contains(ticket)));
+        expect(jsonEncode(store.stored), isNot(contains(ticket)));
+      });
+
+      test('listNearby and downloadNearby never throw (empty listing, failed card)',
+          () async {
+        final core = FakeCore(simulateDelay: Duration.zero);
+        final (c, _) = await controller(core);
+        const peer = DeviceInfo(
+            alias: 'P', deviceType: 'desktop', fingerprint: 'aa', ip: '10.0.0.9');
+        core.failNearbyList.add('aa');
+        final l = await c.listNearby(peer);
+        expect(l.shares, isEmpty);
+        expect(l.ticket, isNull);
+        // Nothing to download: no card.
+        await c.downloadNearby(peer, l, [('x', 'y')]);
+        expect(c.sessions, isEmpty);
+        // The fake core downloads: the card ends done with the shared id.
+        final listing = NearbyListing(
+            peerFingerprint: 'aa',
+            ticket: 'lt1.x',
+            shares: [
+              NearbyShare(id: 's', createdAt: DateTime(2026), files: const [
+                NearbyFile('f', 'a.txt', 'text/plain', 100)
+              ])
+            ]);
+        await c.downloadNearby(peer, listing, [('s', 'f')]);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(core.downloadNearbyCalls, hasLength(1));
+        expect(c.sessions.single.state, TransferState.done);
+      });
+    });
+  });
 }
+
+final _t0 = DateTime.utc(2026, 10, 22);

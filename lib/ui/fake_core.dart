@@ -542,14 +542,64 @@ class FakeCore implements LanDropCore {
   void setNearbyTrusted(Set<String> fingerprints) =>
       nearbyTrusted = {...fingerprints};
 
+  /// Fingerprints passed to [revokeNearbyAccess], for tests.
+  final List<String> revokedNearby = [];
+
   @override
-  void revokeNearbyAccess(String fp) {}
+  void revokeNearbyAccess(String fp) => revokedNearby.add(fp);
 
   @override
   Stream<NearbyAccessRequest> get nearbyRequests => _nearbyReqCtrl.stream;
 
+  /// Test hook: an app asks to see this device's nearby shares.
+  void emitNearbyRequest(NearbyAccessRequest r) => _nearbyReqCtrl.add(r);
+
+  /// Every [respondNearbyAccess] call, for tests.
+  final List<(String, NearbyDecision)> nearbyAnswers = [];
+
   @override
-  void respondNearbyAccess(String id, NearbyDecision decision) {}
+  void respondNearbyAccess(String id, NearbyDecision decision) =>
+      nearbyAnswers.add((id, decision));
+
+  /// Test hook: what [listNearbyShares] returns, by peer fingerprint
+  /// (an empty listing for other peers). A peer in [failNearbyList] throws.
+  final Map<String, NearbyListing> nearbyListings = {};
+  final Set<String> failNearbyList = {};
+
+  /// Every [listNearbyShares] call (peer fingerprint), for tests.
+  final List<String> listNearbyCalls = [];
+
+  /// Every [downloadNearby] call, for tests.
+  final List<(DeviceInfo, NearbyListing, List<(String, String)>)>
+      downloadNearbyCalls = [];
+
+  @override
+  Future<NearbyListing> listNearbyShares(DeviceInfo peer) async {
+    listNearbyCalls.add(peer.fingerprint);
+    if (failNearbyList.contains(peer.fingerprint)) {
+      throw const SocketException('unreachable');
+    }
+    return nearbyListings[peer.fingerprint] ??
+        NearbyListing(peerFingerprint: peer.fingerprint, shares: const []);
+  }
+
+  @override
+  Future<void> downloadNearby(DeviceInfo peer, NearbyListing listing,
+      List<(String shareId, String fileId)> items,
+      {void Function(String sessionId)? onSession}) async {
+    downloadNearbyCalls.add((peer, listing, items));
+    final sid = 'in-nearby-${++_session}';
+    onSession?.call(sid);
+    final files = <(String, int, String?)>[];
+    for (final (shareId, fileId) in items) {
+      for (final sh in listing.shares.where((x) => x.id == shareId)) {
+        for (final f in sh.files.where((x) => x.id == fileId)) {
+          files.add(('$shareId:$fileId', f.size, f.name));
+        }
+      }
+    }
+    await _simulate(sid, files);
+  }
 
   @override
   void revokeShare(String id) {

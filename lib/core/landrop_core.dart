@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' show min;
+import 'dart:math' show max, min;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -305,6 +305,60 @@ class _InSession {
 
   bool get anyActive => files.values.any((f) => f.active);
   bool get allFinished => files.values.every((f) => f.finished);
+}
+
+/// One file of a nearby download: its place below the save folder.
+class _NearbyItem {
+  final String shareId;
+  final NearbyFile file;
+  List<String> dirSegs = const [];
+  String name = '';
+  String display = '';
+  String key = '';
+  _NearbyItem(this.shareId, this.file);
+}
+
+/// A nearby download in progress, so [LanDropCoreImpl.cancelSession] can
+/// stop it.
+class _NearbyDownload {
+  final String id;
+  bool cancelled = false;
+  HttpClient? client;
+  File? part;
+  final List<String> createdDirs = [];
+  _NearbyDownload(this.id);
+}
+
+class _DlCancelled implements Exception {
+  const _DlCancelled();
+}
+
+class _DlResult {
+  final String? savedPath;
+  final String? error;
+  final SendErrorCode? code;
+  final bool notFound;
+  final bool fatal;
+  const _DlResult.ok(String path)
+      : savedPath = path,
+        error = null,
+        code = null,
+        notFound = false,
+        fatal = false;
+  const _DlResult.notFound()
+      : savedPath = null,
+        error = null,
+        code = null,
+        notFound = true,
+        fatal = false;
+  const _DlResult.fail(String this.error, SendErrorCode this.code)
+      : savedPath = null,
+        notFound = false,
+        fatal = false;
+  const _DlResult.fatal(String this.error, SendErrorCode this.code)
+      : savedPath = null,
+        notFound = false,
+        fatal = true;
 }
 
 class LanDropCoreImpl implements LanDropCore {
@@ -784,6 +838,10 @@ class LanDropCoreImpl implements LanDropCore {
     await _server?.close(force: true);
     _server = null;
     await _web.stop();
+    for (final d in _downloads.values) {
+      d.cancelled = true;
+      d.client?.close(force: true);
+    }
     final s = _session;
     if (s != null) _endSession(s, reason: 'receiver stopped');
     _pendingDecision = false;
@@ -1106,6 +1164,12 @@ class LanDropCoreImpl implements LanDropCore {
 
   @override
   Future<void> cancelSession(String sessionId) async {
+    final dl = _downloads[sessionId];
+    if (dl != null) {
+      dl.cancelled = true;
+      dl.client?.close(force: true);
+      return;
+    }
     final out = _outgoing[sessionId];
     if (out != null) {
       if (out.cancelled) return;
@@ -1556,6 +1620,432 @@ class LanDropCoreImpl implements LanDropCore {
     } catch (_) {
     } finally {
       c.close(force: true);
+    }
+  }
+
+  // ------------------------------------------------------ nearby (client)
+
+  /// Time allowed for each request of the nearby listing (PLAN 3).
+  static const _nearbyCall = Duration(seconds: 10);
+
+  /// Most bytes read from a listing answer.
+  static const _nearbyMaxResponse = 4 << 20;
+  static final _fpRe = RegExp(r'^[0-9a-f]{64}$');
+  static final _nearbyIdRe = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
+  static final _ticketRe = RegExp(r'^[A-Za-z0-9._~+/=-]{1,252}$');
+
+  /// Downloads in progress, by session id (see [downloadNearby]).
+  final Map<String, _NearbyDownload> _downloads = {};
+
+  static Future<List<int>> _readCapped(HttpClientResponse res, int max) async {
+    if (res.contentLength > max) throw _HttpError(413, 'response too large');
+    final b = BytesBuilder(copy: false);
+    var n = 0;
+    await for (final c in res) {
+      n += c.length;
+      if (n > max) throw _HttpError(413, 'response too large');
+      b.add(c);
+    }
+    return b.takeBytes();
+  }
+
+  /// POST [body] to [path] of [link] with the pinned [client]; the answer
+  /// is read up to [max] bytes. A wrong certificate throws a
+  /// [HandshakeException] before anything is sent.
+  Future<(int, List<int>)> _nearbyPost(HttpClient client, Link link,
+      String path, Map<String, dynamic> body, String fp, int max) async {
+    final req = await client.postUrl(link.uri(path)).timeout(_nearbyCall);
+    req.followRedirects = false;
+    req.headers.contentType = ContentType.json;
+    req.add(utf8.encode(jsonEncode(body)));
+    final res = await req.close().timeout(_nearbyCall);
+    _checkPeerCert(res, fp);
+    final bytes = await _readCapped(res, max).timeout(_nearbyCall);
+    return (res.statusCode, bytes);
+  }
+
+  @override
+  Future<NearbyListing> listNearbyShares(DeviceInfo peer) async {
+    final identity = _identity;
+    if (identity == null) throw StateError('core has no identity yet');
+    final fp = peer.fingerprint;
+    if (!_fpRe.hasMatch(fp)) throw ArgumentError('peer has no fingerprint');
+    final known = _withKnownAddresses(peer);
+    final route = _Route(await _selector.select(known) ?? _directLink(known));
+    final client = _newClient(expectFp: fp);
+    try {
+      // 1. challenge (the link is switched when nothing answers)
+      (int, List<int>) ch;
+      while (true) {
+        try {
+          ch = await _nearbyPost(client, route.link,
+              '$_landropBase/nearby/challenge',
+              {'fingerprint': identity.fingerprint}, fp, 4096);
+          break;
+        } on SocketException {
+          if (!await _switchLink(known, route)) rethrow;
+        } on TimeoutException {
+          if (!await _switchLink(known, route)) rethrow;
+        }
+      }
+      if (ch.$1 != 200) throw _HttpError(ch.$1, 'nearby challenge refused');
+      final c = jsonDecode(utf8.decode(ch.$2));
+      final nonce = c is Map ? c['nonce'] : null;
+      if (nonce is! String || nonce.isEmpty || nonce.length > 128) {
+        throw _HttpError(502, 'invalid nearby challenge');
+      }
+      // 2. list, signed for this peer, this device and this nonce
+      var alias = sanitizeDisplayText(self.alias, max: 64);
+      while (alias.length > 64) {
+        alias = String.fromCharCodes(alias.runes.toList()..removeLast());
+      }
+      final r = await _nearbyPost(client, route.link,
+          '$_landropBase/nearby/list', {
+        'fingerprint': identity.fingerprint,
+        'nonce': nonce,
+        'cert': base64Encode(identity.certDer),
+        'sig': base64Encode(identity.sign(nearbyProofMessage(fp,
+            identity.fingerprint, 'POST', '$_landropBase/nearby/list', nonce))),
+        if (alias.isNotEmpty) 'alias': alias,
+      }, fp, _nearbyMaxResponse);
+      if (r.$1 != 200) throw _HttpError(r.$1, 'nearby list refused');
+      return parseNearbyListing(r.$2, fp,
+          now: (options.webClock ?? DateTime.now)());
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// The listing in [bytes], which come from another device and are
+  /// therefore checked strictly: malformed shares and files are dropped,
+  /// names are sanitised, nothing throws. No usable share, or no usable
+  /// ticket, gives an empty listing (what a device that does not trust us
+  /// answers, too).
+  @visibleForTesting
+  static NearbyListing parseNearbyListing(List<int> bytes, String peerFp,
+      {DateTime? now}) {
+    final empty = NearbyListing(peerFingerprint: peerFp, shares: const []);
+    try {
+      final v = jsonDecode(utf8.decode(bytes));
+      if (v is! Map) return empty;
+      final raw = v['shares'];
+      final t = v['ticket'];
+      if (raw is! List || t is! String || !_ticketRe.hasMatch(t)) return empty;
+      final shares = <NearbyShare>[];
+      for (final j in raw) {
+        if (shares.length >= 50) break;
+        final s = _parseNearbyShare(j);
+        if (s != null) shares.add(s);
+      }
+      if (shares.isEmpty) return empty;
+      final exp = v['ticketExpiresIn'];
+      return NearbyListing(
+          peerFingerprint: peerFp,
+          shares: shares,
+          ticket: t,
+          ticketExpires: exp is int
+              ? (now ?? DateTime.now()).add(Duration(seconds: exp.clamp(0, 3600)))
+              : null);
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  static NearbyShare? _parseNearbyShare(Object? j) {
+    if (j is! Map) return null;
+    final id = j['id'];
+    final created = j['createdAt'];
+    final expires = j['expiresAt'];
+    final left = j['downloadsLeft'];
+    final rawFiles = j['files'];
+    if (id is! String ||
+        !_nearbyIdRe.hasMatch(id) ||
+        created is! String ||
+        (expires != null && expires is! String) ||
+        (left != null && left is! int) ||
+        rawFiles is! List) {
+      return null;
+    }
+    final createdAt = DateTime.tryParse(created);
+    final expiresAt = expires == null ? null : DateTime.tryParse(expires as String);
+    if (createdAt == null || (expires != null && expiresAt == null)) return null;
+    final files = <NearbyFile>[];
+    for (final f in rawFiles) {
+      if (files.length >= 1000) break;
+      if (f is! Map) continue;
+      final fid = f['id'];
+      final name = f['name'];
+      final size = f['size'];
+      final mime = f['mime'];
+      if (fid is! String ||
+          !_nearbyIdRe.hasMatch(fid) ||
+          name is! String ||
+          name.length > 4096 ||
+          size is! int ||
+          size < 0 ||
+          size > (1 << 50)) {
+        continue;
+      }
+      final clean = sanitizeDisplayText(name, max: 4096);
+      files.add(NearbyFile(
+          fid,
+          clean.isEmpty ? 'file' : clean,
+          mime is String && mime.length <= 128 && !hasSpoofingChars(mime)
+              ? mime
+              : 'application/octet-stream',
+          size));
+    }
+    if (files.isEmpty) return null;
+    return NearbyShare(
+        id: id,
+        createdAt: createdAt,
+        expiresAt: expiresAt,
+        downloadsLeft: left == null ? null : max<int>(0, left as int),
+        truncated: j['truncated'] == true,
+        files: files);
+  }
+
+  @override
+  Future<void> downloadNearby(DeviceInfo peer, NearbyListing listing,
+      List<(String shareId, String fileId)> items,
+      {void Function(String sessionId)? onSession}) async {
+    final firstTicket = listing.ticket;
+    if (firstTicket == null || !_ticketRe.hasMatch(firstTicket)) {
+      throw ArgumentError('listing has no ticket');
+    }
+    if (!_fpRe.hasMatch(peer.fingerprint)) {
+      throw ArgumentError('peer has no fingerprint');
+    }
+    final wanted = <_NearbyItem>[];
+    final seen = <String>{};
+    for (final (shareId, fileId) in items) {
+      final file = listing.shares
+          .where((s) => s.id == shareId)
+          .expand((s) => s.files)
+          .where((f) => f.id == fileId)
+          .firstOrNull;
+      if (file == null ||
+          !_nearbyIdRe.hasMatch(shareId) ||
+          !_nearbyIdRe.hasMatch(fileId) ||
+          !seen.add('$shareId/$fileId')) {
+        continue;
+      }
+      wanted.add(_NearbyItem(shareId, file));
+    }
+    if (wanted.isEmpty) throw ArgumentError('no such items in the listing');
+
+    final dl = _NearbyDownload(randomHex(16));
+    final sid = dl.id;
+    final saveDir = _saveDir;
+    // Same layout rules as a received transfer: every segment sanitised,
+    // a top-level folder never merges into an existing one.
+    final tops = <String, String>{};
+    for (final w in wanted) {
+      final segs = sanitizeRelativePath(w.file.name);
+      var dir = <String>[];
+      if (segs.length > 1) {
+        final top = tops.putIfAbsent(
+            segs.first,
+            () => uniqueDirName(saveDir, segs.first,
+                taken: tops.values.toSet()));
+        dir = [top, ...segs.sublist(1, segs.length - 1)];
+      }
+      w.dirSegs = dir;
+      w.name = segs.last;
+      w.display = segs.join('/');
+      w.key = '${w.shareId}:${w.file.id}';
+    }
+    final client = _newClient(expectFp: peer.fingerprint);
+    dl.client = client;
+    _downloads[sid] = dl;
+    try {
+      onSession?.call(sid);
+    } catch (_) {}
+
+    var received = 0;
+    void emit(_NearbyItem w,
+            {bool done = false,
+            String? error,
+            SendErrorCode? code,
+            String? savedPath}) =>
+        _progressCtrl.add(TransferProgress(
+            sid, w.key, done && error == null ? w.file.size : received,
+            w.file.size,
+            done: done,
+            error: error,
+            errorCode: error == null ? null : code ?? SendErrorCode.unknown,
+            fileName: w.display,
+            savedPath: savedPath));
+
+    for (final w in wanted) {
+      received = 0;
+      emit(w);
+    }
+    var ticket = firstTicket;
+    var relisted = false;
+    String? fatal;
+    SendErrorCode fatalCode = SendErrorCode.unknown;
+    try {
+      // Refuse what cannot fit before downloading anything (S18).
+      final total = wanted.fold<int>(0, (a, w) => a + w.file.size);
+      final free = await (options.freeSpace ?? freeDiskBytes)(saveDir);
+      if (free != null && total > free - _freeSpaceMargin) {
+        fatal = 'not enough free space';
+        fatalCode = SendErrorCode.diskError;
+      }
+      final known = _withKnownAddresses(peer);
+      final route = fatal != null
+          ? null
+          : _Route(await _selector.select(known) ?? _directLink(known));
+
+      Future<_DlResult> fetch(_NearbyItem w) async {
+        File? part;
+        RandomAccessFile? raf;
+        received = 0;
+        var lastEmit = 0;
+        try {
+          HttpClientResponse res;
+          while (true) {
+            try {
+              final req = await client
+                  .getUrl(route!.link.uri(
+                      '$_landropBase/nearby/shares/${w.shareId}/files/${w.file.id}'))
+                  .timeout(options.probeTimeout * 2);
+              req.followRedirects = false;
+              req.headers.set(
+                  HttpHeaders.authorizationHeader, 'LanDrop-Ticket $ticket');
+              res = await req.close().timeout(options.stallTimeout);
+              break;
+            } on SocketException {
+              if (dl.cancelled || !await _switchLink(known, route!)) rethrow;
+            } on TimeoutException {
+              if (dl.cancelled || !await _switchLink(known, route!)) rethrow;
+            }
+          }
+          _checkPeerCert(res, peer.fingerprint);
+          if (res.statusCode != 200) {
+            try {
+              await _readCapped(res, 64 * 1024).timeout(options.probeTimeout);
+            } catch (_) {}
+            return res.statusCode == 404
+                ? const _DlResult.notFound()
+                : _DlResult.fail('HTTP ${res.statusCode}',
+                    SendErrorCode.unknown);
+          }
+          if (res.contentLength != -1 && res.contentLength != w.file.size) {
+            return _DlResult.fail(
+                'size differs from the listing', SendErrorCode.unknown);
+          }
+          final dir = await _ensureDir(saveDir, w.dirSegs, dl.createdDirs);
+          part = await reserveUniqueFile(dir.path, '.${w.name}.part');
+          // Never write through a symlink planted in place of the part file.
+          if (FileSystemEntity.typeSync(part.path, followLinks: false) !=
+              FileSystemEntityType.file) {
+            return _DlResult.fail('unsafe path', SendErrorCode.diskError);
+          }
+          dl.part = part;
+          raf = await part.open(mode: FileMode.writeOnly);
+          await for (final chunk in res.timeout(options.stallTimeout)) {
+            if (dl.cancelled || !_running) throw const _DlCancelled();
+            if (received + chunk.length > w.file.size) {
+              return _DlResult.fail(
+                  'more data than listed', SendErrorCode.unknown);
+            }
+            await raf.writeFrom(chunk);
+            received += chunk.length;
+            if (received - lastEmit >= _progressStep) {
+              lastEmit = received;
+              emit(w);
+            }
+          }
+          await raf.close();
+          raf = null;
+          if (received != w.file.size) {
+            return _DlResult.fail('incomplete download', SendErrorCode.unknown);
+          }
+          final target = await reserveUniqueFile(dir.path, w.name);
+          await part.rename(target.path);
+          part = null;
+          return _DlResult.ok(target.path);
+        } on _DlCancelled {
+          return const _DlResult.fail(_cancelledError, SendErrorCode.cancelled);
+        } on HandshakeException {
+          return const _DlResult.fatal('certificate fingerprint mismatch',
+              SendErrorCode.fingerprintMismatch);
+        } catch (e) {
+          if (dl.cancelled) {
+            return const _DlResult.fail(
+                _cancelledError, SendErrorCode.cancelled);
+          }
+          return _DlResult.fail(
+              e is _HttpError ? e.message : '${e.runtimeType}',
+              _sendExceptionCode(e));
+        } finally {
+          try {
+            await raf?.close();
+          } catch (_) {}
+          dl.part = null;
+          try {
+            await part?.delete();
+          } catch (_) {}
+        }
+      }
+
+      for (final w in wanted) {
+        received = 0;
+        if (dl.cancelled) {
+          emit(w,
+              done: true,
+              error: _cancelledError,
+              code: SendErrorCode.cancelled);
+          continue;
+        }
+        if (fatal != null) {
+          emit(w, done: true, error: fatal, code: fatalCode);
+          continue;
+        }
+        var r = await fetch(w);
+        if (r.notFound && !relisted && !dl.cancelled) {
+          // The ticket may have expired (or the address changed): list once
+          // more and retry this file with the new ticket.
+          relisted = true;
+          try {
+            final fresh = await listNearbyShares(peer);
+            final t = fresh.ticket;
+            final same = fresh.shares
+                .where((s) => s.id == w.shareId)
+                .expand((s) => s.files)
+                .any((f) => f.id == w.file.id && f.size == w.file.size);
+            if (t != null && same) {
+              ticket = t;
+              r = await fetch(w);
+            }
+          } catch (e) {
+            r = _DlResult.fail('${e.runtimeType}', _sendExceptionCode(e));
+          }
+        }
+        if (r.notFound) {
+          r = const _DlResult.fail('no longer shared', SendErrorCode.declined);
+        }
+        if (r.fatal) {
+          fatal = r.error;
+          fatalCode = r.code!;
+        }
+        received = r.savedPath != null ? w.file.size : received;
+        if (r.savedPath != null) {
+          emit(w, done: true, savedPath: r.savedPath);
+        } else {
+          emit(w, done: true, error: r.error, code: r.code);
+        }
+      }
+    } finally {
+      _downloads.remove(sid);
+      client.close(force: true);
+      for (final d in dl.createdDirs.reversed) {
+        try {
+          await Directory(d).delete(); // only succeeds when empty
+        } catch (_) {}
+      }
     }
   }
 
@@ -2434,17 +2924,25 @@ class LanDropCoreImpl implements LanDropCore {
 
   /// Creates (one level at a time) the directory for [f] below saveDir and
   /// checks, with symlinks resolved, that it is still inside saveDir.
-  Future<Directory> _dirFor(_InSession s, _InFile f) async {
+  Future<Directory> _dirFor(_InSession s, _InFile f) =>
+      _ensureDir(s.saveDir, f.dirSegs, s.createdDirs);
+
+  /// Creates (one level at a time) the directory [segs] below [saveDir],
+  /// remembering new ones in [created], and checks, with symlinks resolved,
+  /// that every level is inside [saveDir]. Shared by uploads and nearby
+  /// downloads.
+  static Future<Directory> _ensureDir(
+      String saveDir, List<String> segs, List<String> created) async {
     final sep = Platform.pathSeparator;
-    var path = s.saveDir;
-    for (final seg in f.dirSegs) {
+    var path = saveDir;
+    for (final seg in segs) {
       path = '$path$sep$seg';
       final d = Directory(path);
       if (!await d.exists()) {
         await d.create();
-        s.createdDirs.add(path);
+        created.add(path);
       }
-      if (!await isWithinDir(s.saveDir, path)) {
+      if (!await isWithinDir(saveDir, path)) {
         throw _HttpError(403, 'unsafe path');
       }
     }

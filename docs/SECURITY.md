@@ -71,6 +71,7 @@ Status: fixed (with the test that covers it), accepted (reason in section 3), op
 | S25 | Medium | nearby challenge | Challenge endpoint abuse: unlimited nonces, rate. | fixed | security_c_test.dart: C8, C9, C10 |
 | S26 | Medium | nearby tickets | Download tickets: hashed storage, 10 min fixed life, bound to IP, header only, re-checked on every request (revoked on stop sharing, toggle off, untrust). | fixed | security_c_test.dart: C12, C13, C14, C15, C16 |
 | S27 | Medium | nearby endpoints | Listing caps (50 shares, 1000 files), Host check (421), HTTPS only (plain HTTP gives the unknown-path 404), no path or token in the listing. | fixed | security_c_test.dart: C11, C18, C19 (C1 for the browser listing) |
+| S28 | High | nearby client (listNearbyShares, downloadNearby) | The app side talks only to the pinned peer certificate (a different one throws before any request), never follows redirects, sends the ticket only in the `Authorization` header to that peer, never logs, stores or persists it, reads at most 4 MB of listing, validates the listing strictly (junk is dropped), and saves files like a received transfer: every name segment sanitised, unique names, no write through a symlink, `.part` then rename, free-space check, abort on more bytes than listed. | fixed | nearby_test.dart: N2, N4, N7, N8; security_c_test.dart: C20, C21 and the hostile-listing, 4 MB, ticket-secrecy, redirect, size, cancel and re-list tests |
 
 ## 3. Accepted risks and out of scope
 

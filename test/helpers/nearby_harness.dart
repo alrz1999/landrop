@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:landrop/core/api.dart';
 import 'package:landrop/core/identity.dart';
 import 'package:landrop/core/landrop_core.dart';
 
@@ -15,7 +16,9 @@ LanDropCoreOptions nearbyOpts({
   int rateLimit = 1000,
   DateTime Function()? clock,
   int? httpPort,
+  Future<int?> Function(String dir)? freeSpace,
 }) => LanDropCoreOptions(
+  freeSpace: freeSpace,
   sharesStorePath: sharesStorePath,
   webClock: clock,
   httpPort: httpPort,
@@ -215,3 +218,98 @@ Map<String, String> ticketHeader(String ticket) => {
 
 String nearbyFileUrl(String base, String shareId, String fileId) =>
     '$base$nearbyApi/nearby/shares/$shareId/files/$fileId';
+
+// ------------------------------------------------------------- spy peer
+
+/// One request a [SpyPeer] received.
+class SpyReq {
+  final String method;
+  final Uri uri;
+  final Map<String, String> headers;
+  final String body;
+  SpyReq(this.method, this.uri, this.headers, this.body);
+}
+
+/// A fake peer over HTTPS with [id]'s certificate, answering as [handler]
+/// says; it records every request (for "was anything sent here").
+class SpyPeer {
+  final TlsIdentity id;
+  final HttpServer server;
+  final List<SpyReq> requests = [];
+  Future<void> Function(SpyPeer spy, HttpRequest req, String body) handler;
+  SpyPeer._(this.id, this.server, this.handler);
+
+  static Future<SpyPeer> start(
+    TlsIdentity id,
+    Future<void> Function(SpyPeer spy, HttpRequest req, String body) handler,
+  ) async {
+    final server = await HttpServer.bindSecure(
+      InternetAddress.loopbackIPv4,
+      0,
+      id.securityContext(),
+    );
+    final spy = SpyPeer._(id, server, handler);
+    server.listen((req) async {
+      try {
+        final body = await utf8.decodeStream(req);
+        final h = <String, String>{};
+        req.headers.forEach((k, v) => h[k] = v.join(','));
+        spy.requests.add(SpyReq(req.method, req.uri, h, body));
+        await spy.handler(spy, req, body);
+      } catch (_) {
+        try {
+          await req.response.close();
+        } catch (_) {}
+      }
+    });
+    return spy;
+  }
+
+  /// Requests below `/api/landrop/v1/nearby/` (not the /info probes).
+  List<SpyReq> get nearbyRequests =>
+      requests.where((r) => r.uri.path.contains('/nearby/')).toList();
+
+  int count(String suffix) =>
+      requests.where((r) => r.uri.path.endsWith(suffix)).length;
+
+  DeviceInfo get peer => DeviceInfo(
+    alias: 'Spy',
+    deviceType: 'desktop',
+    fingerprint: id.fingerprint,
+    ip: '127.0.0.1',
+    port: server.port,
+  );
+
+  Future<void> close() => server.close(force: true);
+
+  /// Answers [status] with [body].
+  static Future<void> reply(HttpRequest req, int status, String body) async {
+    req.response.statusCode = status;
+    req.response.headers.contentType = ContentType.json;
+    req.response.write(body);
+    await req.response.close();
+  }
+
+  /// A listing body with one share of [files] (id, name, size).
+  static String listing(
+    List<(String, String, int)> files, {
+    String ticket = 'lt1.spyticket',
+    String shareId = 'share1',
+  }) => jsonEncode({
+    'shares': [
+      {
+        'id': shareId,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'expiresAt': null,
+        'downloadsLeft': null,
+        'truncated': false,
+        'files': [
+          for (final f in files)
+            {'id': f.$1, 'name': f.$2, 'size': f.$3, 'mime': 'text/plain'},
+        ],
+      },
+    ],
+    'ticket': ticket,
+    'ticketExpiresIn': 600,
+  });
+}
