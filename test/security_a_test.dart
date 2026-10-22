@@ -132,7 +132,9 @@ Future<bool> _closedWithin(Socket s, Duration within) async {
   final c = Completer<bool>();
   s.listen(
     (_) {},
-    onDone: () => c.complete(true),
+    onDone: () {
+      if (!c.isCompleted) c.complete(true);
+    },
     onError: (_) {
       if (!c.isCompleted) c.complete(true);
     },
@@ -276,8 +278,18 @@ void main() {
         for (final s in idle) {
           s.destroy();
         }
-        final slow = await Socket.connect('127.0.0.1', port);
-        slow.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-A:');
+        // The server may still be releasing the slots of the sockets just
+        // destroyed above, so a connect can be refused for a moment.
+        Socket? slow;
+        for (var i = 0; i < 20 && slow == null; i++) {
+          try {
+            slow = await Socket.connect('127.0.0.1', port);
+          } on SocketException {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          }
+        }
+        expect(slow, isNotNull);
+        slow!.write('GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-A:');
         expect(await _closedWithin(slow, const Duration(seconds: 4)), isTrue);
         final r = await HttpClient().getUrl(
           Uri.parse('http://127.0.0.1:$port/'),
