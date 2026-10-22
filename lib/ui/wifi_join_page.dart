@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'dialogs.dart' show latinDigitsFormatter;
+import 'digits.dart';
 import 'hotspot_service.dart' show escapeWifiQr;
 import 'hotspot_wizard.dart' show FindDevicePanel;
+import 'l10n.dart';
 import 'widgets.dart';
 import 'wifi_join_service.dart';
 import 'wifi_qr.dart';
@@ -15,6 +18,9 @@ typedef WifiScannerBuilder = Widget Function(
     BuildContext context, void Function(String code) onCode);
 
 enum _Stage { scan, confirm, joining, joined, error }
+
+/// Why the scan or manual entry was not accepted.
+enum _Hint { notWifiQr, manualInvalid }
 
 /// Android only: scan the Wi-Fi QR code of another phone's hotspot (or type
 /// the name and password), join that network, then look for the other device
@@ -47,16 +53,16 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
   bool? _camera; // null while asking
   WifiCredentials? _creds;
   WifiJoinResult? _joined;
-  String? _error;
-  String? _hint;
-  String? _banner;
+  WifiJoinException? _error;
+  _Hint? _hint;
+  WifiJoinException? _banner;
 
   @override
   void initState() {
     super.initState();
     _lostSub = _service.lost.listen((e) {
       if (mounted && _stage == _Stage.joined) {
-        setState(() => _banner = e.message);
+        setState(() => _banner = e);
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _askCamera());
@@ -84,8 +90,7 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
     final c = parseWifiQr(code);
     setState(() {
       if (c == null) {
-        _hint = 'That QR code is not a Wi-Fi code. Scan the code shown by '
-            'the other phone\'s LanDrop hotspot.';
+        _hint = _Hint.notWifiQr;
       } else {
         _hint = null;
         _creds = c;
@@ -95,15 +100,15 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
   }
 
   void _submitManual() {
-    final ssid = _ssid.text.trim();
-    final pass = _password.text;
+    // Typed on a Persian keyboard: digits become Latin (UX.md 4.6).
+    final ssid = normalizeDigits(_ssid.text).trim();
+    final pass = normalizeDigits(_password.text);
     final c = parseWifiQr(
         'WIFI:T:${pass.isEmpty ? 'nopass' : 'WPA'};S:${escapeWifiQr(ssid)};'
         'P:${escapeWifiQr(pass)};H:$_hidden;;');
     setState(() {
       if (c == null) {
-        _hint = 'Enter the network name (up to 32 characters) and its '
-            'password (8 to 63 characters, or none for an open network).';
+        _hint = _Hint.manualInvalid;
       } else {
         _hint = null;
         _creds = c;
@@ -130,14 +135,14 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
     } on WifiJoinException catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = e;
           _stage = _Stage.error;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = wifiJoinMessage('failed', '$e');
+          _error = wifiJoinError('failed', '$e');
           _stage = _Stage.error;
         });
       }
@@ -158,13 +163,13 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Join a hotspot by QR')),
+      appBar: AppBar(title: Text(context.l.connectWifiJoinTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
             key: const Key('wifiJoinPage'),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 32),
             children: switch (_stage) {
               _Stage.scan => _scan(context),
               _Stage.confirm => _confirm(context),
@@ -180,15 +185,12 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
 
   List<Widget> _scan(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = context.l;
     final builder = widget.scannerBuilder ??
         (BuildContext _, void Function(String) onCode) =>
             WifiScannerView(onCode: onCode);
     return [
-      Text(
-          'On the other phone, open LanDrop > Connect without Wi-Fi > '
-          '"This device shares the hotspot" > Start hotspot. Then point this '
-          'camera at the QR code it shows.',
-          style: t.bodyMedium),
+      Text(l.wifiJoinScanIntro, style: t.bodyMedium),
       const SizedBox(height: 12),
       if (_camera == null)
         const Center(child: CircularProgressIndicator())
@@ -202,7 +204,7 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
           ),
         )
       else ...[
-        Text(wifiJoinMessage('camera'),
+        Text(wifiJoinMessage('camera', null, l),
             key: const Key('cameraDenied'),
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
         const SizedBox(height: 8),
@@ -210,13 +212,16 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
           key: const Key('retryCamera'),
           onPressed: _askCamera,
           icon: const Icon(Icons.photo_camera),
-          label: const Text('Allow the camera'),
+          label: Text(l.wifiJoinAllowCamera),
         ),
       ],
       if (_hint != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(_hint!,
+          padding: const EdgeInsetsDirectional.only(top: 8),
+          child: Text(
+              _hint == _Hint.notWifiQr
+                  ? l.wifiJoinNotWifiQr
+                  : l.wifiJoinManualInvalid,
               key: const Key('scanHint'),
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ),
@@ -225,32 +230,37 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
         key: const Key('manualToggle'),
         onPressed: () => setState(() => _manual = !_manual),
         icon: Icon(_manual ? Icons.expand_less : Icons.keyboard),
-        label: const Text('Enter name and password'),
+        label: Text(l.wifiJoinManualToggle),
       ),
       if (_manual) ...[
+        // Technical values: left to right, Persian digits typed as Latin.
         TextField(
           key: const Key('manualSsid'),
           controller: _ssid,
-          decoration: const InputDecoration(labelText: 'Network name'),
+          textDirection: TextDirection.ltr,
+          inputFormatters: [latinDigitsFormatter],
+          decoration: InputDecoration(labelText: l.wifiJoinNetworkName),
         ),
         TextField(
           key: const Key('manualPassword'),
           controller: _password,
           obscureText: false,
-          decoration: const InputDecoration(
-              labelText: 'Password (empty for an open network)'),
+          textDirection: TextDirection.ltr,
+          keyboardType: TextInputType.visiblePassword,
+          inputFormatters: [latinDigitsFormatter],
+          decoration: InputDecoration(labelText: l.wifiJoinPasswordLabel),
         ),
         CheckboxListTile(
           key: const Key('manualHidden'),
-          contentPadding: EdgeInsets.zero,
+          contentPadding: EdgeInsetsDirectional.zero,
           value: _hidden,
           onChanged: (v) => setState(() => _hidden = v ?? false),
-          title: const Text('Hidden network'),
+          title: Text(l.wifiJoinHidden),
         ),
         FilledButton(
           key: const Key('manualContinue'),
           onPressed: _submitManual,
-          child: const Text('Continue'),
+          child: Text(l.wifiJoinContinue),
         ),
       ],
     ];
@@ -258,30 +268,26 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
 
   List<Widget> _confirm(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = context.l;
     final c = _creds!;
     return [
-      Text('Join ${c.ssid}?',
+      Text(l.wifiJoinConfirmTitle(l.ltrValue(c.ssid)),
           key: const Key('joinConfirmTitle'), style: t.titleLarge),
       const SizedBox(height: 8),
-      Text(
-          'LanDrop will ask Android to join this Wi-Fi network. Android will '
-          'ask you to confirm. While joined, this phone may lose its '
-          'internet connection. Only LanDrop uses this network; other apps '
-          'keep using your normal connection where Android allows it.',
-          key: const Key('joinExplain'),
-          style: t.bodyMedium),
+      Text(l.wifiJoinExplain,
+          key: const Key('joinExplain'), style: t.bodyMedium),
       const SizedBox(height: 16),
       FilledButton.icon(
         key: const Key('joinButton'),
         onPressed: _join,
         icon: const Icon(Icons.wifi),
-        label: const Text('Join'),
+        label: Text(l.wifiJoinJoin),
       ),
       const SizedBox(height: 8),
       OutlinedButton(
         key: const Key('cancelJoin'),
         onPressed: () => setState(() => _stage = _Stage.scan),
-        child: const Text('Cancel'),
+        child: Text(l.commonCancel),
       ),
     ];
   }
@@ -290,47 +296,48 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
         const SizedBox(height: 24),
         const Center(child: CircularProgressIndicator()),
         const SizedBox(height: 16),
-        Text(
-            'Joining ${_creds?.ssid ?? ''}… Confirm the Android prompt when '
-            'it appears.',
-            key: const Key('joining'),
-            textAlign: TextAlign.center),
+        Text(context.l.wifiJoinJoining(context.l.ltrValue(_creds?.ssid ?? '')),
+            key: const Key('joining'), textAlign: TextAlign.center),
       ];
 
   List<Widget> _errorView(BuildContext context) => [
-        Text(_error ?? '',
+        Text(_error?.localized(context.l) ?? '',
             key: const Key('joinError'),
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
         const SizedBox(height: 16),
         FilledButton(
           key: const Key('joinRetry'),
           onPressed: _join,
-          child: const Text('Try again'),
+          child: Text(context.l.commonTryAgain),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
           key: const Key('joinBack'),
           onPressed: () => setState(() => _stage = _Stage.scan),
-          child: const Text('Scan again'),
+          child: Text(context.l.wifiJoinScanAgain),
         ),
       ];
 
   List<Widget> _done(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final l = context.l;
     final gw = _joined?.gateway;
+    final ssid = _joined?.ssid.isNotEmpty == true
+        ? _joined!.ssid
+        : _creds?.ssid ?? '';
     return [
-      Text('Joined ${_joined?.ssid.isNotEmpty == true ? _joined!.ssid : _creds?.ssid ?? ''}',
+      Text(l.wifiJoinJoined(l.ltrValue(ssid)),
           key: const Key('joinedTitle'), style: t.titleLarge),
       if (_banner != null)
         Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(_banner!,
+          padding: const EdgeInsetsDirectional.only(top: 8),
+          child: Text(_banner!.localized(l),
               key: const Key('joinLost'),
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ),
-      const SectionHeader('Find the other device'),
+      SectionHeader(l.wifiJoinFindTitle),
       FindDevicePanel(
-        label: 'Find the other device',
+        label: l.wifiJoinFindTitle,
         autoStart: true,
         localAddresses: widget.localAddresses,
         extraGateways: [?gw],
@@ -340,7 +347,7 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
         key: const Key('leaveNetwork'),
         onPressed: _leave,
         icon: const Icon(Icons.wifi_off),
-        label: const Text('Leave network'),
+        label: Text(l.wifiJoinLeave),
       ),
     ];
   }

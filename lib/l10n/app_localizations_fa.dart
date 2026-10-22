@@ -1146,4 +1146,721 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get diagReportNote =>
       'این گزارش به انگلیسی است تا پشتیبانی بتواند آن را بخواند.';
+
+  @override
+  String get platformAndroid => 'اندروید';
+
+  @override
+  String get platformIos => 'آیفون / آیپد';
+
+  @override
+  String get platformMac => 'مک';
+
+  @override
+  String get platformWindows => 'ویندوز';
+
+  @override
+  String get platformLinux => 'لینوکس';
+
+  @override
+  String get platformOther => 'دستگاه‌های دیگر';
+
+  @override
+  String get hotspotShareAndroid1 =>
+      'دکمهٔ «شروع هات‌اسپات» را در پایین بزنید: LanDrop یک هات‌اسپات خصوصی می‌سازد (اینترنت همراه به اشتراک گذاشته نمی‌شود) و یک کد QR نشان می‌دهد که دستگاه دیگر برای وصل شدن آن را اسکن می‌کند. ممکن است این گوشی تا وقتی هات‌اسپات روشن است از وای‌فای خودش جدا شود.';
+
+  @override
+  String get hotspotShareAndroid2 =>
+      'یا از هات‌اسپات معمولی گوشی استفاده کنید: تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت > نقطه اتصال Wi-Fi (نام‌ها بسته به برند گوشی کمی فرق دارد). آن را روشن کنید و نام و رمز آن را یادداشت کنید.';
+
+  @override
+  String get hotspotShareIos1 =>
+      'به Settings > Personal Hotspot (تنظیمات > هات‌اسپات شخصی) بروید و «Allow Others to Join» را روشن کنید. (طرح اینترنت همراه شما باید اجازهٔ استفاده از هات‌اسپات را بدهد.)';
+
+  @override
+  String get hotspotShareIos2 =>
+      'این صفحه را تا وقتی دستگاه دیگر وصل شود باز نگه دارید: رمز وای‌فای در آن نمایش داده می‌شود.';
+
+  @override
+  String get hotspotShareMac1 =>
+      'ساده‌ترین راه: برعکس عمل کنید. بگذارید دستگاه دیگر هات‌اسپات بسازد و از این مک به آن وصل شوید (در بالا «این دستگاه به آن وصل می‌شود» را انتخاب کنید).';
+
+  @override
+  String get hotspotShareMac2 =>
+      'اگر باز هم می‌خواهید از این مک هات‌اسپات بسازید: System Settings > General > Sharing را باز کنید، روی (i) کنار Internet Sharing کلیک کنید، اتصال خود (مثلاً Ethernet) را برای رایانه‌هایی که از Wi-Fi استفاده می‌کنند به اشتراک بگذارید، نام و رمز شبکه را تعیین کنید و سپس Internet Sharing را روشن کنید.';
+
+  @override
+  String get hotspotShareWindows1 =>
+      'به Settings > Network & internet > Mobile hotspot بروید.';
+
+  @override
+  String get hotspotShareWindows2 =>
+      '«Mobile hotspot» را روشن کنید. نام و رمز شبکه در همان صفحه نمایش داده می‌شود.';
+
+  @override
+  String hotspotShareLinux1(String command) {
+    return 'به Settings > Wi-Fi بروید، منوی (⋮) را باز کنید و «Turn On Wi-Fi Hotspot…» را انتخاب کنید. در میزکارهای دیگر از NetworkManager استفاده کنید: یک شبکهٔ Wi-Fi جدید با حالت «Hotspot» بسازید، یا این فرمان را اجرا کنید: $command';
+  }
+
+  @override
+  String get hotspotShareLinux2 => 'نام و رمز شبکه را یادداشت کنید.';
+
+  @override
+  String get hotspotShareOther1 =>
+      'هات‌اسپات (اشتراک‌گذاری اینترنت) را در تنظیمات شبکهٔ این دستگاه روشن کنید و نام و رمز آن را یادداشت کنید.';
+
+  @override
+  String get hotspotJoinAndroid1 =>
+      'به تنظیمات > Wi-Fi بروید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا نماد QR کنار «افزودن شبکه» را بزنید و کدی را که روی دستگاه دیگر نمایش داده می‌شود اسکن کنید.';
+
+  @override
+  String get hotspotJoinIos1 =>
+      'به Settings > Wi-Fi بروید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا دوربین (Camera) را به سمت کد QR روی دستگاه دیگر بگیرید و «Join network» را بزنید.';
+
+  @override
+  String get hotspotJoinMac1 =>
+      'روی نماد Wi-Fi در نوار منو (یا Control Center) کلیک کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.';
+
+  @override
+  String get hotspotJoinWindows1 =>
+      'روی نماد شبکه در نوار وظیفه (taskbar) کلیک کنید، فهرست Wi-Fi را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.';
+
+  @override
+  String hotspotJoinLinux1(String command) {
+    return 'منوی شبکه (بالا سمت راست) > Wi-Fi > Select Network را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا این فرمان را اجرا کنید: $command';
+  }
+
+  @override
+  String get hotspotJoinOther1 =>
+      'تنظیمات وای‌فای را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.';
+
+  @override
+  String get hotspotStepShareOther =>
+      'روی دستگاه دیگر، مثل هر شبکهٔ وای‌فای دیگری به این هات‌اسپات وصل شوید (راهنما در پایین).';
+
+  @override
+  String get hotspotStepVpn =>
+      'اگر VPN (فیلترشکن) روشن است، خاموشش کنید. اینترنت همراه می‌تواند روشن بماند.';
+
+  @override
+  String get hotspotStepOpenBoth =>
+      'LanDrop را روی هر دو دستگاه باز کنید، سپس «وصل شدم، دستگاه دیگر را پیدا کن» را بزنید.';
+
+  @override
+  String get hotspotWizardTitle => 'اتصال بدون وای‌فای';
+
+  @override
+  String get hotspotIntro =>
+      'به روتر (مودم) نیازی نیست: یک دستگاه هات‌اسپات وای‌فای می‌سازد، دستگاه دیگر به آن وصل می‌شود و LanDrop دستگاه دیگر را در همان شبکه پیدا می‌کند. وقتی وای‌فای دستگاه‌ها را از هم جدا نگه می‌دارد (شبکه‌های مهمان، اداره یا هتل) هم این روش کمک می‌کند. فایل‌ها مستقیم بین دو دستگاه جابه‌جا می‌شوند و از اینترنت همراه استفاده نمی‌کنند.';
+
+  @override
+  String get hotspotRoleShare => 'این دستگاه هات‌اسپات می‌سازد';
+
+  @override
+  String get hotspotRoleJoin => 'این دستگاه به آن وصل می‌شود';
+
+  @override
+  String wizardOnThisDevice(String platform) {
+    return 'روی این دستگاه ($platform)';
+  }
+
+  @override
+  String get hotspotScanQr => 'اسکن کد QR هات‌اسپات';
+
+  @override
+  String get hotspotOtherJoin => 'روی دستگاه دیگر: به هات‌اسپات وصل شوید';
+
+  @override
+  String get hotspotOtherShare => 'روی دستگاه دیگر: هات‌اسپات بسازید';
+
+  @override
+  String get hotspotFindLabel => 'وصل شدم، دستگاه دیگر را پیدا کن';
+
+  @override
+  String get hotspotCableInstead => 'از کابل استفاده می‌کنید؟ اترنت یا USB';
+
+  @override
+  String get hotspotStart => 'شروع هات‌اسپات';
+
+  @override
+  String get hotspotOn => 'هات‌اسپات روشن است';
+
+  @override
+  String hotspotName(String ssid) {
+    return 'نام: $ssid';
+  }
+
+  @override
+  String get hotspotNoPassword => 'بدون رمز';
+
+  @override
+  String hotspotPassword(String password) {
+    return 'رمز: $password';
+  }
+
+  @override
+  String get hotspotScanHint =>
+      'برای وصل شدن، کد را با دوربین دستگاه دیگر اسکن کنید (اندروید ۱۰ به بالا، آیفون). هات‌اسپات با زدن «توقف هات‌اسپات» یا بستن LanDrop خاموش می‌شود.';
+
+  @override
+  String get hotspotStop => 'توقف هات‌اسپات';
+
+  @override
+  String get hotspotQrSemantics => 'کد QR برای وصل شدن به این هات‌اسپات';
+
+  @override
+  String get findPhaseNetwork => 'در حال بررسی شبکهٔ جدید…';
+
+  @override
+  String get findPhaseProbeHotspot => 'در حال بررسی نشانی‌های معمول هات‌اسپات…';
+
+  @override
+  String get findPhaseScan => 'در حال جست‌وجوی شبکه…';
+
+  @override
+  String get findPhaseWhy => 'چیزی پیدا نشد. در حال بررسی علت…';
+
+  @override
+  String get findNothingHintHotspot =>
+      'بررسی کنید هر دو دستگاه به یک هات‌اسپات وصل باشند و LanDrop روی هر دو باز باشد. سپس دوباره امتحان کنید، یا با «افزودن با IP» نشانی‌ای را که روی دستگاه دیگر نمایش داده می‌شود وارد کنید.';
+
+  @override
+  String findFound(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString دستگاه پیدا شد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get findBackToDevices => 'بازگشت به دستگاه‌ها';
+
+  @override
+  String get findNothingTitle => 'هنوز دستگاهی پیدا نشد';
+
+  @override
+  String get cableEthMac1 =>
+      'کابل اترنت را به هر دو رایانه وصل کنید (مبدل اترنت USB یا Thunderbolt هم کار می‌کند). با کابل مستقیم یا با روتر، مراحل یکی است.';
+
+  @override
+  String get cableEthMac2 =>
+      'به System Settings > Network بروید. اگر مبدل در فهرست نیست، روی «…» > «Add Service…» (یا دکمهٔ +) کلیک کنید، مبدل اترنت را انتخاب کنید و Create را بزنید.';
+
+  @override
+  String cableEthMac3(String prefix) {
+    return 'آن را انتخاب کنید و «Configure IPv4» را روی «Using DHCP» بگذارید. بدون روتر، مک به خودش نشانی‌ای می‌دهد که با $prefix شروع می‌شود. این طبیعی است.';
+  }
+
+  @override
+  String get cableEthPlugBoth => 'کابل اترنت را به هر دو رایانه وصل کنید.';
+
+  @override
+  String cableEthWindows2(String prefix) {
+    return 'به Settings > Network & internet > Ethernet بروید. احتمالاً «No Internet» یا «Unidentified network» نوشته شده است: اشکالی ندارد، ویندوز به خودش نشانی‌ای می‌دهد که با $prefix شروع می‌شود.';
+  }
+
+  @override
+  String get cableEthWindows3 =>
+      'در بخش «IP assignment» گزینهٔ «Automatic (DHCP)» را نگه دارید. وقتی Windows Firewall پرسید، به LanDrop در شبکه‌های Private اجازه دهید. اگر شبکه «Public» علامت خورده است، آن را Private کنید.';
+
+  @override
+  String cableEthLinux2(String command) {
+    return 'به Settings > Network بروید، اتصال سیمی را انتخاب کنید و تنظیمات آن > IPv4 را باز کنید. روش «Link-Local Only» را انتخاب و اعمال کنید. یا این فرمان را اجرا کنید: $command';
+  }
+
+  @override
+  String get cableEthLinux3 =>
+      'اتصال را یک بار خاموش و روشن کنید تا نشانی بگیرد.';
+
+  @override
+  String get cableEthOther1 =>
+      'یک کابل اترنت (در صورت نیاز با مبدل) به هر دو رایانه وصل کنید و مطمئن شوید شبکهٔ سیمی نشانی را خودکار می‌گیرد (DHCP یا «link-local»).';
+
+  @override
+  String get cableUsbAndroid1 =>
+      'اتصال را همین گوشی به اشتراک می‌گذارد: آن را با کابل USB به رایانه وصل کنید.';
+
+  @override
+  String get cableUsbAndroid2 =>
+      'به تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت بروید (نام‌ها بسته به برند گوشی کمی فرق دارد) و «اشتراک‌گذاری اینترنت با USB» را روشن کنید. این گزینه فقط وقتی رایانه وصل است روشن می‌شود.';
+
+  @override
+  String get cableUsbIos1 =>
+      'آیفون را با کابل USB به رایانه وصل کنید و اگر پرسید، «Trust» را بزنید.';
+
+  @override
+  String get cableUsbIos2 =>
+      'به Settings > Personal Hotspot بروید و «Allow Others to Join» را روشن کنید. روی رایانهٔ ویندوزی باید iTunes یا برنامهٔ Apple Devices نصب باشد.';
+
+  @override
+  String get cableUsbMac1 =>
+      'گوشی را با کابل USB به این مک وصل کنید. روی گوشی Personal Hotspot (آیفون) یا «اشتراک‌گذاری اینترنت با USB» (اندروید) را روشن کنید.';
+
+  @override
+  String get cableUsbMac2 =>
+      'مک یک مبدل شبکهٔ جدید در System Settings > Network نشان می‌دهد (مثلاً «iPhone USB» یا «RNDIS/Ethernet Gadget»). اشتراک اینترنت با USB در اندروید روی مک به درایوری نیاز دارد که همراه سیستم نیست؛ آیفون بدون تنظیم اضافه کار می‌کند.';
+
+  @override
+  String get cableUsbWindows1 =>
+      'گوشی را با کابل USB به این رایانه وصل کنید. روی گوشی «اشتراک‌گذاری اینترنت با USB» (اندروید) یا Personal Hotspot (آیفون) را روشن کنید.';
+
+  @override
+  String get cableUsbWindows2 =>
+      'ویندوز یک مبدل جدید اضافه می‌کند (در Settings > Network & internet > Advanced network settings دیده می‌شود). صبر کنید تا Connected نوشته شود.';
+
+  @override
+  String get cableUsbLinux1 =>
+      'گوشی را با کابل USB به این رایانه وصل کنید. روی گوشی «اشتراک‌گذاری اینترنت با USB» (اندروید) یا Personal Hotspot (آیفون) را روشن کنید.';
+
+  @override
+  String get cableUsbLinux2 =>
+      'یک اتصال سیمی جدید ظاهر می‌شود (با نامی مثل usb0، enx… یا eth1). معمولاً خودش وصل می‌شود.';
+
+  @override
+  String get cableUsbOther1 =>
+      'گوشی را با کابل USB وصل کنید و «اشتراک‌گذاری اینترنت با USB» یا Personal Hotspot را روشن کنید؛ سپس رایانه یک مبدل شبکهٔ جدید خواهد داشت.';
+
+  @override
+  String get cableStepWait =>
+      'چند ثانیه صبر کنید: بدون روتر، ممکن است تا یک دقیقه طول بکشد تا هر دو رایانه نشانی بگیرند.';
+
+  @override
+  String get cableStepVpn =>
+      'اگر VPN (فیلترشکن) روشن است، خاموشش کنید. اکنون دستگاه دیگر اتصالش را با این دستگاه به اشتراک می‌گذارد.';
+
+  @override
+  String get cableStepOpenBoth =>
+      'LanDrop را روی هر دو دستگاه باز کنید، سپس «کابل وصل است، دستگاه دیگر را پیدا کن» را بزنید.';
+
+  @override
+  String get cableIntro =>
+      'به وای‌فای یا روتر نیازی نیست: دو دستگاه را با کابل به هم وصل کنید تا LanDrop دستگاه دیگر را از همین راه پیدا کند. فایل‌ها مستقیم از طریق کابل جابه‌جا می‌شوند.';
+
+  @override
+  String get cableKindEthernet => 'کابل اترنت';
+
+  @override
+  String get cableKindUsb => 'اشتراک اینترنت با USB';
+
+  @override
+  String get cableTetherHint =>
+      'روی گوشی: اندروید > تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت > اشتراک‌گذاری اینترنت با USB. آیفون > Settings > Personal Hotspot.';
+
+  @override
+  String get cableFindLabel => 'کابل وصل است، دستگاه دیگر را پیدا کن';
+
+  @override
+  String get cablePhaseProbe => 'در حال بررسی نشانی‌های معمول کابل و USB…';
+
+  @override
+  String get cableNothingHint =>
+      'کابل را بررسی کنید، مطمئن شوید مبدل «وصل» نشان داده می‌شود و LanDrop روی هر دو دستگاه باز است. گرفتن نشانی با کابل مستقیم ممکن است تا یک دقیقه طول بکشد. سپس دوباره امتحان کنید، یا با «افزودن با IP» نشانی‌ای را که روی دستگاه دیگر نمایش داده می‌شود وارد کنید.';
+
+  @override
+  String get wifiDirectTitle => 'وای‌فای دایرکت';
+
+  @override
+  String get wifiDirectIntro =>
+      'دو دستگاه را بدون روتر مستقیم به هم وصل کنید. پس از اتصال، مثل همیشه فایل بفرستید.';
+
+  @override
+  String get wifiDirectTry =>
+      'این‌ها را امتحان کنید: وای‌فای را روشن کنید، دعوت را روی دستگاه دیگر بپذیرید، صفحهٔ هر دو را روشن و آن‌ها را نزدیک هم نگه دارید.';
+
+  @override
+  String get wifiDirectRoleOwner => 'این دستگاه میزبان گروه است.';
+
+  @override
+  String get wifiDirectRoleClient => 'به گروه دستگاه دیگر پیوستید.';
+
+  @override
+  String get wifiDirectConnected => 'با وای‌فای دایرکت وصل است';
+
+  @override
+  String wifiDirectNetwork(String ssid) {
+    return 'شبکه: $ssid';
+  }
+
+  @override
+  String wifiDirectHost(String address) {
+    return 'نشانی میزبان: $address';
+  }
+
+  @override
+  String get wifiDirectLooking => 'در حال جست‌وجوی دستگاه‌های LanDrop…';
+
+  @override
+  String get wifiDirectNone =>
+      'هنوز هیچ دستگاه LanDrop پاسخ نداده است. مطمئن شوید LanDrop روی دستگاه دیگر باز است، سپس دوباره جست‌وجو کنید.';
+
+  @override
+  String get wifiDirectSearchAgain => 'جست‌وجوی دوباره';
+
+  @override
+  String get wifiDirectDisconnect => 'قطع اتصال';
+
+  @override
+  String get wifiDirectTapHint =>
+      'برای اتصال، روی یک دستگاه بزنید. روی دستگاه دیگر پنجرهٔ دعوت اندروید باز می‌شود و باید آن را بپذیرد.';
+
+  @override
+  String get wifiDirectLookingShort => 'در حال جست‌وجو…';
+
+  @override
+  String get wifiDirectEmpty =>
+      'هنوز دستگاهی پیدا نشد. وای‌فای دایرکت را روی دستگاه دیگر هم باز کنید.';
+
+  @override
+  String get wifiDirectInvited =>
+      'دعوت فرستاده شد. آن را روی دستگاه دیگر بپذیرید.';
+
+  @override
+  String get wifiDirectStatusConnected => 'وصل';
+
+  @override
+  String get wifiDirectStatusFailed => 'ناموفق';
+
+  @override
+  String get wifiDirectStatusAvailable => 'در دسترس';
+
+  @override
+  String get wifiDirectStatusUnavailable => 'در دسترس نیست';
+
+  @override
+  String get wifiDirectCreateGroup => 'ساختن گروه در اینجا';
+
+  @override
+  String get wifiDirectCreateHint =>
+      '«ساختن گروه در اینجا» این دستگاه را میزبان می‌کند تا دستگاه دیگر بتواند از صفحهٔ وای‌فای دایرکت خودش آن را پیدا کند و به آن بپیوندد. صفحهٔ هر دو را روشن نگه دارید.';
+
+  @override
+  String get wifiJoinNotWifiQr =>
+      'این کد QR، کد وای‌فای نیست. کدی را اسکن کنید که هات‌اسپات LanDrop روی گوشی دیگر نشان می‌دهد.';
+
+  @override
+  String get wifiJoinManualInvalid =>
+      'نام شبکه (حداکثر ۳۲ نویسه) و رمز آن (۸ تا ۶۳ نویسه، یا خالی برای شبکهٔ باز) را وارد کنید.';
+
+  @override
+  String get wifiJoinScanIntro =>
+      'روی گوشی دیگر، LanDrop را باز کنید و به «اتصال بدون وای‌فای» > «این دستگاه هات‌اسپات می‌سازد» > «شروع هات‌اسپات» بروید. سپس دوربین این گوشی را به سمت کد QR آن بگیرید.';
+
+  @override
+  String get wifiJoinAllowCamera => 'اجازهٔ دسترسی به دوربین';
+
+  @override
+  String get wifiJoinManualToggle => 'وارد کردن نام و رمز';
+
+  @override
+  String get wifiJoinNetworkName => 'نام شبکه';
+
+  @override
+  String get wifiJoinPasswordLabel => 'رمز (برای شبکهٔ باز خالی بگذارید)';
+
+  @override
+  String get wifiJoinHidden => 'شبکهٔ پنهان';
+
+  @override
+  String get wifiJoinContinue => 'ادامه';
+
+  @override
+  String wifiJoinConfirmTitle(String ssid) {
+    return 'به $ssid وصل شوید؟';
+  }
+
+  @override
+  String get wifiJoinExplain =>
+      'LanDrop از اندروید می‌خواهد به این شبکهٔ وای‌فای وصل شود و اندروید از شما تأیید می‌خواهد. تا وقتی وصل هستید، ممکن است اینترنت این گوشی قطع شود. فقط LanDrop از این شبکه استفاده می‌کند؛ برنامه‌های دیگر تا جایی که اندروید اجازه دهد از اتصال معمول شما استفاده می‌کنند.';
+
+  @override
+  String get wifiJoinJoin => 'وصل شو';
+
+  @override
+  String wifiJoinJoining(String ssid) {
+    return 'در حال وصل شدن به $ssid… وقتی پیام اندروید ظاهر شد، آن را تأیید کنید.';
+  }
+
+  @override
+  String get wifiJoinScanAgain => 'اسکن دوباره';
+
+  @override
+  String wifiJoinJoined(String ssid) {
+    return 'به $ssid وصل شد';
+  }
+
+  @override
+  String get wifiJoinFindTitle => 'پیدا کردن دستگاه دیگر';
+
+  @override
+  String get wifiJoinLeave => 'خروج از شبکه';
+
+  @override
+  String get errHotspotUnsupportedPlatform =>
+      'فقط در اندروید می‌توان از داخل LanDrop هات‌اسپات ساخت.';
+
+  @override
+  String get errHotspotUnsupportedSdk =>
+      'این نسخهٔ اندروید اجازه نمی‌دهد برنامه‌ها هات‌اسپات بسازند. به‌جای آن از تنظیمات > نقطه اتصال استفاده کنید.';
+
+  @override
+  String get errHotspotPermissionNearby =>
+      'LanDrop برای ساختن هات‌اسپات به اجازهٔ «دستگاه‌های اطراف» نیاز دارد.';
+
+  @override
+  String get errHotspotPermissionLocation =>
+      'LanDrop برای ساختن هات‌اسپات به اجازهٔ دسترسی به موقعیت مکانی نیاز دارد (اندروید آن را برای قابلیت‌های وای‌فای لازم می‌داند؛ LanDrop از موقعیت مکانی شما استفاده نمی‌کند).';
+
+  @override
+  String get errHotspotNoName =>
+      'هات‌اسپات روشن شد، اما اندروید نام آن را اعلام نکرد.';
+
+  @override
+  String get errHotspotUnavailable => 'ساختن هات‌اسپات در اینجا ممکن نیست.';
+
+  @override
+  String errHotspotRefused(String detail) {
+    return 'اندروید اجازه نداد: $detail. در اندروید ۱۲ و قدیمی‌تر، «موقعیت مکانی» هم باید روشن باشد.';
+  }
+
+  @override
+  String get errHotspotPermissionMissing => 'اجازه داده نشده است';
+
+  @override
+  String get errHotspotIncompatible =>
+      'اندروید الان نمی‌تواند آن را روشن کند؛ معمولاً چون هات‌اسپات معمولی یا اشتراک‌گذاری اینترنت روشن است. آن را خاموش کنید، یا به‌جای این روش از همان استفاده کنید.';
+
+  @override
+  String get errHotspotDisallowed =>
+      'ساختن هات‌اسپات روی این دستگاه مجاز نیست (مثلاً به دلیل نمایهٔ کاری یا محدودیت اپراتور).';
+
+  @override
+  String get errHotspotNoChannel =>
+      'کانال وای‌فای آزادی نیست. کمی بعد دوباره امتحان کنید.';
+
+  @override
+  String get errHotspotBusy => 'یک هات‌اسپات در حال روشن شدن است.';
+
+  @override
+  String get errHotspotCancelled => 'هات‌اسپات متوقف شد.';
+
+  @override
+  String get errHotspotFailed => 'هات‌اسپات روشن نشد.';
+
+  @override
+  String errHotspotFailedDetail(String detail) {
+    return 'هات‌اسپات روشن نشد: $detail.';
+  }
+
+  @override
+  String errHotspotStartError(String error) {
+    return 'هات‌اسپات روشن نشد: $error';
+  }
+
+  @override
+  String get errWifiDirectUnsupported =>
+      'وای‌فای دایرکت روی این دستگاه در دسترس نیست.';
+
+  @override
+  String get errWifiDirectWifiOff =>
+      'وای‌فای خاموش است. وای‌فای را روشن کنید (به روتر نیازی نیست)، سپس دوباره امتحان کنید.';
+
+  @override
+  String get errWifiDirectPermission =>
+      'LanDrop برای پیدا کردن دستگاه‌های اطراف به اجازه نیاز دارد. اجازه دهید، و در اندروید ۱۲ و قدیمی‌تر «موقعیت مکانی» را هم روشن کنید.';
+
+  @override
+  String get errWifiDirectBusy =>
+      'وای‌فای دایرکت مشغول است. کمی صبر کنید و دوباره امتحان کنید، یا اول «قطع اتصال» را بزنید.';
+
+  @override
+  String get errWifiDirectNotReady =>
+      'وای‌فای دایرکت هنوز آماده نیست. دوباره امتحان کنید.';
+
+  @override
+  String get errWifiDirectFailed =>
+      'وای‌فای دایرکت کار نکرد. وای‌فای را خاموش و روشن کنید و دوباره امتحان کنید.';
+
+  @override
+  String errWifiDirectFailedDetail(String detail) {
+    return 'وای‌فای دایرکت کار نکرد ($detail). وای‌فای را خاموش و روشن کنید و دوباره امتحان کنید.';
+  }
+
+  @override
+  String get errWifiJoinUnsupported =>
+      'برای وصل شدن به شبکهٔ وای‌فای از داخل LanDrop، اندروید ۷ یا جدیدتر لازم است. به‌جای آن از تنظیمات وای‌فای وصل شوید.';
+
+  @override
+  String get errWifiJoinCamera =>
+      'LanDrop برای اسکن کد QR به دوربین نیاز دارد. در تنظیمات برنامه اجازه دهید، یا نام و رمز را دستی وارد کنید.';
+
+  @override
+  String get errWifiJoinTimeout =>
+      'اندروید به شبکه وصل نشد. بررسی کنید هات‌اسپات گوشی دیگر روشن و نزدیک باشد، رمز درست باشد و پیام اندروید را رد نکرده باشید. سپس دوباره امتحان کنید.';
+
+  @override
+  String get errWifiJoinLost =>
+      'شبکه قطع شد. بررسی کنید هات‌اسپات هنوز روشن باشد، سپس دوباره اسکن کنید.';
+
+  @override
+  String get errWifiJoinUnsupportedSecurity =>
+      'این شبکه از نوع امنیتی قدیمی (WEP) استفاده می‌کند که اندروید دیگر اجازهٔ اتصال برنامه‌ها به آن را نمی‌دهد. به‌جای آن از تنظیمات وای‌فای وصل شوید.';
+
+  @override
+  String get errWifiJoinPermission =>
+      'اندروید به LanDrop اجازهٔ تغییر شبکه را نداد. به‌جای آن از تنظیمات وای‌فای وصل شوید.';
+
+  @override
+  String get errWifiJoinFailed =>
+      'اتصال به شبکه ممکن نشد. دوباره امتحان کنید، یا از تنظیمات وای‌فای وصل شوید.';
+
+  @override
+  String errWifiJoinFailedDetail(String detail) {
+    return 'اتصال به شبکه ممکن نشد ($detail). دوباره امتحان کنید، یا از تنظیمات وای‌فای وصل شوید.';
+  }
+
+  @override
+  String errorWebHttpStart(String error) {
+    return 'HTTP ساده برای مرورگرها شروع نشد: $error';
+  }
+
+  @override
+  String get pickFilesTitle => 'انتخاب فایل برای ارسال';
+
+  @override
+  String get pickFolderTitle => 'انتخاب پوشه برای ارسال';
+
+  @override
+  String get helperTitle => 'کمک برای اتصال';
+
+  @override
+  String get helperChecking => 'در حال بررسی اتصال شما…';
+
+  @override
+  String helperFound(String name) {
+    return '$name پیدا شد!';
+  }
+
+  @override
+  String get helperCheckFine => 'روی این دستگاه مشکلی دیده نمی‌شود.';
+
+  @override
+  String get helperQ1 => 'آیا هر دو دستگاه به یک وای‌فای وصل هستند؟';
+
+  @override
+  String get helperQ1Same => 'بله، یک وای‌فای';
+
+  @override
+  String get helperQ1Different => 'نه، یا وای‌فای نداریم';
+
+  @override
+  String get helperQ1Cable => 'با کابل وصل می‌کنم';
+
+  @override
+  String get helperChecklist =>
+      'LanDrop را روی دستگاه دیگر باز کنید و صفحه‌اش را روشن نگه دارید. اگر VPN (فیلترشکن) روشن است، خاموشش کنید.';
+
+  @override
+  String get helperSearchAgain => 'دوباره جست‌وجو کن';
+
+  @override
+  String get helperSameWifiNothing =>
+      'مطمئن شوید هر دو دستگاه به یک شبکهٔ وای‌فای وصل‌اند (نه شبکهٔ مهمان) و LanDrop روی هر دو باز است، سپس دوباره جست‌وجو کنید.';
+
+  @override
+  String get helperBlocked =>
+      'ممکن است این وای‌فای اجازهٔ ارتباط دستگاه‌ها با هم را ندهد. بیایید آن‌ها را مستقیم به هم وصل کنیم.';
+
+  @override
+  String get helperConnectDirectly => 'اتصال مستقیم';
+
+  @override
+  String get helperQ2 => 'دستگاه دیگر چیست؟';
+
+  @override
+  String get helperQ2Android => 'گوشی اندروید';
+
+  @override
+  String get helperQ2Iphone => 'آیفون';
+
+  @override
+  String get helperQ2Computer => 'رایانه';
+
+  @override
+  String get helperQ2Browser => 'فقط مرورگر';
+
+  @override
+  String get helperRecommended => 'پیشنهادی';
+
+  @override
+  String get helperMethodShareQrTitle => 'از این گوشی هات‌اسپات بسازید';
+
+  @override
+  String get helperMethodShareQrBody =>
+      'از اینترنت استفاده نمی‌شود. گوشی دیگر کد را اسکن می‌کند تا وصل شود.';
+
+  @override
+  String get helperMethodShareTitle => 'از این دستگاه هات‌اسپات بسازید';
+
+  @override
+  String get helperMethodShareBody =>
+      'از اینترنت استفاده نمی‌شود. دستگاه دیگر مثل هر وای‌فای دیگری به این هات‌اسپات وصل می‌شود.';
+
+  @override
+  String get helperMethodJoinTitle => 'به هات‌اسپات دستگاه دیگر وصل شوید';
+
+  @override
+  String get helperMethodJoinBody =>
+      'هات‌اسپات دستگاه دیگر را روشن کنید، سپس از این دستگاه به آن وصل شوید. از اینترنت استفاده نمی‌شود.';
+
+  @override
+  String get helperMethodJoinQrTitle => 'کد هات‌اسپات گوشی دیگر را اسکن کنید';
+
+  @override
+  String get helperMethodJoinQrBody =>
+      'وقتی گوشی دیگر با LanDrop هات‌اسپات می‌سازد، این گوشی کد QR آن را اسکن می‌کند و وصل می‌شود.';
+
+  @override
+  String get helperMethodWifiDirectTitle => 'استفاده از وای‌فای دایرکت';
+
+  @override
+  String get helperMethodWifiDirectBody =>
+      'گوشی به گوشی، بدون روتر. هر دو گوشی باید اندروید باشند.';
+
+  @override
+  String get helperOpenWifiDirect => 'باز کردن وای‌فای دایرکت';
+
+  @override
+  String get helperMethodBrowserTitle => 'استفاده از مرورگر روی دستگاه دیگر';
+
+  @override
+  String get helperMethodBrowserBody =>
+      'نیازی به نصب نیست: دستگاه دیگر یک لینک را در مرورگرش باز می‌کند تا فایل بفرستد یا دانلود کند. هر دو دستگاه باید به یک وای‌فای یا هات‌اسپات وصل باشند.';
+
+  @override
+  String get helperOpenShares => 'باز کردن صفحهٔ اشتراک';
+
+  @override
+  String get helperOnThisDevice => 'روی این دستگاه';
+
+  @override
+  String get helperOnOtherDevice => 'روی دستگاه دیگر';
+
+  @override
+  String get helperOtherWays => 'راه‌های دیگر';
+
+  @override
+  String get helperTryAnother => 'راه دیگری را امتحان کنید';
+
+  @override
+  String get helperCopyReport => 'کپی گزارش اتصال';
+
+  @override
+  String get wifiJoinCameraFailed =>
+      'دوربین روشن نشد. به‌جای آن، نام و رمز را در پایین وارد کنید.';
 }

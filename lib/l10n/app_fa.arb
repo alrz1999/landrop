@@ -435,5 +435,418 @@
   "diagCopyReport": "کپی گزارش",
   "diagRunAgain": "دوباره بررسی کن",
   "diagDetails": "جزئیات",
-  "diagReportNote": "این گزارش به انگلیسی است تا پشتیبانی بتواند آن را بخواند."
+  "diagReportNote": "این گزارش به انگلیسی است تا پشتیبانی بتواند آن را بخواند.",
+  "platformAndroid": "اندروید",
+  "platformIos": "آیفون / آیپد",
+  "platformMac": "مک",
+  "platformWindows": "ویندوز",
+  "platformLinux": "لینوکس",
+  "platformOther": "دستگاه‌های دیگر",
+  "hotspotShareAndroid1": "دکمهٔ «شروع هات‌اسپات» را در پایین بزنید: LanDrop یک هات‌اسپات خصوصی می‌سازد (اینترنت همراه به اشتراک گذاشته نمی‌شود) و یک کد QR نشان می‌دهد که دستگاه دیگر برای وصل شدن آن را اسکن می‌کند. ممکن است این گوشی تا وقتی هات‌اسپات روشن است از وای‌فای خودش جدا شود.",
+  "hotspotShareAndroid2": "یا از هات‌اسپات معمولی گوشی استفاده کنید: تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت > نقطه اتصال Wi-Fi (نام‌ها بسته به برند گوشی کمی فرق دارد). آن را روشن کنید و نام و رمز آن را یادداشت کنید.",
+  "@hotspotShareAndroid2": {
+    "description": "REVIEW: Persian Android menu names (AOSP: «نقطه اتصال و اشتراک‌گذاری اینترنت», «نقطه اتصال Wi-Fi»); Samsung/Xiaomi differ."
+  },
+  "hotspotShareIos1": "به Settings > Personal Hotspot (تنظیمات > هات‌اسپات شخصی) بروید و «Allow Others to Join» را روشن کنید. (طرح اینترنت همراه شما باید اجازهٔ استفاده از هات‌اسپات را بدهد.)",
+  "@hotspotShareIos1": {
+    "description": "REVIEW: iOS has no Persian system language, so the iOS labels stay English with a Persian gloss."
+  },
+  "hotspotShareIos2": "این صفحه را تا وقتی دستگاه دیگر وصل شود باز نگه دارید: رمز وای‌فای در آن نمایش داده می‌شود.",
+  "hotspotShareMac1": "ساده‌ترین راه: برعکس عمل کنید. بگذارید دستگاه دیگر هات‌اسپات بسازد و از این مک به آن وصل شوید (در بالا «این دستگاه به آن وصل می‌شود» را انتخاب کنید).",
+  "hotspotShareMac2": "اگر باز هم می‌خواهید از این مک هات‌اسپات بسازید: System Settings > General > Sharing را باز کنید، روی (i) کنار Internet Sharing کلیک کنید، اتصال خود (مثلاً Ethernet) را برای رایانه‌هایی که از Wi-Fi استفاده می‌کنند به اشتراک بگذارید، نام و رمز شبکه را تعیین کنید و سپس Internet Sharing را روشن کنید.",
+  "@hotspotShareMac2": {
+    "description": "REVIEW: macOS has no Persian system language; macOS labels kept in English."
+  },
+  "hotspotShareWindows1": "به Settings > Network & internet > Mobile hotspot بروید.",
+  "@hotspotShareWindows1": {
+    "description": "REVIEW: Windows labels kept in English (most Iranian PCs run English Windows); Persian Windows: «تنظیمات > شبکه و اینترنت > نقطه اتصال تلفن همراه»."
+  },
+  "hotspotShareWindows2": "«Mobile hotspot» را روشن کنید. نام و رمز شبکه در همان صفحه نمایش داده می‌شود.",
+  "@hotspotShareWindows2": {
+    "description": "REVIEW: Windows label kept in English."
+  },
+  "hotspotShareLinux1": "به Settings > Wi-Fi بروید، منوی (⋮) را باز کنید و «Turn On Wi-Fi Hotspot…» را انتخاب کنید. در میزکارهای دیگر از NetworkManager استفاده کنید: یک شبکهٔ Wi-Fi جدید با حالت «Hotspot» بسازید، یا این فرمان را اجرا کنید: {command}",
+  "@hotspotShareLinux1": {
+    "description": "REVIEW: Linux desktop labels kept in English.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotShareLinux2": "نام و رمز شبکه را یادداشت کنید.",
+  "hotspotShareOther1": "هات‌اسپات (اشتراک‌گذاری اینترنت) را در تنظیمات شبکهٔ این دستگاه روشن کنید و نام و رمز آن را یادداشت کنید.",
+  "hotspotJoinAndroid1": "به تنظیمات > Wi-Fi بروید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا نماد QR کنار «افزودن شبکه» را بزنید و کدی را که روی دستگاه دیگر نمایش داده می‌شود اسکن کنید.",
+  "@hotspotJoinAndroid1": {
+    "description": "REVIEW: Persian Android labels («افزودن شبکه»); vendors differ."
+  },
+  "hotspotJoinIos1": "به Settings > Wi-Fi بروید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا دوربین (Camera) را به سمت کد QR روی دستگاه دیگر بگیرید و «Join network» را بزنید.",
+  "@hotspotJoinIos1": {
+    "description": "REVIEW: iOS labels kept in English (no Persian iOS)."
+  },
+  "hotspotJoinMac1": "روی نماد Wi-Fi در نوار منو (یا Control Center) کلیک کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.",
+  "@hotspotJoinMac1": {
+    "description": "REVIEW: macOS labels kept in English."
+  },
+  "hotspotJoinWindows1": "روی نماد شبکه در نوار وظیفه (taskbar) کلیک کنید، فهرست Wi-Fi را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.",
+  "hotspotJoinLinux1": "منوی شبکه (بالا سمت راست) > Wi-Fi > Select Network را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید. یا این فرمان را اجرا کنید: {command}",
+  "@hotspotJoinLinux1": {
+    "description": "REVIEW: Linux desktop labels kept in English.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotJoinOther1": "تنظیمات وای‌فای را باز کنید، هات‌اسپات دستگاه دیگر را انتخاب کنید و رمز آن را وارد کنید.",
+  "hotspotStepShareOther": "روی دستگاه دیگر، مثل هر شبکهٔ وای‌فای دیگری به این هات‌اسپات وصل شوید (راهنما در پایین).",
+  "hotspotStepVpn": "اگر VPN (فیلترشکن) روشن است، خاموشش کنید. اینترنت همراه می‌تواند روشن بماند.",
+  "@hotspotStepVpn": {
+    "description": "REVIEW: VPN rendered as «VPN (فیلترشکن)», see UX.md 4.12."
+  },
+  "hotspotStepOpenBoth": "LanDrop را روی هر دو دستگاه باز کنید، سپس «وصل شدم، دستگاه دیگر را پیدا کن» را بزنید.",
+  "hotspotWizardTitle": "اتصال بدون وای‌فای",
+  "hotspotIntro": "به روتر (مودم) نیازی نیست: یک دستگاه هات‌اسپات وای‌فای می‌سازد، دستگاه دیگر به آن وصل می‌شود و LanDrop دستگاه دیگر را در همان شبکه پیدا می‌کند. وقتی وای‌فای دستگاه‌ها را از هم جدا نگه می‌دارد (شبکه‌های مهمان، اداره یا هتل) هم این روش کمک می‌کند. فایل‌ها مستقیم بین دو دستگاه جابه‌جا می‌شوند و از اینترنت همراه استفاده نمی‌کنند.",
+  "hotspotRoleShare": "این دستگاه هات‌اسپات می‌سازد",
+  "hotspotRoleJoin": "این دستگاه به آن وصل می‌شود",
+  "wizardOnThisDevice": "روی این دستگاه ({platform})",
+  "@wizardOnThisDevice": {
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotScanQr": "اسکن کد QR هات‌اسپات",
+  "hotspotOtherJoin": "روی دستگاه دیگر: به هات‌اسپات وصل شوید",
+  "hotspotOtherShare": "روی دستگاه دیگر: هات‌اسپات بسازید",
+  "hotspotFindLabel": "وصل شدم، دستگاه دیگر را پیدا کن",
+  "hotspotCableInstead": "از کابل استفاده می‌کنید؟ اترنت یا USB",
+  "hotspotStart": "شروع هات‌اسپات",
+  "hotspotOn": "هات‌اسپات روشن است",
+  "hotspotName": "نام: {ssid}",
+  "@hotspotName": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotNoPassword": "بدون رمز",
+  "hotspotPassword": "رمز: {password}",
+  "@hotspotPassword": {
+    "placeholders": {
+      "password": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotScanHint": "برای وصل شدن، کد را با دوربین دستگاه دیگر اسکن کنید (اندروید ۱۰ به بالا، آیفون). هات‌اسپات با زدن «توقف هات‌اسپات» یا بستن LanDrop خاموش می‌شود.",
+  "hotspotStop": "توقف هات‌اسپات",
+  "hotspotQrSemantics": "کد QR برای وصل شدن به این هات‌اسپات",
+  "findPhaseNetwork": "در حال بررسی شبکهٔ جدید…",
+  "findPhaseProbeHotspot": "در حال بررسی نشانی‌های معمول هات‌اسپات…",
+  "findPhaseScan": "در حال جست‌وجوی شبکه…",
+  "findPhaseWhy": "چیزی پیدا نشد. در حال بررسی علت…",
+  "findNothingHintHotspot": "بررسی کنید هر دو دستگاه به یک هات‌اسپات وصل باشند و LanDrop روی هر دو باز باشد. سپس دوباره امتحان کنید، یا با «افزودن با IP» نشانی‌ای را که روی دستگاه دیگر نمایش داده می‌شود وارد کنید.",
+  "findFound": "{count, plural, other{{count} دستگاه پیدا شد}}",
+  "@findFound": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "findBackToDevices": "بازگشت به دستگاه‌ها",
+  "findNothingTitle": "هنوز دستگاهی پیدا نشد",
+  "cableEthMac1": "کابل اترنت را به هر دو رایانه وصل کنید (مبدل اترنت USB یا Thunderbolt هم کار می‌کند). با کابل مستقیم یا با روتر، مراحل یکی است.",
+  "cableEthMac2": "به System Settings > Network بروید. اگر مبدل در فهرست نیست، روی «…» > «Add Service…» (یا دکمهٔ +) کلیک کنید، مبدل اترنت را انتخاب کنید و Create را بزنید.",
+  "@cableEthMac2": {
+    "description": "REVIEW: macOS labels kept in English."
+  },
+  "cableEthMac3": "آن را انتخاب کنید و «Configure IPv4» را روی «Using DHCP» بگذارید. بدون روتر، مک به خودش نشانی‌ای می‌دهد که با {prefix} شروع می‌شود. این طبیعی است.",
+  "@cableEthMac3": {
+    "description": "REVIEW: macOS labels kept in English.",
+    "placeholders": {
+      "prefix": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthPlugBoth": "کابل اترنت را به هر دو رایانه وصل کنید.",
+  "cableEthWindows2": "به Settings > Network & internet > Ethernet بروید. احتمالاً «No Internet» یا «Unidentified network» نوشته شده است: اشکالی ندارد، ویندوز به خودش نشانی‌ای می‌دهد که با {prefix} شروع می‌شود.",
+  "@cableEthWindows2": {
+    "description": "REVIEW: Windows labels kept in English.",
+    "placeholders": {
+      "prefix": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthWindows3": "در بخش «IP assignment» گزینهٔ «Automatic (DHCP)» را نگه دارید. وقتی Windows Firewall پرسید، به LanDrop در شبکه‌های Private اجازه دهید. اگر شبکه «Public» علامت خورده است، آن را Private کنید.",
+  "@cableEthWindows3": {
+    "description": "REVIEW: Windows labels kept in English."
+  },
+  "cableEthLinux2": "به Settings > Network بروید، اتصال سیمی را انتخاب کنید و تنظیمات آن > IPv4 را باز کنید. روش «Link-Local Only» را انتخاب و اعمال کنید. یا این فرمان را اجرا کنید: {command}",
+  "@cableEthLinux2": {
+    "description": "REVIEW: Linux desktop labels kept in English.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthLinux3": "اتصال را یک بار خاموش و روشن کنید تا نشانی بگیرد.",
+  "cableEthOther1": "یک کابل اترنت (در صورت نیاز با مبدل) به هر دو رایانه وصل کنید و مطمئن شوید شبکهٔ سیمی نشانی را خودکار می‌گیرد (DHCP یا «link-local»).",
+  "cableUsbAndroid1": "اتصال را همین گوشی به اشتراک می‌گذارد: آن را با کابل USB به رایانه وصل کنید.",
+  "cableUsbAndroid2": "به تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت بروید (نام‌ها بسته به برند گوشی کمی فرق دارد) و «اشتراک‌گذاری اینترنت با USB» را روشن کنید. این گزینه فقط وقتی رایانه وصل است روشن می‌شود.",
+  "@cableUsbAndroid2": {
+    "description": "REVIEW: Persian Android menu names («اشتراک‌گذاری اینترنت با USB»); vendors differ."
+  },
+  "cableUsbIos1": "آیفون را با کابل USB به رایانه وصل کنید و اگر پرسید، «Trust» را بزنید.",
+  "@cableUsbIos1": {
+    "description": "REVIEW: iOS labels kept in English (no Persian iOS)."
+  },
+  "cableUsbIos2": "به Settings > Personal Hotspot بروید و «Allow Others to Join» را روشن کنید. روی رایانهٔ ویندوزی باید iTunes یا برنامهٔ Apple Devices نصب باشد.",
+  "@cableUsbIos2": {
+    "description": "REVIEW: iOS labels kept in English (no Persian iOS)."
+  },
+  "cableUsbMac1": "گوشی را با کابل USB به این مک وصل کنید. روی گوشی Personal Hotspot (آیفون) یا «اشتراک‌گذاری اینترنت با USB» (اندروید) را روشن کنید.",
+  "cableUsbMac2": "مک یک مبدل شبکهٔ جدید در System Settings > Network نشان می‌دهد (مثلاً «iPhone USB» یا «RNDIS/Ethernet Gadget»). اشتراک اینترنت با USB در اندروید روی مک به درایوری نیاز دارد که همراه سیستم نیست؛ آیفون بدون تنظیم اضافه کار می‌کند.",
+  "@cableUsbMac2": {
+    "description": "REVIEW: macOS labels kept in English."
+  },
+  "cableUsbWindows1": "گوشی را با کابل USB به این رایانه وصل کنید. روی گوشی «اشتراک‌گذاری اینترنت با USB» (اندروید) یا Personal Hotspot (آیفون) را روشن کنید.",
+  "cableUsbWindows2": "ویندوز یک مبدل جدید اضافه می‌کند (در Settings > Network & internet > Advanced network settings دیده می‌شود). صبر کنید تا Connected نوشته شود.",
+  "@cableUsbWindows2": {
+    "description": "REVIEW: Windows labels kept in English."
+  },
+  "cableUsbLinux1": "گوشی را با کابل USB به این رایانه وصل کنید. روی گوشی «اشتراک‌گذاری اینترنت با USB» (اندروید) یا Personal Hotspot (آیفون) را روشن کنید.",
+  "cableUsbLinux2": "یک اتصال سیمی جدید ظاهر می‌شود (با نامی مثل usb0، enx… یا eth1). معمولاً خودش وصل می‌شود.",
+  "cableUsbOther1": "گوشی را با کابل USB وصل کنید و «اشتراک‌گذاری اینترنت با USB» یا Personal Hotspot را روشن کنید؛ سپس رایانه یک مبدل شبکهٔ جدید خواهد داشت.",
+  "cableStepWait": "چند ثانیه صبر کنید: بدون روتر، ممکن است تا یک دقیقه طول بکشد تا هر دو رایانه نشانی بگیرند.",
+  "cableStepVpn": "اگر VPN (فیلترشکن) روشن است، خاموشش کنید. اکنون دستگاه دیگر اتصالش را با این دستگاه به اشتراک می‌گذارد.",
+  "@cableStepVpn": {
+    "description": "REVIEW: VPN rendered as «VPN (فیلترشکن)»."
+  },
+  "cableStepOpenBoth": "LanDrop را روی هر دو دستگاه باز کنید، سپس «کابل وصل است، دستگاه دیگر را پیدا کن» را بزنید.",
+  "cableIntro": "به وای‌فای یا روتر نیازی نیست: دو دستگاه را با کابل به هم وصل کنید تا LanDrop دستگاه دیگر را از همین راه پیدا کند. فایل‌ها مستقیم از طریق کابل جابه‌جا می‌شوند.",
+  "cableKindEthernet": "کابل اترنت",
+  "cableKindUsb": "اشتراک اینترنت با USB",
+  "@cableKindUsb": {
+    "description": "REVIEW: \"USB tethering\", see UX.md 4.12."
+  },
+  "cableTetherHint": "روی گوشی: اندروید > تنظیمات > شبکه و اینترنت > نقطه اتصال و اشتراک‌گذاری اینترنت > اشتراک‌گذاری اینترنت با USB. آیفون > Settings > Personal Hotspot.",
+  "@cableTetherHint": {
+    "description": "REVIEW: Persian Android menu names; iOS labels kept in English."
+  },
+  "cableFindLabel": "کابل وصل است، دستگاه دیگر را پیدا کن",
+  "cablePhaseProbe": "در حال بررسی نشانی‌های معمول کابل و USB…",
+  "cableNothingHint": "کابل را بررسی کنید، مطمئن شوید مبدل «وصل» نشان داده می‌شود و LanDrop روی هر دو دستگاه باز است. گرفتن نشانی با کابل مستقیم ممکن است تا یک دقیقه طول بکشد. سپس دوباره امتحان کنید، یا با «افزودن با IP» نشانی‌ای را که روی دستگاه دیگر نمایش داده می‌شود وارد کنید.",
+  "wifiDirectTitle": "وای‌فای دایرکت",
+  "wifiDirectIntro": "دو دستگاه را بدون روتر مستقیم به هم وصل کنید. پس از اتصال، مثل همیشه فایل بفرستید.",
+  "wifiDirectTry": "این‌ها را امتحان کنید: وای‌فای را روشن کنید، دعوت را روی دستگاه دیگر بپذیرید، صفحهٔ هر دو را روشن و آن‌ها را نزدیک هم نگه دارید.",
+  "wifiDirectRoleOwner": "این دستگاه میزبان گروه است.",
+  "wifiDirectRoleClient": "به گروه دستگاه دیگر پیوستید.",
+  "wifiDirectConnected": "با وای‌فای دایرکت وصل است",
+  "wifiDirectNetwork": "شبکه: {ssid}",
+  "@wifiDirectNetwork": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiDirectHost": "نشانی میزبان: {address}",
+  "@wifiDirectHost": {
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiDirectLooking": "در حال جست‌وجوی دستگاه‌های LanDrop…",
+  "wifiDirectNone": "هنوز هیچ دستگاه LanDrop پاسخ نداده است. مطمئن شوید LanDrop روی دستگاه دیگر باز است، سپس دوباره جست‌وجو کنید.",
+  "wifiDirectSearchAgain": "جست‌وجوی دوباره",
+  "wifiDirectDisconnect": "قطع اتصال",
+  "wifiDirectTapHint": "برای اتصال، روی یک دستگاه بزنید. روی دستگاه دیگر پنجرهٔ دعوت اندروید باز می‌شود و باید آن را بپذیرد.",
+  "wifiDirectLookingShort": "در حال جست‌وجو…",
+  "wifiDirectEmpty": "هنوز دستگاهی پیدا نشد. وای‌فای دایرکت را روی دستگاه دیگر هم باز کنید.",
+  "wifiDirectInvited": "دعوت فرستاده شد. آن را روی دستگاه دیگر بپذیرید.",
+  "wifiDirectStatusConnected": "وصل",
+  "wifiDirectStatusFailed": "ناموفق",
+  "wifiDirectStatusAvailable": "در دسترس",
+  "wifiDirectStatusUnavailable": "در دسترس نیست",
+  "wifiDirectCreateGroup": "ساختن گروه در اینجا",
+  "wifiDirectCreateHint": "«ساختن گروه در اینجا» این دستگاه را میزبان می‌کند تا دستگاه دیگر بتواند از صفحهٔ وای‌فای دایرکت خودش آن را پیدا کند و به آن بپیوندد. صفحهٔ هر دو را روشن نگه دارید.",
+  "wifiJoinNotWifiQr": "این کد QR، کد وای‌فای نیست. کدی را اسکن کنید که هات‌اسپات LanDrop روی گوشی دیگر نشان می‌دهد.",
+  "wifiJoinManualInvalid": "نام شبکه (حداکثر ۳۲ نویسه) و رمز آن (۸ تا ۶۳ نویسه، یا خالی برای شبکهٔ باز) را وارد کنید.",
+  "wifiJoinScanIntro": "روی گوشی دیگر، LanDrop را باز کنید و به «اتصال بدون وای‌فای» > «این دستگاه هات‌اسپات می‌سازد» > «شروع هات‌اسپات» بروید. سپس دوربین این گوشی را به سمت کد QR آن بگیرید.",
+  "wifiJoinAllowCamera": "اجازهٔ دسترسی به دوربین",
+  "wifiJoinManualToggle": "وارد کردن نام و رمز",
+  "wifiJoinNetworkName": "نام شبکه",
+  "wifiJoinPasswordLabel": "رمز (برای شبکهٔ باز خالی بگذارید)",
+  "wifiJoinHidden": "شبکهٔ پنهان",
+  "wifiJoinContinue": "ادامه",
+  "wifiJoinConfirmTitle": "به {ssid} وصل شوید؟",
+  "@wifiJoinConfirmTitle": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinExplain": "LanDrop از اندروید می‌خواهد به این شبکهٔ وای‌فای وصل شود و اندروید از شما تأیید می‌خواهد. تا وقتی وصل هستید، ممکن است اینترنت این گوشی قطع شود. فقط LanDrop از این شبکه استفاده می‌کند؛ برنامه‌های دیگر تا جایی که اندروید اجازه دهد از اتصال معمول شما استفاده می‌کنند.",
+  "wifiJoinJoin": "وصل شو",
+  "wifiJoinJoining": "در حال وصل شدن به {ssid}… وقتی پیام اندروید ظاهر شد، آن را تأیید کنید.",
+  "@wifiJoinJoining": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinScanAgain": "اسکن دوباره",
+  "wifiJoinJoined": "به {ssid} وصل شد",
+  "@wifiJoinJoined": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinFindTitle": "پیدا کردن دستگاه دیگر",
+  "wifiJoinLeave": "خروج از شبکه",
+  "errHotspotUnsupportedPlatform": "فقط در اندروید می‌توان از داخل LanDrop هات‌اسپات ساخت.",
+  "errHotspotUnsupportedSdk": "این نسخهٔ اندروید اجازه نمی‌دهد برنامه‌ها هات‌اسپات بسازند. به‌جای آن از تنظیمات > نقطه اتصال استفاده کنید.",
+  "@errHotspotUnsupportedSdk": {
+    "description": "REVIEW: Persian Android menu name «نقطه اتصال»."
+  },
+  "errHotspotPermissionNearby": "LanDrop برای ساختن هات‌اسپات به اجازهٔ «دستگاه‌های اطراف» نیاز دارد.",
+  "@errHotspotPermissionNearby": {
+    "description": "REVIEW: Android permission name «دستگاه‌های اطراف» as shown by Persian Android."
+  },
+  "errHotspotPermissionLocation": "LanDrop برای ساختن هات‌اسپات به اجازهٔ دسترسی به موقعیت مکانی نیاز دارد (اندروید آن را برای قابلیت‌های وای‌فای لازم می‌داند؛ LanDrop از موقعیت مکانی شما استفاده نمی‌کند).",
+  "errHotspotNoName": "هات‌اسپات روشن شد، اما اندروید نام آن را اعلام نکرد.",
+  "errHotspotUnavailable": "ساختن هات‌اسپات در اینجا ممکن نیست.",
+  "errHotspotRefused": "اندروید اجازه نداد: {detail}. در اندروید ۱۲ و قدیمی‌تر، «موقعیت مکانی» هم باید روشن باشد.",
+  "@errHotspotRefused": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errHotspotPermissionMissing": "اجازه داده نشده است",
+  "errHotspotIncompatible": "اندروید الان نمی‌تواند آن را روشن کند؛ معمولاً چون هات‌اسپات معمولی یا اشتراک‌گذاری اینترنت روشن است. آن را خاموش کنید، یا به‌جای این روش از همان استفاده کنید.",
+  "errHotspotDisallowed": "ساختن هات‌اسپات روی این دستگاه مجاز نیست (مثلاً به دلیل نمایهٔ کاری یا محدودیت اپراتور).",
+  "errHotspotNoChannel": "کانال وای‌فای آزادی نیست. کمی بعد دوباره امتحان کنید.",
+  "errHotspotBusy": "یک هات‌اسپات در حال روشن شدن است.",
+  "errHotspotCancelled": "هات‌اسپات متوقف شد.",
+  "errHotspotFailed": "هات‌اسپات روشن نشد.",
+  "errHotspotFailedDetail": "هات‌اسپات روشن نشد: {detail}.",
+  "@errHotspotFailedDetail": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errHotspotStartError": "هات‌اسپات روشن نشد: {error}",
+  "@errHotspotStartError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errWifiDirectUnsupported": "وای‌فای دایرکت روی این دستگاه در دسترس نیست.",
+  "errWifiDirectWifiOff": "وای‌فای خاموش است. وای‌فای را روشن کنید (به روتر نیازی نیست)، سپس دوباره امتحان کنید.",
+  "errWifiDirectPermission": "LanDrop برای پیدا کردن دستگاه‌های اطراف به اجازه نیاز دارد. اجازه دهید، و در اندروید ۱۲ و قدیمی‌تر «موقعیت مکانی» را هم روشن کنید.",
+  "errWifiDirectBusy": "وای‌فای دایرکت مشغول است. کمی صبر کنید و دوباره امتحان کنید، یا اول «قطع اتصال» را بزنید.",
+  "errWifiDirectNotReady": "وای‌فای دایرکت هنوز آماده نیست. دوباره امتحان کنید.",
+  "errWifiDirectFailed": "وای‌فای دایرکت کار نکرد. وای‌فای را خاموش و روشن کنید و دوباره امتحان کنید.",
+  "errWifiDirectFailedDetail": "وای‌فای دایرکت کار نکرد ({detail}). وای‌فای را خاموش و روشن کنید و دوباره امتحان کنید.",
+  "@errWifiDirectFailedDetail": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errWifiJoinUnsupported": "برای وصل شدن به شبکهٔ وای‌فای از داخل LanDrop، اندروید ۷ یا جدیدتر لازم است. به‌جای آن از تنظیمات وای‌فای وصل شوید.",
+  "errWifiJoinCamera": "LanDrop برای اسکن کد QR به دوربین نیاز دارد. در تنظیمات برنامه اجازه دهید، یا نام و رمز را دستی وارد کنید.",
+  "errWifiJoinTimeout": "اندروید به شبکه وصل نشد. بررسی کنید هات‌اسپات گوشی دیگر روشن و نزدیک باشد، رمز درست باشد و پیام اندروید را رد نکرده باشید. سپس دوباره امتحان کنید.",
+  "errWifiJoinLost": "شبکه قطع شد. بررسی کنید هات‌اسپات هنوز روشن باشد، سپس دوباره اسکن کنید.",
+  "errWifiJoinUnsupportedSecurity": "این شبکه از نوع امنیتی قدیمی (WEP) استفاده می‌کند که اندروید دیگر اجازهٔ اتصال برنامه‌ها به آن را نمی‌دهد. به‌جای آن از تنظیمات وای‌فای وصل شوید.",
+  "errWifiJoinPermission": "اندروید به LanDrop اجازهٔ تغییر شبکه را نداد. به‌جای آن از تنظیمات وای‌فای وصل شوید.",
+  "errWifiJoinFailed": "اتصال به شبکه ممکن نشد. دوباره امتحان کنید، یا از تنظیمات وای‌فای وصل شوید.",
+  "errWifiJoinFailedDetail": "اتصال به شبکه ممکن نشد ({detail}). دوباره امتحان کنید، یا از تنظیمات وای‌فای وصل شوید.",
+  "@errWifiJoinFailedDetail": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errorWebHttpStart": "HTTP ساده برای مرورگرها شروع نشد: {error}",
+  "@errorWebHttpStart": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pickFilesTitle": "انتخاب فایل برای ارسال",
+  "pickFolderTitle": "انتخاب پوشه برای ارسال",
+  "helperTitle": "کمک برای اتصال",
+  "helperChecking": "در حال بررسی اتصال شما…",
+  "helperFound": "{name} پیدا شد!",
+  "@helperFound": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "helperCheckFine": "روی این دستگاه مشکلی دیده نمی‌شود.",
+  "helperQ1": "آیا هر دو دستگاه به یک وای‌فای وصل هستند؟",
+  "helperQ1Same": "بله، یک وای‌فای",
+  "helperQ1Different": "نه، یا وای‌فای نداریم",
+  "helperQ1Cable": "با کابل وصل می‌کنم",
+  "helperChecklist": "LanDrop را روی دستگاه دیگر باز کنید و صفحه‌اش را روشن نگه دارید. اگر VPN (فیلترشکن) روشن است، خاموشش کنید.",
+  "@helperChecklist": {
+    "description": "REVIEW: VPN rendered as «VPN (فیلترشکن)», see UX.md 3.4."
+  },
+  "helperSearchAgain": "دوباره جست‌وجو کن",
+  "helperSameWifiNothing": "مطمئن شوید هر دو دستگاه به یک شبکهٔ وای‌فای وصل‌اند (نه شبکهٔ مهمان) و LanDrop روی هر دو باز است، سپس دوباره جست‌وجو کنید.",
+  "helperBlocked": "ممکن است این وای‌فای اجازهٔ ارتباط دستگاه‌ها با هم را ندهد. بیایید آن‌ها را مستقیم به هم وصل کنیم.",
+  "helperConnectDirectly": "اتصال مستقیم",
+  "helperQ2": "دستگاه دیگر چیست؟",
+  "helperQ2Android": "گوشی اندروید",
+  "helperQ2Iphone": "آیفون",
+  "helperQ2Computer": "رایانه",
+  "helperQ2Browser": "فقط مرورگر",
+  "helperRecommended": "پیشنهادی",
+  "helperMethodShareQrTitle": "از این گوشی هات‌اسپات بسازید",
+  "helperMethodShareQrBody": "از اینترنت استفاده نمی‌شود. گوشی دیگر کد را اسکن می‌کند تا وصل شود.",
+  "helperMethodShareTitle": "از این دستگاه هات‌اسپات بسازید",
+  "helperMethodShareBody": "از اینترنت استفاده نمی‌شود. دستگاه دیگر مثل هر وای‌فای دیگری به این هات‌اسپات وصل می‌شود.",
+  "helperMethodJoinTitle": "به هات‌اسپات دستگاه دیگر وصل شوید",
+  "helperMethodJoinBody": "هات‌اسپات دستگاه دیگر را روشن کنید، سپس از این دستگاه به آن وصل شوید. از اینترنت استفاده نمی‌شود.",
+  "helperMethodJoinQrTitle": "کد هات‌اسپات گوشی دیگر را اسکن کنید",
+  "helperMethodJoinQrBody": "وقتی گوشی دیگر با LanDrop هات‌اسپات می‌سازد، این گوشی کد QR آن را اسکن می‌کند و وصل می‌شود.",
+  "helperMethodWifiDirectTitle": "استفاده از وای‌فای دایرکت",
+  "helperMethodWifiDirectBody": "گوشی به گوشی، بدون روتر. هر دو گوشی باید اندروید باشند.",
+  "helperOpenWifiDirect": "باز کردن وای‌فای دایرکت",
+  "helperMethodBrowserTitle": "استفاده از مرورگر روی دستگاه دیگر",
+  "helperMethodBrowserBody": "نیازی به نصب نیست: دستگاه دیگر یک لینک را در مرورگرش باز می‌کند تا فایل بفرستد یا دانلود کند. هر دو دستگاه باید به یک وای‌فای یا هات‌اسپات وصل باشند.",
+  "helperOpenShares": "باز کردن صفحهٔ اشتراک",
+  "helperOnThisDevice": "روی این دستگاه",
+  "helperOnOtherDevice": "روی دستگاه دیگر",
+  "helperOtherWays": "راه‌های دیگر",
+  "helperTryAnother": "راه دیگری را امتحان کنید",
+  "helperCopyReport": "کپی گزارش اتصال",
+  "wifiJoinCameraFailed": "دوربین روشن نشد. به‌جای آن، نام و رمز را در پایین وارد کنید."
 }

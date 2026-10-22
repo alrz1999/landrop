@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import 'l10n.dart';
+import 'ltr_text.dart';
 import 'widgets.dart';
 import 'wifi_direct_service.dart';
 
@@ -36,7 +38,9 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
   final _subs = <StreamSubscription<dynamic>>[];
   List<WifiDirectPeer> _peers = const [];
   WifiDirectState _state = WifiDirectState.disconnected;
-  String? _error;
+
+  /// The last error; shown in the current language.
+  WifiDirectException? _error;
   bool _busy = false;
   bool _searching = false;
   List<DeviceInfo>? _found;
@@ -49,7 +53,7 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
     }));
     _subs.add(_service.states.listen(_onState));
     _subs.add(_service.errors.listen((e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e);
     }));
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
@@ -73,9 +77,9 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
     try {
       await body();
     } on WifiDirectException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e);
     } catch (e) {
-      if (mounted) setState(() => _error = wifiDirectMessage('error', '$e'));
+      if (mounted) setState(() => _error = wifiDirectError('error', '$e'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -131,17 +135,28 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_error!),
+              Text(_error!.localized(context.l)),
               const SizedBox(height: 8),
-              const Text('Try: Wi-Fi on, accept the invitation on the other '
-                  'device, keep both screens on and close together.'),
+              Text(context.l.wifiDirectTry),
             ],
           ),
         ),
       );
 
+  /// A peer's status in plain words ("Invitation sent…", "available").
+  String _status(AppLocalizations l, String status) => switch (status) {
+        'invited' => l.wifiDirectInvited,
+        'connected' => l.wifiDirectStatusConnected,
+        'failed' => l.wifiDirectStatusFailed,
+        'available' => l.wifiDirectStatusAvailable,
+        'unavailable' => l.wifiDirectStatusUnavailable,
+        _ => status,
+      };
+
   Widget _connectedCard() {
-    final role = _state.isOwner ? 'This device hosts the group.' : 'Joined the other device\'s group.';
+    final l = context.l;
+    final role =
+        _state.isOwner ? l.wifiDirectRoleOwner : l.wifiDirectRoleClient;
     final found = _found;
     return Card(
       key: const Key('wifiDirectConnected'),
@@ -150,46 +165,45 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.wifi_tethering),
-              title: Text('Connected via Wi-Fi Direct'),
+            ListTile(
+              contentPadding: EdgeInsetsDirectional.zero,
+              leading: const Icon(Icons.wifi_tethering),
+              title: Text(l.wifiDirectConnected),
             ),
-            Text([
-              role,
-              if (_state.ssid != null) 'Network: ${_state.ssid}',
-              if (_state.ownerAddress != null) 'Host address: ${_state.ownerAddress}',
-            ].join('\n')),
+            Text(role),
+            if (_state.ssid != null)
+              Text(l.wifiDirectNetwork(l.ltrValue(_state.ssid!)),
+                  key: const Key('wifiDirectSsid')),
+            if (_state.ownerAddress != null)
+              Text(l.wifiDirectHost(l.ltrValue(_state.ownerAddress!)),
+                  key: const Key('wifiDirectHost')),
             const SizedBox(height: 12),
             if (_searching)
-              const Row(children: [
-                SizedBox(
+              Row(children: [
+                const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2)),
-                SizedBox(width: 12),
-                Text('Looking for LanDrop devices…'),
+                const SizedBox(width: 12),
+                Expanded(child: Text(l.wifiDirectLooking)),
               ])
             else if (found != null && found.isEmpty)
-              const Text(
-                  'No LanDrop device answered yet. Make sure LanDrop is open '
-                  'on the other device, then search again.',
-                  key: Key('wifiDirectNone'))
+              Text(l.wifiDirectNone, key: const Key('wifiDirectNone'))
             else if (found != null)
               for (final d in found)
                 ListTile(
                   key: Key('wifiDirectDevice_${d.fingerprint}'),
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsetsDirectional.zero,
                   leading: const Icon(Icons.devices),
-                  title: Text(d.alias),
-                  subtitle: Text(d.ip),
+                  title: AutoDirText(d.alias),
+                  subtitle: LtrText(d.ip),
                 ),
             const SizedBox(height: 8),
             Wrap(spacing: 8, children: [
               OutlinedButton(
                   key: const Key('wifiDirectSearch'),
                   onPressed: _searching ? null : () => _findDevices(_state),
-                  child: const Text('Search again')),
+                  child: Text(l.wifiDirectSearchAgain)),
               FilledButton.tonal(
                   key: const Key('wifiDirectDisconnect'),
                   onPressed: () => _guard(() async {
@@ -202,7 +216,7 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
                           });
                         }
                       }),
-                  child: const Text('Disconnect')),
+                  child: Text(l.wifiDirectDisconnect)),
             ]),
           ],
         ),
@@ -211,27 +225,25 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
   }
 
   Widget _peerList() {
+    final l = context.l;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Nearby devices', style: Theme.of(context).textTheme.titleMedium),
+        Text(l.homeNearbyDevices,
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
-        const Text('Tap a device to connect. The other device gets an '
-            'Android invitation dialog and must accept it.'),
+        Text(l.wifiDirectTapHint),
         const SizedBox(height: 8),
         if (_peers.isEmpty)
-          Text(_busy ? 'Looking…' : 'No devices found yet. Open Wi-Fi Direct '
-              'on the other device too.',
+          Text(_busy ? l.wifiDirectLookingShort : l.wifiDirectEmpty,
               key: const Key('wifiDirectEmpty'))
         else
           for (final p in _peers)
             ListTile(
               key: Key('wifiDirectPeer_${p.address}'),
               leading: const Icon(Icons.smartphone),
-              title: Text(p.name),
-              subtitle: Text(p.status == 'invited'
-                  ? 'Invitation sent. Accept it on the other device.'
-                  : p.status),
+              title: AutoDirText(p.name),
+              subtitle: Text(_status(l, p.status)),
               onTap: p.status == 'connected'
                   ? null
                   : () => _guard(() => _service.connect(p.address)),
@@ -241,32 +253,31 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
           OutlinedButton(
               key: const Key('wifiDirectRescan'),
               onPressed: _busy ? null : _start,
-              child: const Text('Search again')),
+              child: Text(l.wifiDirectSearchAgain)),
           OutlinedButton(
               key: const Key('wifiDirectCreateGroup'),
               onPressed: _busy ? null : () => _guard(_service.createGroup),
-              child: const Text('Create group here')),
+              child: Text(l.wifiDirectCreateGroup)),
         ]),
         const SizedBox(height: 8),
-        const Text('"Create group here" makes this device the host, so the '
-            'other device can find and join it from its own Wi-Fi Direct '
-            'screen. Keep both screens on.'),
+        Text(l.wifiDirectCreateHint),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l;
     return Scaffold(
-      appBar: AppBar(title: const Text('Wi-Fi Direct')),
+      appBar: AppBar(title: Text(l.wifiDirectTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
+            key: const Key('wifiDirectPage'),
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('Connect two devices directly, without a router. '
-                  'Once connected, send files as usual.'),
+              Text(l.wifiDirectIntro),
               const SizedBox(height: 12),
               if (_error != null) ...[_errorCard(), const SizedBox(height: 12)],
               if (_state.connected) _connectedCard() else _peerList(),

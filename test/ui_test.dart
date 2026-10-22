@@ -82,7 +82,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('empty state offers diagnosis; dialog renders findings',
+  testWidgets('empty state opens the helper; dialog renders findings',
       (tester) async {
     final core = await pumpApp(tester);
     expect(find.byKey(const Key('whyNoDevices')), findsNothing);
@@ -93,8 +93,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('whyNoDevices')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
+    // The connection helper (UX.md 3.4) runs the check and shows one result.
+    expect(find.byKey(const Key('connectHelper')), findsOneWidget);
     expect(core.diagnosisCalls, [(null, null)]);
+    expect(find.byKey(const Key('finding-announce-blocked')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // The full report is the dialog in Settings ▸ Advanced.
+    await openAdvanced(tester);
+    await showKey(tester, const Key('diagnoseSettings'));
+    await tester.tap(find.byKey(const Key('diagnoseSettings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
+    expect(core.diagnosisCalls, hasLength(2));
     expect(find.text('Devices only show up after a scan'), findsOneWidget);
     expect(find.byKey(const Key('finding-announce-blocked')), findsOneWidget);
     expect(find.text('What to do: Use "Rescan network" or "Add by IP".'),
@@ -106,7 +118,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('runAgain')));
     await tester.pumpAndSettle();
-    expect(core.diagnosisCalls, hasLength(2));
+    expect(core.diagnosisCalls, hasLength(3));
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('diagnosisDialog')), findsNothing);
@@ -615,7 +627,7 @@ void main() {
     await tester.tap(find.byKey(const Key('pickerHelp')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('peerPicker')), findsNothing);
-    expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
+    expect(find.byKey(const Key('connectHelper')), findsOneWidget);
     expect(core.sent, isEmpty);
   });
 
@@ -800,7 +812,7 @@ void main() {
     expect(find.text('Certificate fingerprint'), findsNothing);
     await tester.tap(find.byKey(const Key('connectHelpSettings')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
+    expect(find.byKey(const Key('connectHelper')), findsOneWidget);
   });
 
   testWidgets('advanced page: address QR, security code, all methods',

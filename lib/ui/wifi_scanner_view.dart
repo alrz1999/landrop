@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'l10n.dart';
+
 /// Camera preview that reports every QR code text through [onCode]. Only
 /// built on Android (wifi_join_page.dart); tests inject their own scanner.
 class WifiScannerView extends StatelessWidget {
@@ -23,11 +25,10 @@ class WifiScannerView extends StatelessWidget {
           }
         }
       },
-      errorBuilder: (context, error) => const Center(
+      errorBuilder: (context, error) => Center(
         child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('The camera could not start. Type the name and '
-              'password below instead.'),
+          padding: const EdgeInsets.all(16),
+          child: Text(context.l.wifiJoinCameraFailed),
         ),
       ),
     );

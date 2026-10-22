@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'l10n.dart';
 import 'wifi_qr.dart';
 
 /// A network this phone joined from a QR code.
@@ -20,31 +21,40 @@ class WifiJoinException implements Exception {
   /// unsupported, camera, timeout, lost, unsupported-security, permission,
   /// failed.
   final String code;
+
+  /// English text (logs, tests); the UI shows [localized].
   final String message;
-  const WifiJoinException(this.code, this.message);
+
+  /// Technical detail inserted into the text, if any (English).
+  final String? detail;
+  const WifiJoinException(this.code, this.message, {this.detail});
+
+  /// [message] in the language of [l].
+  String localized(AppLocalizations l) => wifiJoinMessage(code, detail, l);
+
   @override
   String toString() => message;
 }
 
-/// Readable text and what to try, per error code.
-String wifiJoinMessage(String code, [String? detail]) => switch (code) {
-      'unsupported' => 'Joining a Wi-Fi network from LanDrop needs Android 7 '
-          'or newer. Join it in the Wi-Fi settings instead.',
-      'camera' => 'LanDrop needs the camera to scan the QR code. Allow it in '
-          'the app settings, or type the name and password instead.',
-      'timeout' => 'Android did not join the network. Check that the other '
-          'phone\'s hotspot is on and close by, that the password is right, '
-          'and that you did not decline the Android prompt. Then try again.',
-      'lost' => 'The network went away. Check that the hotspot is still on, '
-          'then scan again.',
-      'unsupported-security' => 'This network uses an old security type (WEP) '
-          'that Android no longer lets apps join. Join it in the Wi-Fi '
-          'settings instead.',
-      'permission' => 'Android did not allow LanDrop to change the network. '
-          'Join it in the Wi-Fi settings instead.',
-      _ => 'Could not join the network${detail == null ? '' : ' ($detail)'}. '
-          'Try again, or join it in the Wi-Fi settings.',
-    };
+/// Readable text and what to try, per error code; English when [l] is null.
+String wifiJoinMessage(String code, [String? detail, AppLocalizations? l]) {
+  l ??= englishStrings;
+  return switch (code) {
+    'unsupported' => l.errWifiJoinUnsupported,
+    'camera' => l.errWifiJoinCamera,
+    'timeout' => l.errWifiJoinTimeout,
+    'lost' => l.errWifiJoinLost,
+    'unsupported-security' => l.errWifiJoinUnsupportedSecurity,
+    'permission' => l.errWifiJoinPermission,
+    _ => detail == null
+        ? l.errWifiJoinFailed
+        : l.errWifiJoinFailedDetail(detail),
+  };
+}
+
+/// A [WifiJoinException] with the English text for [code].
+WifiJoinException wifiJoinError(String code, [String? detail]) =>
+    WifiJoinException(code, wifiJoinMessage(code, detail), detail: detail);
 
 /// What the page needs; the page tests use a fake.
 abstract class WifiJoinApi {
@@ -88,7 +98,7 @@ class WifiJoinService implements WifiJoinApi {
     if (supported) {
       final s = events ?? const EventChannel(eventsName).receiveBroadcastStream();
       _sub = s.listen(handleEvent, onError: (Object e) {
-        _fail(WifiJoinException('failed', wifiJoinMessage('failed', '$e')));
+        _fail(wifiJoinError('failed', '$e'));
       });
     }
   }
@@ -130,15 +140,13 @@ class WifiJoinService implements WifiJoinApi {
         ));
       case 'failed':
         final code = e['code'] is String ? e['code'] as String : 'failed';
-        _fail(WifiJoinException(
-            code,
-            wifiJoinMessage(
-                code, e['message'] is String ? e['message'] as String : null)));
+        _fail(wifiJoinError(
+            code, e['message'] is String ? e['message'] as String : null));
       case 'lost':
         if (_pending != null) {
-          _fail(WifiJoinException('lost', wifiJoinMessage('lost')));
+          _fail(wifiJoinError('lost'));
         } else {
-          _lost.add(WifiJoinException('lost', wifiJoinMessage('lost')));
+          _lost.add(wifiJoinError('lost'));
         }
     }
   }
@@ -156,12 +164,12 @@ class WifiJoinService implements WifiJoinApi {
   @override
   Future<WifiJoinResult> join(WifiCredentials c) async {
     if (!supported) {
-      throw WifiJoinException('unsupported', wifiJoinMessage('unsupported'));
+      throw wifiJoinError('unsupported');
     }
     try {
       final sdk = await _channel.invokeMethod<int>('sdkInt') ?? 0;
       if (sdk < 24) {
-        throw WifiJoinException('unsupported', wifiJoinMessage('unsupported'));
+        throw wifiJoinError('unsupported');
       }
       final pending = Completer<WifiJoinResult>();
       _pending = pending;
@@ -173,14 +181,14 @@ class WifiJoinService implements WifiJoinApi {
       });
       return await pending.future.timeout(timeout, onTimeout: () {
         _pending = null;
-        throw WifiJoinException('timeout', wifiJoinMessage('timeout'));
+        throw wifiJoinError('timeout');
       });
     } on PlatformException catch (e) {
       _pending = null;
-      throw WifiJoinException(e.code, wifiJoinMessage(e.code, e.message));
+      throw wifiJoinError(e.code, e.message);
     } on MissingPluginException {
       _pending = null;
-      throw WifiJoinException('unsupported', wifiJoinMessage('unsupported'));
+      throw wifiJoinError('unsupported');
     }
   }
 

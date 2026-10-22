@@ -1,20 +1,31 @@
-// Localization infrastructure (docs/UX.md section 4, steps L1/L5/R1).
+// Localization infrastructure (docs/UX.md section 4, steps L1/L5/R1, L4).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:landrop/core/api.dart';
 import 'package:landrop/core/diagnosis.dart';
 import 'package:landrop/l10n/app_localizations.dart';
 import 'package:landrop/ui/app_controller.dart';
+import 'package:landrop/ui/cable_wizard.dart';
+import 'package:landrop/ui/connect_helper.dart';
 import 'package:landrop/ui/digits.dart';
 import 'package:landrop/ui/fake_core.dart';
 import 'package:landrop/ui/finding_text.dart';
 import 'package:landrop/ui/format.dart';
 import 'package:landrop/ui/dialogs.dart' show shortFolder;
+import 'package:landrop/ui/hotspot_service.dart';
+import 'package:landrop/ui/hotspot_wizard.dart';
 import 'package:landrop/ui/l10n.dart' show BidiL10n;
 import 'package:landrop/ui/ltr_text.dart';
+import 'package:landrop/ui/wifi_direct_page.dart';
+import 'package:landrop/ui/wifi_direct_service.dart';
+import 'package:landrop/ui/wifi_join_page.dart';
+import 'package:landrop/ui/wifi_join_service.dart';
+import 'package:landrop/ui/wifi_qr.dart';
 
 import 'helpers/pump_localized.dart';
 
@@ -45,6 +56,63 @@ List<Finding> _sampleFindings() => diagnose(const DiagnosisInput(
             failure: 'timeout'),
       ],
     ));
+
+/// Wi-Fi Direct without a radio: the test pushes peers and states.
+class _FakeWifiDirect implements WifiDirectApi {
+  final peersC = StreamController<List<WifiDirectPeer>>.broadcast();
+  final statesC = StreamController<WifiDirectState>.broadcast();
+  final errorsC = StreamController<WifiDirectException>.broadcast();
+  @override
+  bool get supported => true;
+  @override
+  Stream<List<WifiDirectPeer>> get peers => peersC.stream;
+  @override
+  Stream<WifiDirectState> get states => statesC.stream;
+  @override
+  Stream<WifiDirectException> get errors => errorsC.stream;
+  @override
+  Future<void> checkAvailable() async {}
+  @override
+  Future<void> discover() async {}
+  @override
+  Future<void> stopDiscover() async {}
+  @override
+  Future<void> connect(String address, {int? groupOwnerIntent}) async {}
+  @override
+  Future<void> createGroup() async {}
+  @override
+  Future<void> disconnect() async {}
+  @override
+  Future<WifiDirectState> info() async => WifiDirectState.disconnected;
+  @override
+  void dispose() {}
+}
+
+/// Joining a network without a radio; [camera] decides the permission.
+class _FakeWifiJoin implements WifiJoinApi {
+  _FakeWifiJoin({this.camera = true});
+  final bool camera;
+  final lostC = StreamController<WifiJoinException>.broadcast();
+  @override
+  bool get supported => true;
+  @override
+  Stream<WifiJoinException> get lost => lostC.stream;
+  @override
+  Future<bool> requestCamera() async => camera;
+  @override
+  Future<WifiJoinResult> join(WifiCredentials c) async =>
+      WifiJoinResult(c.ssid, gateway: '192.168.43.1');
+  @override
+  Future<void> leave() async {}
+  @override
+  void dispose() {}
+}
+
+Future<void> _push(WidgetTester t, Widget page) async {
+  t.state<NavigatorState>(find.byType(Navigator).first)
+      .push(MaterialPageRoute(builder: (_) => page));
+  await t.pumpAndSettle();
+}
 
 Future<void> _openSettings(WidgetTester t) async {
   // The tooltip is translated ("Settings" / "تنظیمات"); the icon is not.
@@ -321,12 +389,15 @@ void main() {
 
   group('Persian screens (UX.md 6: L2, L3, R1)', () {
     // English texts of every plain (placeholder-free) message that has a
-    // different Persian text: none may show up on a Persian screen.
+    // different Persian text: none may show up on a Persian screen. Platform
+    // names ("Windows", "Android") are skipped: they are also device data
+    // (a peer's model), which is never translated.
     final englishOnly = () {
       final enArb = _arb('en'), faArb = _arb('fa');
       return {
         for (final k in enArb.keys)
           if (!k.startsWith('@') &&
+              !k.startsWith('platform') &&
               !(enArb[k] as String).contains('{') &&
               enArb[k] != faArb[k])
             enArb[k] as String
@@ -532,6 +603,275 @@ void main() {
         expect(t.takeException(), isNull);
       });
     }
+
+    // L4 / U4: the connection helper and every wizard in Persian.
+    Future<void> scrollTo(WidgetTester t, String key) async {
+      final f = find.byKey(Key(key));
+      if (f.evaluate().isEmpty) {
+        await t.scrollUntilVisible(f, 200,
+            scrollable: find.byType(Scrollable).first);
+      }
+      await t.ensureVisible(f);
+      await t.pumpAndSettle();
+    }
+
+    Future<void> tapKey(WidgetTester t, String key) async {
+      await scrollTo(t, key);
+      await t.tap(find.byKey(Key(key)));
+      await t.pumpAndSettle();
+    }
+
+    String textOf(WidgetTester t, String key) {
+      final w = t.widget(find.byKey(Key(key)));
+      return w is Text ? w.data! : (w as SelectableText).data!;
+    }
+
+    for (final width in [375.0, 1000.0]) {
+      final w = width.toInt();
+
+      testWidgets('connection helper in fa at $w px', (t) async {
+        final core = FakeCore(
+            simulateDelay: const Duration(milliseconds: 10), initialPeers: [])
+          ..scanFindsDevice = false
+          ..diagnosisFindings = _sampleFindings();
+        await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, height: 900, core: core);
+        await _push(
+            t,
+            ConnectHelperPage(
+                platform: HotspotPlatform.android,
+                localAddresses: () async => ['192.168.43.20']));
+        expectRtl(t);
+        expect(find.text(fa.helperTitle), findsOneWidget);
+        expect(find.byKey(const Key('helperResult')), findsOneWidget);
+        expect(find.text(fa.helperQ1), findsOneWidget);
+        expectNoEnglish(t, 'helper check');
+        expect(t.takeException(), isNull);
+
+        // Same Wi-Fi: checklist, nothing found, "connect directly".
+        await tapKey(t, 'q1-same');
+        expect(find.text(fa.helperChecklist), findsOneWidget);
+        await tapKey(t, 'findDevice');
+        expect(find.text(fa.findNothingTitle), findsOneWidget);
+        await scrollTo(t, 'helperBlocked');
+        expect(find.text(fa.helperBlocked), findsOneWidget);
+        expectNoEnglish(t, 'helper same Wi-Fi');
+        expect(t.takeException(), isNull);
+        await tapKey(t, 'helperConnectDirectly');
+        expect(find.text(fa.helperQ2), findsOneWidget);
+        expectNoEnglish(t, 'helper question 2');
+
+        // Android to Android: this phone shares a hotspot.
+        await tapKey(t, 'q2-android');
+        expect(find.text(fa.helperMethodShareQrTitle), findsOneWidget);
+        expect(find.text(fa.helperRecommended), findsOneWidget);
+        expect(textOf(t, 'helper-step-0'), fa.hotspotShareAndroid1);
+        expectNoEnglish(t, 'helper method (top)');
+        await scrollTo(t, 'alt-wifiDirect');
+        expectNoEnglish(t, 'helper method (bottom)');
+        expect(t.takeException(), isNull);
+        await tapKey(t, 'alt-joinByQr');
+        expect(find.text(fa.helperMethodJoinQrTitle), findsOneWidget);
+        expectNoEnglish(t, 'helper QR join');
+
+        // Try another way: a cable (USB tethering on a phone).
+        await tapKey(t, 'helperTryAnother');
+        await tapKey(t, 'q1-cable');
+        expect(textOf(t, 'cable-step-0'), fa.cableUsbAndroid1);
+        expectNoEnglish(t, 'helper cable');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('hotspot wizard and hotspot card in fa at $w px',
+          (t) async {
+        const channel = MethodChannel(HotspotService.channelName);
+        t.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+            (call) async {
+          return switch (call.method) {
+            'sdkInt' => 33,
+            'start' => {
+                'ssid': 'AndroidShare_7',
+                'password': 'x;y12345',
+                'gateway': '192.168.49.1'
+              },
+            _ => true,
+          };
+        });
+        addTearDown(() => t.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null));
+        await pumpLocalized(t,
+            locale: const Locale('fa'),
+            width: width,
+            height: 900,
+            hotspotService: HotspotService(
+                android: true, requestPermission: (_) async => true));
+        await _push(t, const HotspotWizardPage(platform: HotspotPlatform.linux));
+        expectRtl(t);
+        expect(find.text(fa.hotspotWizardTitle), findsOneWidget);
+        expect(find.text(fa.wizardOnThisDevice(fa.platformLinux)),
+            findsOneWidget);
+        // The command stays a left-to-right island in the Persian step.
+        expect(textOf(t, 'step-0'),
+            fa.hotspotJoinLinux1(ltr(linuxJoinCommand)));
+        expectNoEnglish(t, 'hotspot wizard');
+        await tapKey(t, 'otherDevice');
+        expect(find.text(fa.platformIos), findsOneWidget);
+        expectNoEnglish(t, 'hotspot wizard, other device');
+        await scrollTo(t, 'cableInstead');
+        expectNoEnglish(t, 'hotspot wizard (bottom)');
+        expect(t.takeException(), isNull);
+        t.state<NavigatorState>(find.byType(Navigator).first).pop();
+        await t.pumpAndSettle();
+
+        await _push(
+            t, const HotspotWizardPage(platform: HotspotPlatform.android));
+        await tapKey(t, 'roleShare');
+        await tapKey(t, 'startHotspot');
+        // The controller waits a moment for the hotspot's address.
+        await t.pump(const Duration(seconds: 2));
+        await t.pumpAndSettle();
+        expect(find.text(fa.hotspotOn), findsOneWidget);
+        expect(textOf(t, 'hotspotSsid'), fa.hotspotName(ltr('AndroidShare_7')));
+        expect(textOf(t, 'hotspotPassword'),
+            fa.hotspotPassword(ltr('x;y12345')));
+        expectNoEnglish(t, 'hotspot card');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('cable wizard in fa at $w px', (t) async {
+        final core = FakeCore(
+            simulateDelay: const Duration(milliseconds: 10), initialPeers: [])
+          ..scanFindsDevice = false
+          ..diagnosisFindings = const [];
+        await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, height: 900, core: core);
+        await _push(
+            t,
+            CableWizardPage(
+                platform: HotspotPlatform.windows,
+                localAddresses: () async => ['169.254.3.4']));
+        expectRtl(t);
+        expect(find.text(fa.connectCableTitle), findsWidgets);
+        expect(textOf(t, 'cable-step-1'), fa.cableEthWindows2(ltr('169.254')));
+        expectNoEnglish(t, 'cable wizard');
+        await tapKey(t, 'kindUsb');
+        expect(find.text(fa.cableTetherHint), findsOneWidget);
+        expectNoEnglish(t, 'cable wizard, USB');
+        await tapKey(t, 'findDevice');
+        expect(find.text(fa.cableNothingHint), findsOneWidget);
+        expectNoEnglish(t, 'cable wizard, nothing found');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('Wi-Fi Direct page in fa at $w px', (t) async {
+        final svc = _FakeWifiDirect();
+        final core = await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, height: 900);
+        await _push(t, WifiDirectPage(service: svc));
+        expectRtl(t);
+        expect(find.text(fa.wifiDirectTitle), findsOneWidget);
+        expect(find.text(fa.wifiDirectEmpty), findsOneWidget);
+        expectNoEnglish(t, 'Wi-Fi Direct (empty)');
+        svc.peersC.add(const [
+          WifiDirectPeer('Pixel 9', 'aa:bb', 'available'),
+          WifiDirectPeer('گوشی سارا', 'cc:dd', 'invited'),
+        ]);
+        await t.pumpAndSettle();
+        expect(find.text(fa.wifiDirectStatusAvailable), findsOneWidget);
+        expect(find.text(fa.wifiDirectInvited), findsOneWidget);
+        expectNoEnglish(t, 'Wi-Fi Direct (peers)');
+        svc.errorsC.add(wifiDirectError('busy'));
+        await t.pumpAndSettle();
+        expect(find.text(fa.errWifiDirectBusy), findsOneWidget);
+        expectNoEnglish(t, 'Wi-Fi Direct (error)');
+        core.probeAnswers['192.168.49.1'] = FakeCore.persianPeer;
+        svc.statesC.add(const WifiDirectState(
+            connected: true,
+            ownerAddress: '192.168.49.1',
+            ssid: 'DIRECT-xy-Pixel'));
+        await t.pumpAndSettle();
+        expect(find.text(fa.wifiDirectConnected), findsOneWidget);
+        expect(textOf(t, 'wifiDirectHost'),
+            fa.wifiDirectHost(ltr('192.168.49.1')));
+        expect(textOf(t, 'wifiDirectSsid'),
+            fa.wifiDirectNetwork(ltr('DIRECT-xy-Pixel')));
+        expectNoEnglish(t, 'Wi-Fi Direct (connected)');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('Join by QR page in fa at $w px', (t) async {
+        await pumpLocalized(t,
+            locale: const Locale('fa'), width: width, height: 900);
+        await _push(
+            t,
+            WifiJoinPage(
+                service: _FakeWifiJoin(camera: false),
+                scannerBuilder: (_, _) => const SizedBox(),
+                localAddresses: () async => ['192.168.43.20']));
+        expectRtl(t);
+        expect(find.text(fa.connectWifiJoinTitle), findsOneWidget);
+        expect(find.text(fa.errWifiJoinCamera), findsOneWidget);
+        expectNoEnglish(t, 'Join by QR (camera denied)');
+        await tapKey(t, 'manualToggle');
+        // Technical inputs: left to right, Persian digits become Latin.
+        for (final k in ['manualSsid', 'manualPassword']) {
+          expect(t.widget<TextField>(find.byKey(Key(k))).textDirection,
+              TextDirection.ltr, reason: k);
+        }
+        await t.enterText(find.byKey(const Key('manualSsid')), 'Home ۴۲');
+        await t.enterText(
+            find.byKey(const Key('manualPassword')), 'pass۱۲۳۴۵');
+        await t.pump();
+        expect(
+            t.widget<TextField>(find.byKey(const Key('manualSsid')))
+                .controller!
+                .text,
+            'Home 42');
+        expectNoEnglish(t, 'Join by QR (manual)');
+        await tapKey(t, 'manualContinue');
+        expect(textOf(t, 'joinConfirmTitle'),
+            fa.wifiJoinConfirmTitle(ltr('Home 42')));
+        expectNoEnglish(t, 'Join by QR (confirm)');
+        await tapKey(t, 'joinButton');
+        expect(textOf(t, 'joinedTitle'), fa.wifiJoinJoined(ltr('Home 42')));
+        expectNoEnglish(t, 'Join by QR (joined)');
+        expect(t.takeException(), isNull);
+      });
+    }
+
+    test('service messages: English unchanged, Persian from the ARB', () {
+      expect(hotspotMessage('busy'), 'A hotspot is already starting.');
+      expect(hotspotMessage('permission', 'denied'),
+          'Android refused: denied. On Android 12 and older, Location must '
+          'also be switched on.');
+      expect(hotspotMessage('permission'), contains('permission missing'));
+      expect(hotspotMessage('weird', 'x'), 'The hotspot could not start: x.');
+      expect(hotspotMessage('busy', null, fa), fa.errHotspotBusy);
+      expect(
+          const HotspotException('unsupported', 'x',
+                  messageCode: 'permission-nearby')
+              .localized(fa),
+          fa.errHotspotPermissionNearby);
+      expect(wifiJoinMessage('failed', 'boom'),
+          'Could not join the network (boom). Try again, or join it in the '
+          'Wi-Fi settings.');
+      expect(wifiJoinError('timeout').localized(fa), fa.errWifiJoinTimeout);
+      expect(wifiDirectMessage('error'),
+          'Wi-Fi Direct failed. Turn Wi-Fi off and on, and try again.');
+      expect(wifiDirectError('wifi-off').localized(fa), fa.errWifiDirectWifiOff);
+      // A raw event-channel error stays as it is (technical).
+      expect(const WifiDirectException('error', 'boom', detail: 'boom')
+          .localized(fa), 'boom');
+      expect(hotspotPlatformName(HotspotPlatform.ios), 'iPhone / iPad');
+      expect(hotspotPlatformName(HotspotPlatform.ios, fa), fa.platformIos);
+      expect(hotspotSteps(HotspotPlatform.windows, HotspotRole.share, fa),
+          [fa.hotspotShareWindows1, fa.hotspotShareWindows2]);
+      expect(cableSteps(HotspotPlatform.linux, CableKind.ethernet, fa)[1],
+          fa.cableEthLinux2(ltr(linuxLinkLocalCommand)));
+      // English steps keep the plain command (no isolates).
+      expect(cableSteps(HotspotPlatform.linux, CableKind.ethernet)[1],
+          endsWith('Or run: $linuxLinkLocalCommand'));
+    });
 
     testWidgets('Add by IP: LTR field, Persian digits become Latin',
         (t) async {

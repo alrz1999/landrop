@@ -9,6 +9,8 @@ import 'cable_wizard.dart' show openCableWizard;
 import 'diagnosis_dialog.dart' show FindingTile;
 import 'format.dart';
 import 'hotspot_service.dart';
+import 'l10n.dart';
+import 'ltr_text.dart';
 import 'widgets.dart';
 import 'wifi_join_page.dart' show openWifiJoin;
 
@@ -25,89 +27,54 @@ HotspotPlatform currentHotspotPlatform() {
   return HotspotPlatform.other;
 }
 
-String hotspotPlatformName(HotspotPlatform p) => switch (p) {
-      HotspotPlatform.android => 'Android',
-      HotspotPlatform.ios => 'iPhone / iPad',
-      HotspotPlatform.macos => 'Mac',
-      HotspotPlatform.windows => 'Windows',
-      HotspotPlatform.linux => 'Linux',
-      HotspotPlatform.other => 'Other devices',
-    };
+String hotspotPlatformName(HotspotPlatform p, [AppLocalizations? l]) {
+  l ??= englishStrings;
+  return switch (p) {
+    HotspotPlatform.android => l.platformAndroid,
+    HotspotPlatform.ios => l.platformIos,
+    HotspotPlatform.macos => l.platformMac,
+    HotspotPlatform.windows => l.platformWindows,
+    HotspotPlatform.linux => l.platformLinux,
+    HotspotPlatform.other => l.platformOther,
+  };
+}
 
-/// Plain-language steps for [role] on [p].
-List<String> hotspotSteps(HotspotPlatform p, HotspotRole role) {
+/// Shell commands quoted in the Linux steps (never translated).
+const linuxHotspotCommand =
+    'nmcli device wifi hotspot ssid LanDrop password <password>';
+const linuxJoinCommand = 'nmcli device wifi connect <name> password <password>';
+
+/// Plain-language steps for [role] on [p], in the language of [l] (English
+/// when null).
+List<String> hotspotSteps(HotspotPlatform p, HotspotRole role,
+    [AppLocalizations? l]) {
+  l ??= englishStrings;
   if (role == HotspotRole.share) {
     return switch (p) {
-      HotspotPlatform.android => const [
-          'Tap "Start hotspot" below: LanDrop makes a private hotspot (no '
-              'mobile data is shared) and shows a QR code the other device '
-              'can scan to join. This phone may leave its Wi-Fi while it '
-              'runs.',
-          'Or use the normal hotspot: Settings > Network & internet > Hotspot '
-              '& tethering > Wi-Fi hotspot (names differ a little by brand). '
-              'Turn it on and note its name and password.',
+      HotspotPlatform.android => [
+          l.hotspotShareAndroid1,
+          l.hotspotShareAndroid2,
         ],
-      HotspotPlatform.ios => const [
-          'Open Settings > Personal Hotspot and turn on "Allow Others to '
-              'Join". (Your mobile plan must allow hotspot use.)',
-          'Keep that screen open until the other device has joined: it shows '
-              'the Wi-Fi password.',
+      HotspotPlatform.ios => [l.hotspotShareIos1, l.hotspotShareIos2],
+      HotspotPlatform.macos => [l.hotspotShareMac1, l.hotspotShareMac2],
+      HotspotPlatform.windows => [
+          l.hotspotShareWindows1,
+          l.hotspotShareWindows2,
         ],
-      HotspotPlatform.macos => const [
-          'Easiest: do it the other way round. Let the other device share a '
-              'hotspot and join it from this Mac (choose "This device joins '
-              'it" above).',
-          'To share from this Mac anyway: System Settings > General > Sharing, '
-              'click (i) next to Internet Sharing, share your connection '
-              '(for example Ethernet) to computers using Wi-Fi, set a network '
-              'name and password, then turn Internet Sharing on.',
+      HotspotPlatform.linux => [
+          l.hotspotShareLinux1(l.ltrValue(linuxHotspotCommand)),
+          l.hotspotShareLinux2,
         ],
-      HotspotPlatform.windows => const [
-          'Open Settings > Network & internet > Mobile hotspot.',
-          'Turn on "Mobile hotspot". The network name and password are shown '
-              'on that page.',
-        ],
-      HotspotPlatform.linux => const [
-          'Open Settings > Wi-Fi, open the menu (⋮) and choose "Turn On Wi-Fi '
-              'Hotspot…". On other desktops use NetworkManager: create a new '
-              'Wi-Fi network with mode "Hotspot", or run: nmcli device wifi '
-              'hotspot ssid LanDrop password <password>',
-          'Note the network name and password.',
-        ],
-      HotspotPlatform.other => const [
-          'Turn on the hotspot ("tethering") in this device\'s network '
-              'settings and note its name and password.',
-        ],
+      HotspotPlatform.other => [l.hotspotShareOther1],
     };
   }
   return switch (p) {
-    HotspotPlatform.android => const [
-        'Open Settings > Wi-Fi and pick the other device\'s hotspot, then '
-            'enter its password. Or tap the QR icon next to "Add network" and '
-            'scan the code shown on the other device.',
-      ],
-    HotspotPlatform.ios => const [
-        'Open Settings > Wi-Fi and pick the other device\'s hotspot, then '
-            'enter its password. Or point the Camera at the QR code shown on '
-            'the other device and tap "Join network".',
-      ],
-    HotspotPlatform.macos => const [
-        'Click the Wi-Fi icon in the menu bar (or Control Center), pick the '
-            'other device\'s hotspot and enter its password.',
-      ],
-    HotspotPlatform.windows => const [
-        'Click the network icon in the taskbar, open the Wi-Fi list, pick the '
-            'other device\'s hotspot and enter its password.',
-      ],
-    HotspotPlatform.linux => const [
-        'Open the network menu (top right) > Wi-Fi > Select network, pick the '
-            'other device\'s hotspot and enter its password. Or run: nmcli '
-            'device wifi connect <name> password <password>',
-      ],
-    HotspotPlatform.other => const [
-        'Open the Wi-Fi settings, pick the other device\'s hotspot and enter '
-            'its password.',
-      ],
+    HotspotPlatform.android => [l.hotspotJoinAndroid1],
+    HotspotPlatform.ios => [l.hotspotJoinIos1],
+    HotspotPlatform.macos => [l.hotspotJoinMac1],
+    HotspotPlatform.windows => [l.hotspotJoinWindows1],
+    HotspotPlatform.linux => [l.hotspotJoinLinux1(l.ltrValue(linuxJoinCommand))],
+    HotspotPlatform.other => [l.hotspotJoinOther1],
   };
 }
 
@@ -134,55 +101,47 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
+    final l = context.l;
     final t = Theme.of(context).textTheme;
     final p = _platform;
     final other =
         _role == HotspotRole.share ? HotspotRole.join : HotspotRole.share;
     final mine = [
-      ...hotspotSteps(p, _role),
+      ...hotspotSteps(p, _role, l),
       if (_role == HotspotRole.share)
-        'On the other device, join this hotspot like any Wi-Fi network (see '
-            'below).'
+        l.hotspotStepShareOther
       else
-        'Turn off any VPN. Mobile data can stay on.',
-      'Open LanDrop on both devices, then tap "I\'m connected, find the '
-          'other device".',
+        l.hotspotStepVpn,
+      l.hotspotStepOpenBoth,
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect without Wi-Fi')),
+      appBar: AppBar(title: Text(l.hotspotWizardTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
             key: const Key('hotspotWizard'),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 32),
             children: [
-              Text(
-                'No router needed: one device shares a Wi-Fi hotspot, the '
-                'other joins it, and LanDrop finds the other device on that '
-                'network. This also helps when the Wi-Fi keeps devices apart '
-                '(guest, office or hotel networks). Files go directly between '
-                'the two devices and do not use mobile data.',
-                style: t.bodyMedium,
-              ),
+              Text(l.hotspotIntro, style: t.bodyMedium),
               const SizedBox(height: 16),
               SegmentedButton<HotspotRole>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                       value: HotspotRole.share,
-                      icon: Icon(Icons.wifi_tethering),
-                      label: Text('This device shares the hotspot',
-                          key: Key('roleShare'))),
+                      icon: const Icon(Icons.wifi_tethering),
+                      label: Text(l.hotspotRoleShare,
+                          key: const Key('roleShare'))),
                   ButtonSegment(
                       value: HotspotRole.join,
-                      icon: Icon(Icons.wifi),
-                      label: Text('This device joins it',
-                          key: Key('roleJoin'))),
+                      icon: const Icon(Icons.wifi),
+                      label: Text(l.hotspotRoleJoin,
+                          key: const Key('roleJoin'))),
                 ],
                 selected: {_role},
                 onSelectionChanged: (s) => setState(() => _role = s.first),
               ),
-              SectionHeader('On this device (${hotspotPlatformName(p)})'),
+              SectionHeader(l.wizardOnThisDevice(hotspotPlatformName(p, l))),
               WizardSteps(mine, keyPrefix: 'step'),
               if (p == HotspotPlatform.android &&
                   _role == HotspotRole.share &&
@@ -190,40 +149,25 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
                 const HotspotCard(),
               if (p == HotspotPlatform.android && _role == HotspotRole.join)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsetsDirectional.only(top: 8),
                   child: FilledButton.icon(
                     key: const Key('scanHotspotQr'),
                     onPressed: () => openWifiJoin(context),
                     icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('Scan the hotspot QR code'),
+                    label: Text(l.hotspotScanQr),
                   ),
                 ),
               const SizedBox(height: 8),
-              Card(
-                child: ExpansionTile(
-                  key: const Key('otherDevice'),
-                  title: Text(other == HotspotRole.join
-                      ? 'On the other device: join the hotspot'
-                      : 'On the other device: share a hotspot'),
-                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final op in HotspotPlatform.values)
-                      if (op != HotspotPlatform.other) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(hotspotPlatformName(op),
-                              style: t.titleSmall),
-                        ),
-                        WizardSteps(hotspotSteps(op, other),
-                            keyPrefix: 'other-${op.name}'),
-                      ],
-                  ],
-                ),
+              OtherDeviceSteps(
+                tileKey: const Key('otherDevice'),
+                role: other,
+                title: other == HotspotRole.join
+                    ? l.hotspotOtherJoin
+                    : l.hotspotOtherShare,
               ),
               const SizedBox(height: 16),
               FindDevicePanel(
-                label: "I'm connected, find the other device",
+                label: l.hotspotFindLabel,
                 localAddresses: widget.localAddresses,
               ),
               const SizedBox(height: 8),
@@ -233,11 +177,62 @@ class _HotspotWizardPageState extends State<HotspotWizardPage> {
                     platform: widget.platform,
                     localAddresses: widget.localAddresses),
                 icon: const Icon(Icons.cable),
-                label: const Text('Using a cable instead? Ethernet or USB'),
+                label: Text(l.hotspotCableInstead),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Collapsed card with what to do on the other device for [role], one block
+/// per platform in [platforms] (every platform but "other" by default).
+class OtherDeviceSteps extends StatelessWidget {
+  const OtherDeviceSteps({
+    super.key,
+    required this.role,
+    required this.title,
+    this.platforms,
+    this.initiallyExpanded = false,
+    this.tileKey,
+  });
+
+  /// Key of the expandable tile (tap it to open).
+  final Key? tileKey;
+
+  final HotspotRole role;
+  final String title;
+  final List<HotspotPlatform>? platforms;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l;
+    final t = Theme.of(context).textTheme;
+    final shown = platforms ??
+        [
+          for (final op in HotspotPlatform.values)
+            if (op != HotspotPlatform.other) op
+        ];
+    return Card(
+      child: ExpansionTile(
+        key: tileKey,
+        title: Text(title),
+        initiallyExpanded: initiallyExpanded,
+        childrenPadding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 12),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final op in shown) ...[
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 8),
+              child: Text(hotspotPlatformName(op, l), style: t.titleSmall),
+            ),
+            WizardSteps(hotspotSteps(op, role, l),
+                keyPrefix: 'other-${op.name}'),
+          ],
+        ],
       ),
     );
   }
@@ -250,8 +245,10 @@ class HotspotCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppScope.of(context);
+    final l = context.l;
     final t = Theme.of(context).textTheme;
     final h = c.hotspot;
+    final error = c.hotspotFailure?.localized(l) ?? c.hotspotError;
     return Card(
       key: const Key('hotspotCard'),
       child: Padding(
@@ -269,52 +266,52 @@ class HotspotCard extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.wifi_tethering),
-                label: const Text('Start hotspot'),
+                label: Text(l.hotspotStart),
               ),
-              if (c.hotspotError != null)
+              if (error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(c.hotspotError!,
+                  padding: const EdgeInsetsDirectional.only(top: 8),
+                  child: Text(error,
                       key: const Key('hotspotError'),
                       style: TextStyle(
                           color: Theme.of(context).colorScheme.error)),
                 ),
             ] else ...[
-              Text('Hotspot is on', style: t.titleMedium),
+              Text(l.hotspotOn, style: t.titleMedium),
               const SizedBox(height: 8),
-              SelectableText('Name: ${h.ssid}', key: const Key('hotspotSsid')),
+              // Name and password are typed on the other device: LTR.
+              SelectableText(l.hotspotName(l.ltrValue(h.ssid)),
+                  key: const Key('hotspotSsid')),
               SelectableText(
                   h.password.isEmpty
-                      ? 'No password'
-                      : 'Password: ${h.password}',
+                      ? l.hotspotNoPassword
+                      : l.hotspotPassword(l.ltrValue(h.password)),
                   key: const Key('hotspotPassword')),
               const SizedBox(height: 12),
               Center(
-                child: Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(8),
-                  child: QrImageView(
-                    key: const Key('hotspotQr'),
-                    data: wifiQrPayload(h.ssid, h.password),
-                    size: 180,
-                    backgroundColor: Colors.white,
+                child: Semantics(
+                  label: l.hotspotQrSemantics,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(8),
+                    child: QrImageView(
+                      key: const Key('hotspotQr'),
+                      data: wifiQrPayload(h.ssid, h.password),
+                      size: 180,
+                      backgroundColor: Colors.white,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                'Scan with the other device\'s camera to join (Android 10+, '
-                'iPhone). The hotspot stops when you tap Stop or close '
-                'LanDrop.',
-                style: t.bodySmall,
-                textAlign: TextAlign.center,
-              ),
+              Text(l.hotspotScanHint,
+                  style: t.bodySmall, textAlign: TextAlign.center),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 key: const Key('stopHotspot'),
                 onPressed: c.stopHotspot,
                 icon: const Icon(Icons.stop_circle_outlined),
-                label: const Text('Stop hotspot'),
+                label: Text(l.hotspotStop),
               ),
             ],
           ],
@@ -342,12 +339,14 @@ class WizardSteps extends StatelessWidget {
       children: [
         for (final (i, s) in steps.indexed)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsetsDirectional.symmetric(vertical: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                    radius: 12, child: Text('${i + 1}', style: t.labelMedium)),
+                    radius: 12,
+                    child: Text(context.l.digits(i + 1),
+                        style: t.labelMedium)),
                 const SizedBox(width: 12),
                 Expanded(
                     child: Text(s,
@@ -372,11 +371,9 @@ class FindDevicePanel extends StatefulWidget {
     this.localAddresses,
     this.extraGateways = const [],
     this.autoStart = false,
-    this.phaseProbe = 'Checking the usual hotspot addresses…',
-    this.nothingFoundHint =
-        'Check that both devices are on the same hotspot and LanDrop is open '
-            'on both. Then try again, or use "Add by IP" with the address '
-            'shown on the other device.',
+    this.phaseProbe,
+    this.nothingFoundHint,
+    this.onFound,
   });
 
   final String label;
@@ -387,8 +384,16 @@ class FindDevicePanel extends StatefulWidget {
 
   /// Start searching as soon as the panel appears.
   final bool autoStart;
-  final String phaseProbe;
-  final String nothingFoundHint;
+
+  /// Progress line while probing; default "Checking the usual hotspot
+  /// addresses…".
+  final String? phaseProbe;
+
+  /// Shown when nothing was found; default: same hotspot, Add by IP.
+  final String? nothingFoundHint;
+
+  /// Called after every search with what it found (empty: nothing).
+  final void Function(List<DeviceInfo> found)? onFound;
 
   @override
   State<FindDevicePanel> createState() => _FindDevicePanelState();
@@ -419,11 +424,12 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
 
   Future<void> _find() async {
     final c = AppScope.read(context);
+    final l = context.l;
     setState(() {
       _searching = true;
       _found = null;
       _findings = null;
-      _phase = 'Looking at the new network…';
+      _phase = l.findPhaseNetwork;
     });
     final byFp = <String, DeviceInfo>{};
     try {
@@ -432,20 +438,22 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
       try {
         own = await (widget.localAddresses ?? _defaultAddresses)();
       } catch (_) {}
-      if (mounted) setState(() => _phase = widget.phaseProbe);
+      if (mounted) {
+        setState(() => _phase = widget.phaseProbe ?? l.findPhaseProbeHotspot);
+      }
       final targets =
           hotspotProbeTargets(own, extraGateways: widget.extraGateways);
       for (final d in await c.probeAddresses(targets)) {
         byFp[d.fingerprint] = d;
       }
-      if (mounted) setState(() => _phase = 'Scanning the network…');
+      if (mounted) setState(() => _phase = l.findPhaseScan);
       await c.rescan();
       for (final d in c.peers) {
         byFp.putIfAbsent(d.fingerprint, () => d);
       }
       List<Finding>? findings;
       if (byFp.isEmpty) {
-        if (mounted) setState(() => _phase = 'Nothing found. Checking why…');
+        if (mounted) setState(() => _phase = l.findPhaseWhy);
         findings = await c.runDiagnosis();
       }
       if (!mounted) return;
@@ -458,12 +466,14 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
       setState(() {
         _found = byFp.values.toList();
         _findings = [
-          Finding(Severity.problem, 'search-failed', 'The search failed', '$e')
+          Finding(Severity.problem, 'search-failed', l.diagSearchFailedTitle,
+              '$e')
         ];
       });
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+    if (mounted) widget.onFound?.call(byFp.values.toList());
   }
 
   @override
@@ -485,7 +495,7 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
         ),
         if (_searching && _phase != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsetsDirectional.only(top: 8),
             child: Text(_phase!, key: const Key('searchPhase')),
           ),
         ..._results(t),
@@ -496,18 +506,18 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
   List<Widget> _results(TextTheme t) {
     final found = _found;
     if (found == null || _searching) return const [];
+    final l = context.l;
     if (found.isNotEmpty) {
       return [
-        SectionHeader(
-            'Found ${found.length} device${found.length == 1 ? '' : 's'}'),
+        SectionHeader(l.findFound(found.length)),
         Card(
           child: Column(children: [
             for (final d in found)
               ListTile(
                 key: Key('found-${d.fingerprint}'),
                 leading: CircleAvatar(child: Icon(deviceIcon(d.deviceType))),
-                title: Text(d.alias),
-                subtitle: Text('${d.ip}:${d.port}'),
+                title: AutoDirText(d.alias),
+                subtitle: LtrText('${d.ip}:${d.port}'),
               ),
           ]),
         ),
@@ -515,16 +525,17 @@ class _FindDevicePanelState extends State<FindDevicePanel> {
         OutlinedButton(
           key: const Key('wizardDone'),
           onPressed: () => Navigator.maybePop(context),
-          child: const Text('Back to devices'),
+          child: Text(l.findBackToDevices),
         ),
       ];
     }
     return [
       const SizedBox(height: 16),
-      Text('No device found yet',
+      Text(l.findNothingTitle,
           key: const Key('nothingFound'), style: t.titleMedium),
       const SizedBox(height: 4),
-      Text(widget.nothingFoundHint, style: t.bodyMedium),
+      Text(widget.nothingFoundHint ?? l.findNothingHintHotspot,
+          style: t.bodyMedium),
       for (final f in _findings ?? const <Finding>[]) FindingTile(finding: f),
     ];
   }

@@ -260,12 +260,18 @@ void main() {
         findsNothing);
   });
 
-  testWidgets('diagnosis dialog: "Connect with a hotspot" opens the wizard',
-      (tester) async {
+  testWidgets(
+      'diagnosis dialog: "Connect with a hotspot" opens the connection '
+      'helper at "What is the other device?"', (tester) async {
     final core = await _pumpApp(tester);
     core.setPeers(const []);
     await tester.pumpAndSettle();
-    await _tapVisible(tester, find.byKey(const Key('whyNoDevices')));
+    // The dialog is the connection report in Settings ▸ Advanced; the empty
+    // list's button opens the connection helper (UX.md 3.4).
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.byKey(const Key('advancedSettings')));
+    await _tapVisible(tester, find.byKey(const Key('diagnoseSettings')));
     expect(find.byKey(const Key('diagnosisDialog')), findsOneWidget);
     final action = find.byKey(const Key('findingAction-announce-blocked'));
     expect(action, findsOneWidget);
@@ -274,7 +280,8 @@ void main() {
     expect(find.byKey(const Key('findingAction-network')), findsNothing);
     await _tapVisible(tester, action);
     expect(find.byKey(const Key('diagnosisDialog')), findsNothing);
-    expect(find.byKey(const Key('hotspotWizard')), findsOneWidget);
+    expect(find.byKey(const Key('connectHelper')), findsOneWidget);
+    expect(find.byKey(const Key('helperQ2')), findsOneWidget);
   });
 
   testWidgets('wizard from the empty peer list and from Settings',

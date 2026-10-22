@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'advanced_settings.dart';
 import 'app_controller.dart';
-import 'diagnosis_dialog.dart';
+import 'connect_helper.dart';
 import 'dialogs.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
@@ -185,7 +185,8 @@ class SettingsPage extends StatelessWidget {
                 title: Text(l.settingsConnectHelp),
                 subtitle: Text(l.settingsConnectHelpSub),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => showDiagnosisDialog(context),
+                onTap: () => openConnectHelper(context,
+                    pickFiles: pickFiles, pickFolder: pickFolder),
               ),
               ListTile(
                 key: const Key('sharesSettings'),

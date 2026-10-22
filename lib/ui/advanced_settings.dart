@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'cable_wizard.dart';
+import 'connect_helper.dart';
 import 'diagnosis_dialog.dart';
 import 'format.dart';
 import 'hotspot_wizard.dart';
@@ -110,7 +111,11 @@ class AdvancedSettingsPage extends StatelessWidget {
                   children: [
                     Text(_status(l, c)),
                     // Technical, for support; stays in English.
-                    if (c.lastError != null)
+                    if (c.webHttpStartError != null)
+                      Text(l.errorWebHttpStart(
+                              l.ltrValue(c.webHttpStartError!)),
+                          key: const Key('lastError'), style: t.bodySmall)
+                    else if (c.lastError != null)
                       LtrText(c.lastError!,
                           key: const Key('lastError'),
                           style: t.bodySmall,
@@ -184,6 +189,13 @@ class AdvancedSettingsPage extends StatelessWidget {
                   subtitle: Text(l.connectWifiJoinSub),
                   onTap: () => openWifiJoin(context),
                 ),
+              ListTile(
+                key: const Key('helperAdvanced'),
+                leading: const Icon(Icons.assistant_navigation),
+                title: Text(l.helperTitle),
+                subtitle: Text(l.settingsConnectHelpSub),
+                onTap: () => openConnectHelper(context),
+              ),
             ],
           ),
         ),

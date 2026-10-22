@@ -129,10 +129,10 @@ Future<void> startShareFlow(
   List<String> paths;
   try {
     if (folder) {
-      final d = await pickFolder();
+      final d = await pickFolderTitled(pickFolder, l.pickFolderTitle);
       paths = d == null || d.isEmpty ? const [] : [d];
     } else {
-      paths = await pickFiles();
+      paths = await pickFilesTitled(pickFiles, l.pickFilesTitle);
     }
   } catch (e) {
     snack(l.errorPicker('$e'));

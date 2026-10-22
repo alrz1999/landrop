@@ -1157,4 +1157,722 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get diagReportNote =>
       'This report is in English so support can read it.';
+
+  @override
+  String get platformAndroid => 'Android';
+
+  @override
+  String get platformIos => 'iPhone / iPad';
+
+  @override
+  String get platformMac => 'Mac';
+
+  @override
+  String get platformWindows => 'Windows';
+
+  @override
+  String get platformLinux => 'Linux';
+
+  @override
+  String get platformOther => 'Other devices';
+
+  @override
+  String get hotspotShareAndroid1 =>
+      'Tap \"Start hotspot\" below: LanDrop makes a private hotspot (no mobile data is shared) and shows a QR code the other device can scan to join. This phone may leave its Wi-Fi while it runs.';
+
+  @override
+  String get hotspotShareAndroid2 =>
+      'Or use the normal hotspot: Settings > Network & internet > Hotspot & tethering > Wi-Fi hotspot (names differ a little by brand). Turn it on and note its name and password.';
+
+  @override
+  String get hotspotShareIos1 =>
+      'Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". (Your mobile plan must allow hotspot use.)';
+
+  @override
+  String get hotspotShareIos2 =>
+      'Keep that screen open until the other device has joined: it shows the Wi-Fi password.';
+
+  @override
+  String get hotspotShareMac1 =>
+      'Easiest: do it the other way round. Let the other device share a hotspot and join it from this Mac (choose \"This device joins it\" above).';
+
+  @override
+  String get hotspotShareMac2 =>
+      'To share from this Mac anyway: System Settings > General > Sharing, click (i) next to Internet Sharing, share your connection (for example Ethernet) to computers using Wi-Fi, set a network name and password, then turn Internet Sharing on.';
+
+  @override
+  String get hotspotShareWindows1 =>
+      'Open Settings > Network & internet > Mobile hotspot.';
+
+  @override
+  String get hotspotShareWindows2 =>
+      'Turn on \"Mobile hotspot\". The network name and password are shown on that page.';
+
+  @override
+  String hotspotShareLinux1(String command) {
+    return 'Open Settings > Wi-Fi, open the menu (⋮) and choose \"Turn On Wi-Fi Hotspot…\". On other desktops use NetworkManager: create a new Wi-Fi network with mode \"Hotspot\", or run: $command';
+  }
+
+  @override
+  String get hotspotShareLinux2 => 'Note the network name and password.';
+
+  @override
+  String get hotspotShareOther1 =>
+      'Turn on the hotspot (\"tethering\") in this device\'s network settings and note its name and password.';
+
+  @override
+  String get hotspotJoinAndroid1 =>
+      'Open Settings > Wi-Fi and pick the other device\'s hotspot, then enter its password. Or tap the QR icon next to \"Add network\" and scan the code shown on the other device.';
+
+  @override
+  String get hotspotJoinIos1 =>
+      'Open Settings > Wi-Fi and pick the other device\'s hotspot, then enter its password. Or point the Camera at the QR code shown on the other device and tap \"Join network\".';
+
+  @override
+  String get hotspotJoinMac1 =>
+      'Click the Wi-Fi icon in the menu bar (or Control Center), pick the other device\'s hotspot and enter its password.';
+
+  @override
+  String get hotspotJoinWindows1 =>
+      'Click the network icon in the taskbar, open the Wi-Fi list, pick the other device\'s hotspot and enter its password.';
+
+  @override
+  String hotspotJoinLinux1(String command) {
+    return 'Open the network menu (top right) > Wi-Fi > Select network, pick the other device\'s hotspot and enter its password. Or run: $command';
+  }
+
+  @override
+  String get hotspotJoinOther1 =>
+      'Open the Wi-Fi settings, pick the other device\'s hotspot and enter its password.';
+
+  @override
+  String get hotspotStepShareOther =>
+      'On the other device, join this hotspot like any Wi-Fi network (see below).';
+
+  @override
+  String get hotspotStepVpn => 'Turn off any VPN. Mobile data can stay on.';
+
+  @override
+  String get hotspotStepOpenBoth =>
+      'Open LanDrop on both devices, then tap \"I\'m connected, find the other device\".';
+
+  @override
+  String get hotspotWizardTitle => 'Connect without Wi-Fi';
+
+  @override
+  String get hotspotIntro =>
+      'No router needed: one device shares a Wi-Fi hotspot, the other joins it, and LanDrop finds the other device on that network. This also helps when the Wi-Fi keeps devices apart (guest, office or hotel networks). Files go directly between the two devices and do not use mobile data.';
+
+  @override
+  String get hotspotRoleShare => 'This device shares the hotspot';
+
+  @override
+  String get hotspotRoleJoin => 'This device joins it';
+
+  @override
+  String wizardOnThisDevice(String platform) {
+    return 'On this device ($platform)';
+  }
+
+  @override
+  String get hotspotScanQr => 'Scan the hotspot QR code';
+
+  @override
+  String get hotspotOtherJoin => 'On the other device: join the hotspot';
+
+  @override
+  String get hotspotOtherShare => 'On the other device: share a hotspot';
+
+  @override
+  String get hotspotFindLabel => 'I\'m connected, find the other device';
+
+  @override
+  String get hotspotCableInstead => 'Using a cable instead? Ethernet or USB';
+
+  @override
+  String get hotspotStart => 'Start hotspot';
+
+  @override
+  String get hotspotOn => 'Hotspot is on';
+
+  @override
+  String hotspotName(String ssid) {
+    return 'Name: $ssid';
+  }
+
+  @override
+  String get hotspotNoPassword => 'No password';
+
+  @override
+  String hotspotPassword(String password) {
+    return 'Password: $password';
+  }
+
+  @override
+  String get hotspotScanHint =>
+      'Scan with the other device\'s camera to join (Android 10+, iPhone). The hotspot stops when you tap Stop or close LanDrop.';
+
+  @override
+  String get hotspotStop => 'Stop hotspot';
+
+  @override
+  String get hotspotQrSemantics => 'QR code to join this hotspot';
+
+  @override
+  String get findPhaseNetwork => 'Looking at the new network…';
+
+  @override
+  String get findPhaseProbeHotspot => 'Checking the usual hotspot addresses…';
+
+  @override
+  String get findPhaseScan => 'Scanning the network…';
+
+  @override
+  String get findPhaseWhy => 'Nothing found. Checking why…';
+
+  @override
+  String get findNothingHintHotspot =>
+      'Check that both devices are on the same hotspot and LanDrop is open on both. Then try again, or use \"Add by IP\" with the address shown on the other device.';
+
+  @override
+  String findFound(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString devices',
+      one: '1 device',
+    );
+    return 'Found $_temp0';
+  }
+
+  @override
+  String get findBackToDevices => 'Back to devices';
+
+  @override
+  String get findNothingTitle => 'No device found yet';
+
+  @override
+  String get cableEthMac1 =>
+      'Plug the Ethernet cable into both computers (a USB or Thunderbolt Ethernet adapter is fine). Cable or router: the same steps.';
+
+  @override
+  String get cableEthMac2 =>
+      'Open System Settings > Network. If the adapter is not listed, click \"…\" > \"Add Service…\" (or the + button), pick the Ethernet adapter and click Create.';
+
+  @override
+  String cableEthMac3(String prefix) {
+    return 'Select it and set \"Configure IPv4\" to \"Using DHCP\". With no router the Mac gives itself an address starting with $prefix. That is normal.';
+  }
+
+  @override
+  String get cableEthPlugBoth => 'Plug the Ethernet cable into both computers.';
+
+  @override
+  String cableEthWindows2(String prefix) {
+    return 'Open Settings > Network & internet > Ethernet. It should say \"No Internet\" or \"Unidentified network\": that is fine, Windows gives itself an address starting with $prefix.';
+  }
+
+  @override
+  String get cableEthWindows3 =>
+      'Under \"IP assignment\" keep \"Automatic (DHCP)\". On the Windows Firewall prompt, allow LanDrop on Private networks. If the network is marked \"Public\", set it to Private.';
+
+  @override
+  String cableEthLinux2(String command) {
+    return 'Open Settings > Network, pick the wired connection and open its settings > IPv4. Choose the \"Link-Local Only\" method and apply. Or run: $command';
+  }
+
+  @override
+  String get cableEthLinux3 =>
+      'Turn the connection off and on so it gets an address.';
+
+  @override
+  String get cableEthOther1 =>
+      'Plug an Ethernet cable (with an adapter if needed) into both computers, and make sure the wired network uses automatic addresses (DHCP or \"link-local\").';
+
+  @override
+  String get cableUsbAndroid1 =>
+      'This phone is the one sharing: connect it to the computer with a USB cable.';
+
+  @override
+  String get cableUsbAndroid2 =>
+      'Open Settings > Network & internet > Hotspot & tethering (names differ a little by brand), then turn on \"USB tethering\". It only switches on while a computer is plugged in.';
+
+  @override
+  String get cableUsbIos1 =>
+      'Connect the iPhone to the computer with a USB cable and tap \"Trust\" if asked.';
+
+  @override
+  String get cableUsbIos2 =>
+      'Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". On a Windows PC, iTunes or the Apple Devices app must be installed.';
+
+  @override
+  String get cableUsbMac1 =>
+      'Connect the phone to this Mac with a USB cable. On the phone turn on Personal Hotspot (iPhone) or USB tethering (Android).';
+
+  @override
+  String get cableUsbMac2 =>
+      'The Mac shows a new network adapter in System Settings > Network (for example \"iPhone USB\" or \"RNDIS/Ethernet Gadget\"). Android USB tethering needs a driver on a Mac, which is not built in; an iPhone works out of the box.';
+
+  @override
+  String get cableUsbWindows1 =>
+      'Connect the phone to this PC with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).';
+
+  @override
+  String get cableUsbWindows2 =>
+      'Windows adds a new adapter (shown in Settings > Network & internet > Advanced network settings). Wait until it says Connected.';
+
+  @override
+  String get cableUsbLinux1 =>
+      'Connect the phone to this computer with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).';
+
+  @override
+  String get cableUsbLinux2 =>
+      'A new wired connection appears (named like usb0, enx… or eth1). It usually connects by itself.';
+
+  @override
+  String get cableUsbOther1 =>
+      'Connect the phone with a USB cable and turn on USB tethering or Personal Hotspot; the computer then has a new network adapter.';
+
+  @override
+  String get cableStepWait =>
+      'Wait a few seconds: with no router it takes up to a minute for both computers to get their addresses.';
+
+  @override
+  String get cableStepVpn =>
+      'Turn off any VPN. The other device now shares its connection to this one.';
+
+  @override
+  String get cableStepOpenBoth =>
+      'Open LanDrop on both devices, then tap \"The cable is connected, find the other device\".';
+
+  @override
+  String get cableIntro =>
+      'No Wi-Fi or router needed: connect the two devices with a cable and LanDrop finds the other device on that link. Files go directly over the cable.';
+
+  @override
+  String get cableKindEthernet => 'Ethernet cable';
+
+  @override
+  String get cableKindUsb => 'USB tethering';
+
+  @override
+  String get cableTetherHint =>
+      'On the phone: Android > Settings > Network & internet > Hotspot & tethering > USB tethering. iPhone > Settings > Personal Hotspot.';
+
+  @override
+  String get cableFindLabel => 'The cable is connected, find the other device';
+
+  @override
+  String get cablePhaseProbe => 'Checking the usual cable and USB addresses…';
+
+  @override
+  String get cableNothingHint =>
+      'Check the cable, that the adapter shows as connected, and that LanDrop is open on both devices. A direct cable can take up to a minute to get addresses. Then try again, or use \"Add by IP\" with the address shown on the other device.';
+
+  @override
+  String get wifiDirectTitle => 'Wi-Fi Direct';
+
+  @override
+  String get wifiDirectIntro =>
+      'Connect two devices directly, without a router. Once connected, send files as usual.';
+
+  @override
+  String get wifiDirectTry =>
+      'Try: Wi-Fi on, accept the invitation on the other device, keep both screens on and close together.';
+
+  @override
+  String get wifiDirectRoleOwner => 'This device hosts the group.';
+
+  @override
+  String get wifiDirectRoleClient => 'Joined the other device\'s group.';
+
+  @override
+  String get wifiDirectConnected => 'Connected via Wi-Fi Direct';
+
+  @override
+  String wifiDirectNetwork(String ssid) {
+    return 'Network: $ssid';
+  }
+
+  @override
+  String wifiDirectHost(String address) {
+    return 'Host address: $address';
+  }
+
+  @override
+  String get wifiDirectLooking => 'Looking for LanDrop devices…';
+
+  @override
+  String get wifiDirectNone =>
+      'No LanDrop device answered yet. Make sure LanDrop is open on the other device, then search again.';
+
+  @override
+  String get wifiDirectSearchAgain => 'Search again';
+
+  @override
+  String get wifiDirectDisconnect => 'Disconnect';
+
+  @override
+  String get wifiDirectTapHint =>
+      'Tap a device to connect. The other device gets an Android invitation dialog and must accept it.';
+
+  @override
+  String get wifiDirectLookingShort => 'Looking…';
+
+  @override
+  String get wifiDirectEmpty =>
+      'No devices found yet. Open Wi-Fi Direct on the other device too.';
+
+  @override
+  String get wifiDirectInvited =>
+      'Invitation sent. Accept it on the other device.';
+
+  @override
+  String get wifiDirectStatusConnected => 'connected';
+
+  @override
+  String get wifiDirectStatusFailed => 'failed';
+
+  @override
+  String get wifiDirectStatusAvailable => 'available';
+
+  @override
+  String get wifiDirectStatusUnavailable => 'unavailable';
+
+  @override
+  String get wifiDirectCreateGroup => 'Create group here';
+
+  @override
+  String get wifiDirectCreateHint =>
+      '\"Create group here\" makes this device the host, so the other device can find and join it from its own Wi-Fi Direct screen. Keep both screens on.';
+
+  @override
+  String get wifiJoinNotWifiQr =>
+      'That QR code is not a Wi-Fi code. Scan the code shown by the other phone\'s LanDrop hotspot.';
+
+  @override
+  String get wifiJoinManualInvalid =>
+      'Enter the network name (up to 32 characters) and its password (8 to 63 characters, or none for an open network).';
+
+  @override
+  String get wifiJoinScanIntro =>
+      'On the other phone, open LanDrop > Connect without Wi-Fi > \"This device shares the hotspot\" > Start hotspot. Then point this camera at the QR code it shows.';
+
+  @override
+  String get wifiJoinAllowCamera => 'Allow the camera';
+
+  @override
+  String get wifiJoinManualToggle => 'Enter name and password';
+
+  @override
+  String get wifiJoinNetworkName => 'Network name';
+
+  @override
+  String get wifiJoinPasswordLabel => 'Password (empty for an open network)';
+
+  @override
+  String get wifiJoinHidden => 'Hidden network';
+
+  @override
+  String get wifiJoinContinue => 'Continue';
+
+  @override
+  String wifiJoinConfirmTitle(String ssid) {
+    return 'Join $ssid?';
+  }
+
+  @override
+  String get wifiJoinExplain =>
+      'LanDrop will ask Android to join this Wi-Fi network. Android will ask you to confirm. While joined, this phone may lose its internet connection. Only LanDrop uses this network; other apps keep using your normal connection where Android allows it.';
+
+  @override
+  String get wifiJoinJoin => 'Join';
+
+  @override
+  String wifiJoinJoining(String ssid) {
+    return 'Joining $ssid… Confirm the Android prompt when it appears.';
+  }
+
+  @override
+  String get wifiJoinScanAgain => 'Scan again';
+
+  @override
+  String wifiJoinJoined(String ssid) {
+    return 'Joined $ssid';
+  }
+
+  @override
+  String get wifiJoinFindTitle => 'Find the other device';
+
+  @override
+  String get wifiJoinLeave => 'Leave network';
+
+  @override
+  String get errHotspotUnsupportedPlatform =>
+      'Only Android can start a hotspot from LanDrop.';
+
+  @override
+  String get errHotspotUnsupportedSdk =>
+      'This Android version cannot start a hotspot from an app. Use Settings > Hotspot instead.';
+
+  @override
+  String get errHotspotPermissionNearby =>
+      'LanDrop needs the \"Nearby devices\" permission to start a hotspot.';
+
+  @override
+  String get errHotspotPermissionLocation =>
+      'LanDrop needs the location permission to start a hotspot (Android requires it for Wi-Fi features; LanDrop does not use your location).';
+
+  @override
+  String get errHotspotNoName =>
+      'The hotspot started but Android did not report its name.';
+
+  @override
+  String get errHotspotUnavailable =>
+      'Starting a hotspot is not available here.';
+
+  @override
+  String errHotspotRefused(String detail) {
+    return 'Android refused: $detail. On Android 12 and older, Location must also be switched on.';
+  }
+
+  @override
+  String get errHotspotPermissionMissing => 'permission missing';
+
+  @override
+  String get errHotspotIncompatible =>
+      'Android cannot start it right now, usually because the normal hotspot or tethering is on. Turn that off, or use it instead.';
+
+  @override
+  String get errHotspotDisallowed =>
+      'Hotspots are not allowed on this device (for example by a work profile or the carrier).';
+
+  @override
+  String get errHotspotNoChannel =>
+      'No free Wi-Fi channel. Try again in a moment.';
+
+  @override
+  String get errHotspotBusy => 'A hotspot is already starting.';
+
+  @override
+  String get errHotspotCancelled => 'The hotspot was stopped.';
+
+  @override
+  String get errHotspotFailed => 'The hotspot could not start.';
+
+  @override
+  String errHotspotFailedDetail(String detail) {
+    return 'The hotspot could not start: $detail.';
+  }
+
+  @override
+  String errHotspotStartError(String error) {
+    return 'The hotspot could not start: $error';
+  }
+
+  @override
+  String get errWifiDirectUnsupported =>
+      'Wi-Fi Direct is not available on this device.';
+
+  @override
+  String get errWifiDirectWifiOff =>
+      'Wi-Fi is off. Turn Wi-Fi on (no router needed), then try again.';
+
+  @override
+  String get errWifiDirectPermission =>
+      'LanDrop needs permission to find nearby devices. Allow it, and on Android 12 and older also switch Location on.';
+
+  @override
+  String get errWifiDirectBusy =>
+      'Wi-Fi Direct is busy. Wait a moment and try again, or tap Disconnect first.';
+
+  @override
+  String get errWifiDirectNotReady =>
+      'Wi-Fi Direct is not ready yet. Try again.';
+
+  @override
+  String get errWifiDirectFailed =>
+      'Wi-Fi Direct failed. Turn Wi-Fi off and on, and try again.';
+
+  @override
+  String errWifiDirectFailedDetail(String detail) {
+    return 'Wi-Fi Direct failed ($detail). Turn Wi-Fi off and on, and try again.';
+  }
+
+  @override
+  String get errWifiJoinUnsupported =>
+      'Joining a Wi-Fi network from LanDrop needs Android 7 or newer. Join it in the Wi-Fi settings instead.';
+
+  @override
+  String get errWifiJoinCamera =>
+      'LanDrop needs the camera to scan the QR code. Allow it in the app settings, or type the name and password instead.';
+
+  @override
+  String get errWifiJoinTimeout =>
+      'Android did not join the network. Check that the other phone\'s hotspot is on and close by, that the password is right, and that you did not decline the Android prompt. Then try again.';
+
+  @override
+  String get errWifiJoinLost =>
+      'The network went away. Check that the hotspot is still on, then scan again.';
+
+  @override
+  String get errWifiJoinUnsupportedSecurity =>
+      'This network uses an old security type (WEP) that Android no longer lets apps join. Join it in the Wi-Fi settings instead.';
+
+  @override
+  String get errWifiJoinPermission =>
+      'Android did not allow LanDrop to change the network. Join it in the Wi-Fi settings instead.';
+
+  @override
+  String get errWifiJoinFailed =>
+      'Could not join the network. Try again, or join it in the Wi-Fi settings.';
+
+  @override
+  String errWifiJoinFailedDetail(String detail) {
+    return 'Could not join the network ($detail). Try again, or join it in the Wi-Fi settings.';
+  }
+
+  @override
+  String errorWebHttpStart(String error) {
+    return 'Plain HTTP for browsers could not start: $error';
+  }
+
+  @override
+  String get pickFilesTitle => 'Choose files to send';
+
+  @override
+  String get pickFolderTitle => 'Choose a folder to send';
+
+  @override
+  String get helperTitle => 'Help me connect';
+
+  @override
+  String get helperChecking => 'Checking your connection…';
+
+  @override
+  String helperFound(String name) {
+    return 'Found $name!';
+  }
+
+  @override
+  String get helperCheckFine => 'Nothing looks wrong on this device.';
+
+  @override
+  String get helperQ1 => 'Are both devices on the same Wi-Fi?';
+
+  @override
+  String get helperQ1Same => 'Yes, same Wi-Fi';
+
+  @override
+  String get helperQ1Different => 'No, or there is no Wi-Fi';
+
+  @override
+  String get helperQ1Cable => 'I\'ll use a cable';
+
+  @override
+  String get helperChecklist =>
+      'Open LanDrop on the other device and keep its screen on. Turn off any VPN.';
+
+  @override
+  String get helperSearchAgain => 'Search again';
+
+  @override
+  String get helperSameWifiNothing =>
+      'Make sure both devices use the same Wi-Fi network (not a guest network) and LanDrop is open on both, then search again.';
+
+  @override
+  String get helperBlocked =>
+      'This Wi-Fi may keep devices apart. Let\'s connect them directly.';
+
+  @override
+  String get helperConnectDirectly => 'Connect directly';
+
+  @override
+  String get helperQ2 => 'What is the other device?';
+
+  @override
+  String get helperQ2Android => 'An Android phone';
+
+  @override
+  String get helperQ2Iphone => 'An iPhone';
+
+  @override
+  String get helperQ2Computer => 'A computer';
+
+  @override
+  String get helperQ2Browser => 'Only a browser';
+
+  @override
+  String get helperRecommended => 'Recommended';
+
+  @override
+  String get helperMethodShareQrTitle => 'Share a hotspot from this phone';
+
+  @override
+  String get helperMethodShareQrBody =>
+      'No internet is used. The other phone scans the code to join.';
+
+  @override
+  String get helperMethodShareTitle => 'Share a hotspot from this device';
+
+  @override
+  String get helperMethodShareBody =>
+      'No internet is used. The other device joins this hotspot like any Wi-Fi network.';
+
+  @override
+  String get helperMethodJoinTitle => 'Join the other device\'s hotspot';
+
+  @override
+  String get helperMethodJoinBody =>
+      'Turn on the hotspot on the other device, then join it from this one. No internet is used.';
+
+  @override
+  String get helperMethodJoinQrTitle => 'Scan the other phone\'s hotspot code';
+
+  @override
+  String get helperMethodJoinQrBody =>
+      'When the other phone shares a hotspot with LanDrop, this phone scans its QR code and joins.';
+
+  @override
+  String get helperMethodWifiDirectTitle => 'Use Wi-Fi Direct';
+
+  @override
+  String get helperMethodWifiDirectBody =>
+      'Phone to phone without a router. Both phones must run Android.';
+
+  @override
+  String get helperOpenWifiDirect => 'Open Wi-Fi Direct';
+
+  @override
+  String get helperMethodBrowserTitle => 'Use a browser on the other device';
+
+  @override
+  String get helperMethodBrowserBody =>
+      'Nothing to install: the other device opens a link in its browser to send or download files. Both devices must be on the same Wi-Fi or hotspot.';
+
+  @override
+  String get helperOpenShares => 'Open the Share page';
+
+  @override
+  String get helperOnThisDevice => 'On this device';
+
+  @override
+  String get helperOnOtherDevice => 'On the other device';
+
+  @override
+  String get helperOtherWays => 'Other ways';
+
+  @override
+  String get helperTryAnother => 'Try another way';
+
+  @override
+  String get helperCopyReport => 'Copy connection report';
+
+  @override
+  String get wifiJoinCameraFailed =>
+      'The camera could not start. Type the name and password below instead.';
 }

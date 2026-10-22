@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:landrop/ui/app.dart';
 import 'package:landrop/ui/app_controller.dart';
 import 'package:landrop/ui/fake_core.dart';
+import 'package:landrop/ui/hotspot_service.dart';
 
 /// Pumps [app] in a [width] x [height] logical-pixel window and settles.
 /// A `RenderFlex overflowed` during layout fails the test.
@@ -23,7 +24,8 @@ LanDropApp localizedApp(
     FakeCore? core,
     MemorySettingsStore? store,
     Future<List<String>> Function()? pickFiles,
-    Future<String?> Function()? pickFolder}) {
+    Future<String?> Function()? pickFolder,
+    HotspotService? hotspotService}) {
   return LanDropApp(
     core: core ?? FakeCore(simulateDelay: const Duration(milliseconds: 10)),
     store: store ??
@@ -32,6 +34,7 @@ LanDropApp localizedApp(
     initialAlias: 'Tester',
     pickFiles: pickFiles ?? () async => <String>[],
     pickFolder: pickFolder ?? () async => null,
+    hotspotService: hotspotService,
   );
 }
 
@@ -42,7 +45,8 @@ Future<FakeCore> pumpLocalized(WidgetTester t,
     double height = 800,
     FakeCore? core,
     Future<List<String>> Function()? pickFiles,
-    Future<String?> Function()? pickFolder}) async {
+    Future<String?> Function()? pickFolder,
+    HotspotService? hotspotService}) async {
   core ??= FakeCore(simulateDelay: const Duration(milliseconds: 10));
   await pumpApp(
       t,
@@ -50,7 +54,8 @@ Future<FakeCore> pumpLocalized(WidgetTester t,
           locale: locale,
           core: core,
           pickFiles: pickFiles,
-          pickFolder: pickFolder),
+          pickFolder: pickFolder,
+          hotspotService: hotspotService),
       width: width, height: height);
   return core;
 }

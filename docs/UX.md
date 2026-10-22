@@ -1033,7 +1033,8 @@ English copy byte-identical until a step explicitly changes copy, and update the
 `find.text` assertions in the same PR; `flutter analyze` clean; all tests green (212 before the
 l10n work; 235 after L1/L5/R1-infra: +22 in `test/l10n_test.dart`, +1 send error-code test in
 `test/core_test.dart`; the suite total also includes tests added by parallel steps; 262 after
-the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens).
+the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens; 295 after U4 and L4: +22 in
+`test/connect_helper_test.dart`, +11 in `test/l10n_test.dart`).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1164,6 +1165,75 @@ screens" (home with devices / empty / transfers / incoming dialog / details shee
 picker, Settings, Advanced, Shares page, share options, pairing, Add by IP; 375 and 1000 px; RTL,
 no English for any extracted plain message, LTR technical values, no overflow); `FakeCore.persianPeer`
 («لپ‌تاپ سارا», `192.168.1.42` + a `169.254` address) and `FakeCore.mixedFiles`.
+
+**U4 implemented:** `ConnectHelperPage` (`lib/ui/connect_helper.dart`, key `connectHelper`, title
+"Help me connect") opens from `whyNoDevices`, `discoveryHelp`, `pickerHelp`, Settings
+`connectHelpSettings` and Settings ▸ Advanced (`helperAdvanced`, last row of "All connection
+methods"); the diagnosis dialog's `hotspot-wizard` / `cable-wizard` finding buttons close the dialog
+and open the helper at question 2 / at the cable steps (no second check). Step 0 runs
+`runDiagnosis()` and a rescan in parallel (`helperChecking`); a device that appears is announced
+("Found {name}!", `helperFound`, "Back to devices"); one finding is shown with `FindingTile`
+(`helperResult`: the worst problem or warning, never the info-only codes of 4.10; its own
+technical text collapsed), the rest under a collapsed `helperDetails`, or "Nothing looks wrong on
+this device." Question 1 (`q1-same`, `q1-different`, `q1-cable`): same Wi-Fi shows the checklist and
+a `FindDevicePanel` "Search again"; when it finds nothing, "This Wi-Fi may keep devices apart…" and
+`helperConnectDirectly` lead to question 2 (`q2-android`, `q2-iphone`, `q2-computer`, `q2-browser`).
+`connectMethodsFor(platform, other)` picks the recommended method (labelled "Recommended") and lists
+the others under "Other ways" (`alt-<method>`): Android + phone → share a hotspot from this phone
+(`HotspotCard` when the hotspot is supported, the share steps, the other phone's join steps), then
+Join by QR (`helperScanQr` → `WifiJoinPage`) and Wi-Fi Direct (`helperWifiDirect` →
+`WifiDirectPage`); iPhone/computer + phone → join the phone's hotspot (the other device's share
+steps, this device's join steps; `helperScanQr` only on Android) or a cable; two computers → cable
+(`CableSetup`, extracted from `CableWizardPage` and shared, USB tethering preselected when a phone is
+involved), then either hotspot; "Only a browser" → `helperOpenShares` (Shares page). Android-only
+methods never appear on other platforms (test seam `platform`). Every method ends in the same
+`FindDevicePanel` ("I'm connected, find the other device", cable steps have their own), with "Try
+another way" (`helperTryAnother`, back to question 1) and "Copy connection report"
+(`helperCopyReport`, English report via the shared `copyDiagnosisReport`; runs the check first if
+needed) always at the bottom. The old wizards stay as pages (Advanced, `hotspotHelp`, `cableHelp`,
+`cableInstead`, `scanHotspotQr`) and keep their keys. Tests whose expectations changed because
+`whyNoDevices` / `pickerHelp` / `connectHelpSettings` / the finding buttons now open the helper:
+`ui_test.dart` ("empty state opens the helper; dialog renders findings" now reaches the dialog via
+Advanced, "choose device without devices…", "settings: grouped…"), `hotspot_test.dart` (diagnosis
+dialog action → helper question 2), `cable_test.dart` (entry points: finding action → helper cable
+steps). *Gaps:* "Found {name}!" offers "Back to devices", not "Send to it"; questions are tap-to-answer
+tiles, not radios + Next; `addByIp` stays on home (the helper has no "type the address" step); the
+helper does not remember the last answer; the send-failure snackbar's "Help" still opens the
+diagnosis dialog; not tried on real devices.
+
+**L4 implemented for** `hotspot_wizard.dart`, `cable_wizard.dart`, `wifi_direct_page.dart`,
+`wifi_join_page.dart`, `wifi_scanner_view.dart`, the three services, `pickers.dart`,
+`AppController` errors and the helper: 194 new keys (`platform*`, `hotspotShare*`/`hotspotJoin*` one key per step, `cableEth*`/`cableUsb*`,
+`hotspot*`, `find*`, `cable*`, `wifiDirect*`, `wifiJoin*`, `errHotspot*`/`errWifiDirect*`/
+`errWifiJoin*`, `pickFilesTitle`/`pickFolderTitle`, `errorWebHttpStart`, `helper*`; 478 keys in
+all). English is byte-identical (the services build their English `message` from the ARB through
+`englishStrings`, so service tests are unchanged). `hotspotSteps`, `cableSteps` and
+`hotspotPlatformName` take an optional `AppLocalizations` (English when omitted). Shell commands
+(`nmcli …`) and the `169.254` prefix are placeholders filled with `ltrValue()`, so they stay LTR in
+Persian. Exceptions keep `code` + English `message` and gain `detail` and `localized(l)`
+(`HotspotException.messageCode` for the sub-cases: `permission-nearby`, `unsupported-sdk`, …;
+`wifiJoinError` / `wifiDirectError` builders; a raw event-channel Wi-Fi Direct error stays as it
+is); the pages keep the exception and localize it when building. `AppController.hotspotFailure`
+(the exception) and `webHttpStartError` (raw error, shown as "Plain HTTP for browsers could not
+start: …" in Advanced) carry the codes; `hotspotError` / `lastError` stay English. System picker
+titles: `defaultPickFiles([title])` / `defaultPickFolder([title])`, and `pickFilesTitled` /
+`pickFolderTitled` pass the translated title from home and the Shares page (test pickers are
+called as before). Persian: OS menu paths are translated for Android (AOSP Persian labels, «نقطه
+اتصال و اشتراک‌گذاری اینترنت», «اشتراک‌گذاری اینترنت با USB») and kept in English with a short
+Persian gloss for iOS/iPadOS and macOS (no Persian system language), Windows (most PCs run English
+Windows; the Persian Windows label is in the REVIEW note) and GNOME; 27 new `REVIEW:` notes in
+`app_fa.arb`. **R1 for these screens:** `EdgeInsetsDirectional`; SSID and password in the hotspot
+card, the Wi-Fi Direct group name and host address, joined/confirm network names and found-device
+addresses are LTR (`ltrValue` in sentences, `LtrText` for addresses); names use `AutoDirText`; step
+numbers use Persian digits; the manual SSID/password fields are LTR with `latinDigitsFormatter` and
+`normalizeDigits` on submit; the hotspot QR got a `Semantics` label. Tests: `l10n_test.dart` "Persian
+screens" adds the helper (check, same Wi-Fi, question 2, a method, other ways, cable), the hotspot
+wizard + card, the cable wizard (+ search), Wi-Fi Direct (peers, error, connected) and Join by QR
+(camera denied, manual entry, confirm, joined) in fa at 375 and 1000 px (RTL, no English for any
+plain ARB message except platform names, LTR islands, no overflow), plus a unit test of the service
+messages. *Gaps:* the Android notification texts are L6; the copied report stays English by design;
+`AppController.lastError` for core start/send failures is the raw exception text (technical, shown
+only in Advanced); Persian OS paths need a native review on real Samsung/Xiaomi menus.
 
 Order: L1 → L2 → L3 → L5 → L4 → L6 → L7 → R1 → R2 → U1 → U3 → U2 → U5 → U4 → U6 → U7 → U8 → U9 →
 U10. L4 is after L5 because the wizards show `FindingTile`. Each step is a separate PR and can ship.

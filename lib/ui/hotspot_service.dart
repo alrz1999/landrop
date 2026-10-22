@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'l10n.dart';
+
 /// Runtime permission Android needs before `startLocalOnlyHotspot`.
 enum HotspotPermission { nearbyWifiDevices, location }
 
@@ -26,11 +28,57 @@ class HotspotException implements Exception {
   /// unsupported, permission, busy, no-channel, incompatible-mode,
   /// tethering-disallowed, cancelled, failed.
   final String code;
+
+  /// English text (logs, tests); the UI shows [localized].
   final String message;
-  const HotspotException(this.code, this.message);
+
+  /// Which text of [hotspotMessage] [message] is (default [code]).
+  final String? messageCode;
+
+  /// Technical detail inserted into the text, if any (English).
+  final String? detail;
+  const HotspotException(this.code, this.message,
+      {this.messageCode, this.detail});
+
+  /// [message] in the language of [l].
+  String localized(AppLocalizations l) =>
+      hotspotMessage(messageCode ?? code, detail, l);
+
   @override
   String toString() => message;
 }
+
+/// Readable text per hotspot message code (native error codes plus
+/// `unsupported-platform`, `unsupported-sdk`, `unsupported-here`,
+/// `permission-nearby`, `permission-location`, `no-name`, `start-error`);
+/// English when [l] is null.
+String hotspotMessage(String code, [String? detail, AppLocalizations? l]) {
+  l ??= englishStrings;
+  return switch (code) {
+    'unsupported-platform' => l.errHotspotUnsupportedPlatform,
+    'unsupported-sdk' => l.errHotspotUnsupportedSdk,
+    'unsupported-here' => l.errHotspotUnavailable,
+    'permission-nearby' => l.errHotspotPermissionNearby,
+    'permission-location' => l.errHotspotPermissionLocation,
+    'no-name' => l.errHotspotNoName,
+    'start-error' => l.errHotspotStartError(detail ?? ''),
+    'permission' =>
+      l.errHotspotRefused(detail ?? l.errHotspotPermissionMissing),
+    'incompatible-mode' => l.errHotspotIncompatible,
+    'tethering-disallowed' => l.errHotspotDisallowed,
+    'no-channel' => l.errHotspotNoChannel,
+    'busy' => l.errHotspotBusy,
+    'cancelled' => l.errHotspotCancelled,
+    _ => detail == null
+        ? l.errHotspotFailed
+        : l.errHotspotFailedDetail(detail),
+  };
+}
+
+HotspotException _hotspotError(String code, String messageCode,
+        [String? detail]) =>
+    HotspotException(code, hotspotMessage(messageCode, detail),
+        messageCode: messageCode, detail: detail);
 
 /// Asks for [p]; true when granted.
 typedef HotspotPermissionRequest = Future<bool> Function(HotspotPermission p);
@@ -84,42 +132,34 @@ class HotspotService {
   /// [HotspotException].
   Future<HotspotCredentials> start() async {
     if (!supported) {
-      throw const HotspotException(
-          'unsupported', 'Only Android can start a hotspot from LanDrop.');
+      throw _hotspotError('unsupported', 'unsupported-platform');
     }
     try {
       final sdk = await _channel.invokeMethod<int>('sdkInt') ?? 0;
       if (sdk < 26) {
-        throw const HotspotException('unsupported',
-            'This Android version cannot start a hotspot from an app. Use '
-                'Settings > Hotspot instead.');
+        throw _hotspotError('unsupported', 'unsupported-sdk');
       }
       final perm = hotspotPermissionFor(sdk);
       if (!await _request(perm)) {
-        throw HotspotException(
+        throw _hotspotError(
             'permission',
             perm == HotspotPermission.nearbyWifiDevices
-                ? 'LanDrop needs the "Nearby devices" permission to start a '
-                    'hotspot.'
-                : 'LanDrop needs the location permission to start a hotspot '
-                    '(Android requires it for Wi-Fi features; LanDrop does '
-                    'not use your location).');
+                ? 'permission-nearby'
+                : 'permission-location');
       }
       final m = await _channel.invokeMapMethod<String, dynamic>('start');
       final ssid = m?['ssid'];
       final pass = m?['password'];
       final gw = m?['gateway'];
       if (ssid is! String || ssid.isEmpty) {
-        throw const HotspotException(
-            'failed', 'The hotspot started but Android did not report its name.');
+        throw _hotspotError('failed', 'no-name');
       }
       return HotspotCredentials(ssid, pass is String ? pass : '',
           gateway: gw is String && gw.isNotEmpty ? gw : null);
     } on PlatformException catch (e) {
-      throw HotspotException(e.code, _message(e.code, e.message));
+      throw _hotspotError(e.code, e.code, e.message);
     } on MissingPluginException {
-      throw const HotspotException(
-          'unsupported', 'Starting a hotspot is not available here.');
+      throw _hotspotError('unsupported', 'unsupported-here');
     }
   }
 
@@ -129,19 +169,4 @@ class HotspotService {
       await _channel.invokeMethod<bool>('stop');
     } catch (_) {}
   }
-
-  static String _message(String code, String? detail) => switch (code) {
-        'permission' => 'Android refused: ${detail ?? 'permission missing'}. '
-            'On Android 12 and older, Location must also be switched on.',
-        'incompatible-mode' => 'Android cannot start it right now, usually '
-            'because the normal hotspot or tethering is on. Turn that off, '
-            'or use it instead.',
-        'tethering-disallowed' =>
-          'Hotspots are not allowed on this device (for example by a work '
-              'profile or the carrier).',
-        'no-channel' => 'No free Wi-Fi channel. Try again in a moment.',
-        'busy' => 'A hotspot is already starting.',
-        'cancelled' => 'The hotspot was stopped.',
-        _ => 'The hotspot could not start${detail == null ? '' : ': $detail'}.',
-      };
 }

@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import 'connect_helper.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
 import 'cable_wizard.dart';
@@ -138,13 +139,18 @@ class _HomePageState extends State<HomePage> {
 
   Future<DeviceInfo?> _pickPeer(String title) => showPeerPicker(
       context, AppScope.read(context).peers,
-      title: title, onHelp: () => showDiagnosisDialog(context));
+      title: title, onHelp: _openHelper);
+
+  /// "Can't find the other device?" (UX.md 3.4).
+  void _openHelper() => openConnectHelper(context,
+      pickFiles: widget.pickFiles, pickFolder: widget.pickFolder);
 
   Future<void> _sendFlow({DeviceInfo? to}) async {
     final c = AppScope.read(context);
     List<String> paths;
     try {
-      paths = await widget.pickFiles();
+      paths =
+          await pickFilesTitled(widget.pickFiles, context.l.pickFilesTitle);
     } catch (e) {
       if (mounted) _snack(context.l.errorFilePicker('$e'), error: true);
       return;
@@ -161,7 +167,8 @@ class _HomePageState extends State<HomePage> {
     final c = AppScope.read(context);
     String? dir;
     try {
-      dir = await widget.pickFolder();
+      dir = await pickFolderTitled(
+          widget.pickFolder, context.l.pickFolderTitle);
     } catch (e) {
       if (mounted) _snack(context.l.errorFolderPicker('$e'), error: true);
       return;
@@ -237,7 +244,7 @@ class _HomePageState extends State<HomePage> {
             actions: [
               TextButton(
                 key: const Key('discoveryHelp'),
-                onPressed: () => showDiagnosisDialog(context),
+                onPressed: _openHelper,
                 child: Text(l.homeHelp),
               ),
               TextButton(
@@ -293,7 +300,7 @@ class _HomePageState extends State<HomePage> {
         ),
       if (c.peers.isEmpty)
         EmptyPeersHelp(
-            onDiagnose: () => showDiagnosisDialog(context),
+            onDiagnose: _openHelper,
             onHotspot: () => openHotspotWizard(context),
             onCable: () => openCableWizard(context))
       else

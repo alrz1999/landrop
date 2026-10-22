@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/api.dart';
-import 'cable_wizard.dart';
+import 'connect_helper.dart';
 import 'finding_text.dart';
-import 'hotspot_wizard.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
 import 'widgets.dart';
 
 /// Runs the guided diagnosis (optionally probing [targetIp]) and shows the
 /// findings with "Run again" and "Copy report". A finding's action button
-/// ("Connect with a hotspot") closes the dialog and opens the wizard.
+/// ("Connect with a hotspot") closes the dialog and opens the connection
+/// helper at the matching step (UX.md 3.4).
 Future<void> showDiagnosisDialog(BuildContext context,
     {String? targetIp, int? targetPort}) async {
   final c = AppScope.read(context);
@@ -24,11 +24,23 @@ Future<void> showDiagnosisDialog(BuildContext context,
           : '$targetIp${targetPort == null ? '' : ':$targetPort'}',
     ),
   );
-  if (action == hotspotWizardAction && context.mounted) {
-    await openHotspotWizard(context);
-  } else if (action == cableWizardAction && context.mounted) {
-    await openCableWizard(context);
+  if ((action == hotspotWizardAction || action == cableWizardAction) &&
+      context.mounted) {
+    await openConnectHelper(context, action: action);
   }
+}
+
+/// Copies the diagnosis report: English for support (UX.md 4.10); in
+/// Persian one translated line on top says so. Confirms with a snackbar.
+Future<void> copyDiagnosisReport(BuildContext context, List<Finding> findings,
+    {String? target}) async {
+  final l = context.l;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final report =
+      formatDiagnosisReport(findings, at: DateTime.now(), target: target);
+  final text = l.isRtl ? '${l.diagReportNote}\n\n$report' : report;
+  await Clipboard.setData(ClipboardData(text: text));
+  messenger?.showSnackBar(SnackBar(content: Text(l.diagReportCopied)));
 }
 
 /// Button label for a [Finding.action] the UI knows, else null.
@@ -88,17 +100,7 @@ class _DiagnosisDialogState extends State<DiagnosisDialog> {
   Future<void> _copy() async {
     final f = _findings;
     if (f == null) return;
-    final l = context.l;
-    // The report stays English for support (UX.md 4.10); in Persian one
-    // translated line on top says so.
-    final report =
-        formatDiagnosisReport(f, at: DateTime.now(), target: widget.target);
-    final text = l.isRtl ? '${l.diagReportNote}\n\n$report' : report;
-    await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(l.diagReportCopied)));
-    }
+    await copyDiagnosisReport(context, f, target: widget.target);
   }
 
   @override

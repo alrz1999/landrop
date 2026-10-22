@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/api.dart';
 import 'background_service.dart';
 import 'hotspot_service.dart';
+import 'l10n.dart' show englishStrings;
 import 'multicast_lock.dart';
 import 'storage_access.dart';
 
@@ -143,7 +144,11 @@ class AppController extends ChangeNotifier {
   /// The hotspot this device shares, while it does.
   HotspotCredentials? hotspot;
   bool hotspotStarting = false;
+
+  /// Why the hotspot did not start, in English (logs, tests);
+  /// [hotspotFailure] has the code the UI localizes.
   String? hotspotError;
+  HotspotException? hotspotFailure;
 
   /// Shows the counts in the Android service notification (test seam).
   final StatusNotifier _statusNotifier;
@@ -159,7 +164,12 @@ class AppController extends ChangeNotifier {
   bool _keepShares = true; // shares survive a restart (opt-out)
   Locale? _locale; // app language; null = follow the system
   CoreStatus status = CoreStatus.stopped;
+  /// The last technical error (English, shown in Settings ▸ Advanced).
   String? lastError;
+
+  /// Set with [lastError] when plain HTTP for browsers failed to start: the
+  /// raw error, so the UI can say what failed in the user's language.
+  String? webHttpStartError;
   List<DeviceInfo> peers = const [];
   final List<TransferSession> sessions = [];
   bool scanning = false;
@@ -346,6 +356,7 @@ class AppController extends ChangeNotifier {
   Future<void> _start() async {
     status = CoreStatus.starting;
     lastError = null;
+    webHttpStartError = null;
     _discoveryErrorDismissed = false;
     _notify();
     try {
@@ -361,7 +372,8 @@ class AppController extends ChangeNotifier {
         try {
           await core.setWebHttpEnabled(true);
         } catch (e) {
-          lastError = 'Plain HTTP for browsers could not start: $e';
+          webHttpStartError = '$e';
+          lastError = englishStrings.errorWebHttpStart('$e');
         }
       }
     } catch (e) {
@@ -547,6 +559,7 @@ class AppController extends ChangeNotifier {
     if (hotspotStarting) return;
     hotspotStarting = true;
     hotspotError = null;
+    hotspotFailure = null;
     _notify();
     try {
       final h = await hotspotService.start();
@@ -557,9 +570,13 @@ class AppController extends ChangeNotifier {
       }
       await restartDiscovery();
     } on HotspotException catch (e) {
+      hotspotFailure = e;
       hotspotError = e.message;
     } catch (e) {
-      hotspotError = 'The hotspot could not start: $e';
+      final f = HotspotException('failed', hotspotMessage('start-error', '$e'),
+          messageCode: 'start-error', detail: '$e');
+      hotspotFailure = f;
+      hotspotError = f.message;
     } finally {
       hotspotStarting = false;
       _notify();
@@ -570,6 +587,7 @@ class AppController extends ChangeNotifier {
     await hotspotService.stop();
     hotspot = null;
     hotspotError = null;
+    hotspotFailure = null;
     _guardCall(() => core.setHotspotInfo(null));
     await restartDiscovery();
     _notify();

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import 'hotspot_service.dart';
+import 'l10n.dart';
 
 /// A device found by Wi-Fi Direct discovery.
 class WifiDirectPeer {
@@ -45,8 +46,20 @@ class WifiDirectState {
 class WifiDirectException implements Exception {
   /// unsupported, permission, busy, error, no-service-requests, wifi-off.
   final String code;
+
+  /// English text (logs, tests); the UI shows [localized].
   final String message;
-  const WifiDirectException(this.code, this.message);
+
+  /// Technical detail inserted into the text, if any (English).
+  final String? detail;
+  const WifiDirectException(this.code, this.message, {this.detail});
+
+  /// [message] in the language of [l]. A raw technical error (the message is
+  /// the detail itself) stays as it is.
+  String localized(AppLocalizations l) => detail != null && message == detail
+      ? message
+      : wifiDirectMessage(code, detail, l);
+
   @override
   String toString() => message;
 }
@@ -69,19 +82,26 @@ abstract class WifiDirectApi {
   void dispose();
 }
 
-/// Readable text and what to try, per error code.
-String wifiDirectMessage(String code, [String? detail]) => switch (code) {
-      'unsupported' => 'Wi-Fi Direct is not available on this device.',
-      'wifi-off' => 'Wi-Fi is off. Turn Wi-Fi on (no router needed), then '
-          'try again.',
-      'permission' => 'LanDrop needs permission to find nearby devices. '
-          'Allow it, and on Android 12 and older also switch Location on.',
-      'busy' => 'Wi-Fi Direct is busy. Wait a moment and try again, or tap '
-          'Disconnect first.',
-      'no-service-requests' => 'Wi-Fi Direct is not ready yet. Try again.',
-      _ => 'Wi-Fi Direct failed${detail == null ? '' : ' ($detail)'}. Turn '
-          'Wi-Fi off and on, and try again.',
-    };
+/// Readable text and what to try, per error code; English when [l] is null.
+String wifiDirectMessage(String code,
+    [String? detail, AppLocalizations? l]) {
+  l ??= englishStrings;
+  return switch (code) {
+    'unsupported' => l.errWifiDirectUnsupported,
+    'wifi-off' => l.errWifiDirectWifiOff,
+    'permission' => l.errWifiDirectPermission,
+    'busy' => l.errWifiDirectBusy,
+    'no-service-requests' => l.errWifiDirectNotReady,
+    _ => detail == null
+        ? l.errWifiDirectFailed
+        : l.errWifiDirectFailedDetail(detail),
+  };
+}
+
+/// A [WifiDirectException] with the English text for [code].
+WifiDirectException wifiDirectError(String code, [String? detail]) =>
+    WifiDirectException(code, wifiDirectMessage(code, detail),
+        detail: detail);
 
 /// Wi-Fi Direct assist through the `dev.landrop/wifidirect` channel and the
 /// `dev.landrop/wifidirect/events` event channel (WifiDirectManager.kt). It
@@ -98,7 +118,7 @@ class WifiDirectService implements WifiDirectApi {
     if (supported) {
       final s = events ?? const EventChannel(eventsName).receiveBroadcastStream();
       _sub = s.listen(handleEvent, onError: (Object e) {
-        _errors.add(WifiDirectException('error', '$e'));
+        _errors.add(WifiDirectException('error', '$e', detail: '$e'));
       });
     }
   }
@@ -144,10 +164,8 @@ class WifiDirectService implements WifiDirectApi {
         _states.add(_parseState(e));
       case 'error':
         final code = e['code'] is String ? e['code'] as String : 'error';
-        _errors.add(WifiDirectException(
-            code,
-            wifiDirectMessage(
-                code, e['message'] is String ? e['message'] as String : null)));
+        _errors.add(wifiDirectError(
+            code, e['message'] is String ? e['message'] as String : null));
     }
   }
 
@@ -164,21 +182,21 @@ class WifiDirectService implements WifiDirectApi {
 
   Future<T?> _call<T>(String method, [Object? args]) async {
     if (!supported) {
-      throw WifiDirectException('unsupported', wifiDirectMessage('unsupported'));
+      throw wifiDirectError('unsupported');
     }
     try {
       return await _channel.invokeMethod<T>(method, args);
     } on PlatformException catch (e) {
-      throw WifiDirectException(e.code, wifiDirectMessage(e.code, e.message));
+      throw wifiDirectError(e.code, e.message);
     } on MissingPluginException {
-      throw WifiDirectException('unsupported', wifiDirectMessage('unsupported'));
+      throw wifiDirectError('unsupported');
     }
   }
 
   Future<void> _permission() async {
     final sdk = await _call<int>('sdkInt') ?? 0;
     if (!await _request(hotspotPermissionFor(sdk))) {
-      throw WifiDirectException('permission', wifiDirectMessage('permission'));
+      throw wifiDirectError('permission');
     }
   }
 
@@ -186,15 +204,15 @@ class WifiDirectService implements WifiDirectApi {
   Future<void> checkAvailable() async {
     final r = await _call<dynamic>('supported');
     if (r is bool) {
-      if (!r) throw WifiDirectException('unsupported', wifiDirectMessage('unsupported'));
+      if (!r) throw wifiDirectError('unsupported');
       return;
     }
     if (r is Map) {
       if (r['feature'] == false) {
-        throw WifiDirectException('unsupported', wifiDirectMessage('unsupported'));
+        throw wifiDirectError('unsupported');
       }
       if (r['wifiEnabled'] == false) {
-        throw WifiDirectException('wifi-off', wifiDirectMessage('wifi-off'));
+        throw wifiDirectError('wifi-off');
       }
     }
   }

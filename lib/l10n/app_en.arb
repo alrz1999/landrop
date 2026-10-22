@@ -1494,5 +1494,887 @@
   "diagReportNote": "This report is in English so support can read it.",
   "@diagReportNote": {
     "description": "First line of the copied report in Persian only."
+  },
+  "platformAndroid": "Android",
+  "@platformAndroid": {
+    "description": "Platform name in wizard headings."
+  },
+  "platformIos": "iPhone / iPad",
+  "@platformIos": {
+    "description": "Platform name in wizard headings."
+  },
+  "platformMac": "Mac",
+  "@platformMac": {
+    "description": "Platform name in wizard headings."
+  },
+  "platformWindows": "Windows",
+  "@platformWindows": {
+    "description": "Platform name in wizard headings."
+  },
+  "platformLinux": "Linux",
+  "@platformLinux": {
+    "description": "Platform name in wizard headings."
+  },
+  "platformOther": "Other devices",
+  "@platformOther": {
+    "description": "Platform name: any other device."
+  },
+  "hotspotShareAndroid1": "Tap \"Start hotspot\" below: LanDrop makes a private hotspot (no mobile data is shared) and shows a QR code the other device can scan to join. This phone may leave its Wi-Fi while it runs.",
+  "@hotspotShareAndroid1": {
+    "description": "Hotspot wizard, Android shares, step 1."
+  },
+  "hotspotShareAndroid2": "Or use the normal hotspot: Settings > Network & internet > Hotspot & tethering > Wi-Fi hotspot (names differ a little by brand). Turn it on and note its name and password.",
+  "@hotspotShareAndroid2": {
+    "description": "Hotspot wizard, Android shares, step 2 (Android menu path)."
+  },
+  "hotspotShareIos1": "Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". (Your mobile plan must allow hotspot use.)",
+  "@hotspotShareIos1": {
+    "description": "Hotspot wizard, iPhone shares, step 1 (iOS menu path)."
+  },
+  "hotspotShareIos2": "Keep that screen open until the other device has joined: it shows the Wi-Fi password.",
+  "@hotspotShareIos2": {
+    "description": "Hotspot wizard, iPhone shares, step 2."
+  },
+  "hotspotShareMac1": "Easiest: do it the other way round. Let the other device share a hotspot and join it from this Mac (choose \"This device joins it\" above).",
+  "@hotspotShareMac1": {
+    "description": "Hotspot wizard, Mac shares, step 1; quotes the hotspotRoleJoin button."
+  },
+  "hotspotShareMac2": "To share from this Mac anyway: System Settings > General > Sharing, click (i) next to Internet Sharing, share your connection (for example Ethernet) to computers using Wi-Fi, set a network name and password, then turn Internet Sharing on.",
+  "@hotspotShareMac2": {
+    "description": "Hotspot wizard, Mac shares, step 2 (macOS menu path)."
+  },
+  "hotspotShareWindows1": "Open Settings > Network & internet > Mobile hotspot.",
+  "@hotspotShareWindows1": {
+    "description": "Hotspot wizard, Windows shares, step 1 (Windows menu path)."
+  },
+  "hotspotShareWindows2": "Turn on \"Mobile hotspot\". The network name and password are shown on that page.",
+  "@hotspotShareWindows2": {
+    "description": "Hotspot wizard, Windows shares, step 2."
+  },
+  "hotspotShareLinux1": "Open Settings > Wi-Fi, open the menu (⋮) and choose \"Turn On Wi-Fi Hotspot…\". On other desktops use NetworkManager: create a new Wi-Fi network with mode \"Hotspot\", or run: {command}",
+  "@hotspotShareLinux1": {
+    "description": "Hotspot wizard, Linux shares, step 1; command is a shell command, never translated.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotShareLinux2": "Note the network name and password.",
+  "@hotspotShareLinux2": {
+    "description": "Hotspot wizard, Linux shares, step 2."
+  },
+  "hotspotShareOther1": "Turn on the hotspot (\"tethering\") in this device's network settings and note its name and password.",
+  "@hotspotShareOther1": {
+    "description": "Hotspot wizard, other device shares."
+  },
+  "hotspotJoinAndroid1": "Open Settings > Wi-Fi and pick the other device's hotspot, then enter its password. Or tap the QR icon next to \"Add network\" and scan the code shown on the other device.",
+  "@hotspotJoinAndroid1": {
+    "description": "Hotspot wizard, Android joins (Android menu path)."
+  },
+  "hotspotJoinIos1": "Open Settings > Wi-Fi and pick the other device's hotspot, then enter its password. Or point the Camera at the QR code shown on the other device and tap \"Join network\".",
+  "@hotspotJoinIos1": {
+    "description": "Hotspot wizard, iPhone joins (iOS menu path)."
+  },
+  "hotspotJoinMac1": "Click the Wi-Fi icon in the menu bar (or Control Center), pick the other device's hotspot and enter its password.",
+  "@hotspotJoinMac1": {
+    "description": "Hotspot wizard, Mac joins."
+  },
+  "hotspotJoinWindows1": "Click the network icon in the taskbar, open the Wi-Fi list, pick the other device's hotspot and enter its password.",
+  "@hotspotJoinWindows1": {
+    "description": "Hotspot wizard, Windows joins."
+  },
+  "hotspotJoinLinux1": "Open the network menu (top right) > Wi-Fi > Select network, pick the other device's hotspot and enter its password. Or run: {command}",
+  "@hotspotJoinLinux1": {
+    "description": "Hotspot wizard, Linux joins; command is a shell command, never translated.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotJoinOther1": "Open the Wi-Fi settings, pick the other device's hotspot and enter its password.",
+  "@hotspotJoinOther1": {
+    "description": "Hotspot wizard, other device joins."
+  },
+  "hotspotStepShareOther": "On the other device, join this hotspot like any Wi-Fi network (see below).",
+  "@hotspotStepShareOther": {
+    "description": "Hotspot wizard step after sharing."
+  },
+  "hotspotStepVpn": "Turn off any VPN. Mobile data can stay on.",
+  "@hotspotStepVpn": {
+    "description": "Hotspot wizard step after joining."
+  },
+  "hotspotStepOpenBoth": "Open LanDrop on both devices, then tap \"I'm connected, find the other device\".",
+  "@hotspotStepOpenBoth": {
+    "description": "Hotspot wizard last step; quotes hotspotFindLabel."
+  },
+  "hotspotWizardTitle": "Connect without Wi-Fi",
+  "@hotspotWizardTitle": {
+    "description": "Hotspot wizard page title."
+  },
+  "hotspotIntro": "No router needed: one device shares a Wi-Fi hotspot, the other joins it, and LanDrop finds the other device on that network. This also helps when the Wi-Fi keeps devices apart (guest, office or hotel networks). Files go directly between the two devices and do not use mobile data.",
+  "@hotspotIntro": {
+    "description": "Hotspot wizard introduction."
+  },
+  "hotspotRoleShare": "This device shares the hotspot",
+  "@hotspotRoleShare": {
+    "description": "Hotspot wizard role button."
+  },
+  "hotspotRoleJoin": "This device joins it",
+  "@hotspotRoleJoin": {
+    "description": "Hotspot wizard role button."
+  },
+  "wizardOnThisDevice": "On this device ({platform})",
+  "@wizardOnThisDevice": {
+    "description": "Wizard section header; platform is a platform name.",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotScanQr": "Scan the hotspot QR code",
+  "@hotspotScanQr": {
+    "description": "Button: opens the QR join page (Android)."
+  },
+  "hotspotOtherJoin": "On the other device: join the hotspot",
+  "@hotspotOtherJoin": {
+    "description": "Hotspot wizard: expandable steps for the other device."
+  },
+  "hotspotOtherShare": "On the other device: share a hotspot",
+  "@hotspotOtherShare": {
+    "description": "Hotspot wizard: expandable steps for the other device."
+  },
+  "hotspotFindLabel": "I'm connected, find the other device",
+  "@hotspotFindLabel": {
+    "description": "Button that searches for the other device after connecting."
+  },
+  "hotspotCableInstead": "Using a cable instead? Ethernet or USB",
+  "@hotspotCableInstead": {
+    "description": "Hotspot wizard: link to the cable wizard."
+  },
+  "hotspotStart": "Start hotspot",
+  "@hotspotStart": {
+    "description": "Button (Android): start the LanDrop hotspot."
+  },
+  "hotspotOn": "Hotspot is on",
+  "@hotspotOn": {
+    "description": "Hotspot card title while it runs."
+  },
+  "hotspotName": "Name: {ssid}",
+  "@hotspotName": {
+    "description": "Hotspot network name (technical, LTR).",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotNoPassword": "No password",
+  "@hotspotNoPassword": {
+    "description": "Hotspot without a password."
+  },
+  "hotspotPassword": "Password: {password}",
+  "@hotspotPassword": {
+    "description": "Hotspot password (technical, LTR).",
+    "placeholders": {
+      "password": {
+        "type": "String"
+      }
+    }
+  },
+  "hotspotScanHint": "Scan with the other device's camera to join (Android 10+, iPhone). The hotspot stops when you tap Stop or close LanDrop.",
+  "@hotspotScanHint": {
+    "description": "Hotspot card hint under the QR code."
+  },
+  "hotspotStop": "Stop hotspot",
+  "@hotspotStop": {
+    "description": "Button: stop the hotspot."
+  },
+  "hotspotQrSemantics": "QR code to join this hotspot",
+  "@hotspotQrSemantics": {
+    "description": "Screen reader label of the hotspot QR code."
+  },
+  "findPhaseNetwork": "Looking at the new network…",
+  "@findPhaseNetwork": {
+    "description": "Search progress line."
+  },
+  "findPhaseProbeHotspot": "Checking the usual hotspot addresses…",
+  "@findPhaseProbeHotspot": {
+    "description": "Search progress line."
+  },
+  "findPhaseScan": "Scanning the network…",
+  "@findPhaseScan": {
+    "description": "Search progress line."
+  },
+  "findPhaseWhy": "Nothing found. Checking why…",
+  "@findPhaseWhy": {
+    "description": "Search progress line."
+  },
+  "findNothingHintHotspot": "Check that both devices are on the same hotspot and LanDrop is open on both. Then try again, or use \"Add by IP\" with the address shown on the other device.",
+  "@findNothingHintHotspot": {
+    "description": "Search found nothing (hotspot)."
+  },
+  "findFound": "Found {count, plural, =1{1 device} other{{count} devices}}",
+  "@findFound": {
+    "description": "Search result header.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "findBackToDevices": "Back to devices",
+  "@findBackToDevices": {
+    "description": "Button after a successful search."
+  },
+  "findNothingTitle": "No device found yet",
+  "@findNothingTitle": {
+    "description": "Search found nothing: title."
+  },
+  "cableEthMac1": "Plug the Ethernet cable into both computers (a USB or Thunderbolt Ethernet adapter is fine). Cable or router: the same steps.",
+  "@cableEthMac1": {
+    "description": "Cable wizard, Ethernet on a Mac, step 1."
+  },
+  "cableEthMac2": "Open System Settings > Network. If the adapter is not listed, click \"…\" > \"Add Service…\" (or the + button), pick the Ethernet adapter and click Create.",
+  "@cableEthMac2": {
+    "description": "Cable wizard, Ethernet on a Mac, step 2."
+  },
+  "cableEthMac3": "Select it and set \"Configure IPv4\" to \"Using DHCP\". With no router the Mac gives itself an address starting with {prefix}. That is normal.",
+  "@cableEthMac3": {
+    "description": "Cable wizard, Ethernet on a Mac, step 3; prefix is an address prefix (169.254).",
+    "placeholders": {
+      "prefix": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthPlugBoth": "Plug the Ethernet cable into both computers.",
+  "@cableEthPlugBoth": {
+    "description": "Cable wizard, Ethernet on Windows/Linux, step 1."
+  },
+  "cableEthWindows2": "Open Settings > Network & internet > Ethernet. It should say \"No Internet\" or \"Unidentified network\": that is fine, Windows gives itself an address starting with {prefix}.",
+  "@cableEthWindows2": {
+    "description": "Cable wizard, Ethernet on Windows, step 2; prefix is an address prefix (169.254).",
+    "placeholders": {
+      "prefix": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthWindows3": "Under \"IP assignment\" keep \"Automatic (DHCP)\". On the Windows Firewall prompt, allow LanDrop on Private networks. If the network is marked \"Public\", set it to Private.",
+  "@cableEthWindows3": {
+    "description": "Cable wizard, Ethernet on Windows, step 3."
+  },
+  "cableEthLinux2": "Open Settings > Network, pick the wired connection and open its settings > IPv4. Choose the \"Link-Local Only\" method and apply. Or run: {command}",
+  "@cableEthLinux2": {
+    "description": "Cable wizard, Ethernet on Linux, step 2; command is a shell command, never translated.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "cableEthLinux3": "Turn the connection off and on so it gets an address.",
+  "@cableEthLinux3": {
+    "description": "Cable wizard, Ethernet on Linux, step 3."
+  },
+  "cableEthOther1": "Plug an Ethernet cable (with an adapter if needed) into both computers, and make sure the wired network uses automatic addresses (DHCP or \"link-local\").",
+  "@cableEthOther1": {
+    "description": "Cable wizard, Ethernet on other devices."
+  },
+  "cableUsbAndroid1": "This phone is the one sharing: connect it to the computer with a USB cable.",
+  "@cableUsbAndroid1": {
+    "description": "Cable wizard, USB tethering on Android, step 1."
+  },
+  "cableUsbAndroid2": "Open Settings > Network & internet > Hotspot & tethering (names differ a little by brand), then turn on \"USB tethering\". It only switches on while a computer is plugged in.",
+  "@cableUsbAndroid2": {
+    "description": "Cable wizard, USB tethering on Android, step 2 (Android menu path)."
+  },
+  "cableUsbIos1": "Connect the iPhone to the computer with a USB cable and tap \"Trust\" if asked.",
+  "@cableUsbIos1": {
+    "description": "Cable wizard, USB on iPhone, step 1."
+  },
+  "cableUsbIos2": "Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". On a Windows PC, iTunes or the Apple Devices app must be installed.",
+  "@cableUsbIos2": {
+    "description": "Cable wizard, USB on iPhone, step 2."
+  },
+  "cableUsbMac1": "Connect the phone to this Mac with a USB cable. On the phone turn on Personal Hotspot (iPhone) or USB tethering (Android).",
+  "@cableUsbMac1": {
+    "description": "Cable wizard, USB on a Mac, step 1."
+  },
+  "cableUsbMac2": "The Mac shows a new network adapter in System Settings > Network (for example \"iPhone USB\" or \"RNDIS/Ethernet Gadget\"). Android USB tethering needs a driver on a Mac, which is not built in; an iPhone works out of the box.",
+  "@cableUsbMac2": {
+    "description": "Cable wizard, USB on a Mac, step 2."
+  },
+  "cableUsbWindows1": "Connect the phone to this PC with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).",
+  "@cableUsbWindows1": {
+    "description": "Cable wizard, USB on Windows, step 1."
+  },
+  "cableUsbWindows2": "Windows adds a new adapter (shown in Settings > Network & internet > Advanced network settings). Wait until it says Connected.",
+  "@cableUsbWindows2": {
+    "description": "Cable wizard, USB on Windows, step 2."
+  },
+  "cableUsbLinux1": "Connect the phone to this computer with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).",
+  "@cableUsbLinux1": {
+    "description": "Cable wizard, USB on Linux, step 1."
+  },
+  "cableUsbLinux2": "A new wired connection appears (named like usb0, enx… or eth1). It usually connects by itself.",
+  "@cableUsbLinux2": {
+    "description": "Cable wizard, USB on Linux, step 2."
+  },
+  "cableUsbOther1": "Connect the phone with a USB cable and turn on USB tethering or Personal Hotspot; the computer then has a new network adapter.",
+  "@cableUsbOther1": {
+    "description": "Cable wizard, USB on other devices."
+  },
+  "cableStepWait": "Wait a few seconds: with no router it takes up to a minute for both computers to get their addresses.",
+  "@cableStepWait": {
+    "description": "Cable wizard step (Ethernet)."
+  },
+  "cableStepVpn": "Turn off any VPN. The other device now shares its connection to this one.",
+  "@cableStepVpn": {
+    "description": "Cable wizard step (USB tethering)."
+  },
+  "cableStepOpenBoth": "Open LanDrop on both devices, then tap \"The cable is connected, find the other device\".",
+  "@cableStepOpenBoth": {
+    "description": "Cable wizard last step; quotes cableFindLabel."
+  },
+  "cableIntro": "No Wi-Fi or router needed: connect the two devices with a cable and LanDrop finds the other device on that link. Files go directly over the cable.",
+  "@cableIntro": {
+    "description": "Cable wizard introduction."
+  },
+  "cableKindEthernet": "Ethernet cable",
+  "@cableKindEthernet": {
+    "description": "Cable wizard choice."
+  },
+  "cableKindUsb": "USB tethering",
+  "@cableKindUsb": {
+    "description": "Cable wizard choice."
+  },
+  "cableTetherHint": "On the phone: Android > Settings > Network & internet > Hotspot & tethering > USB tethering. iPhone > Settings > Personal Hotspot.",
+  "@cableTetherHint": {
+    "description": "Cable wizard hint for the phone (menu paths)."
+  },
+  "cableFindLabel": "The cable is connected, find the other device",
+  "@cableFindLabel": {
+    "description": "Cable wizard search button."
+  },
+  "cablePhaseProbe": "Checking the usual cable and USB addresses…",
+  "@cablePhaseProbe": {
+    "description": "Search progress line (cable)."
+  },
+  "cableNothingHint": "Check the cable, that the adapter shows as connected, and that LanDrop is open on both devices. A direct cable can take up to a minute to get addresses. Then try again, or use \"Add by IP\" with the address shown on the other device.",
+  "@cableNothingHint": {
+    "description": "Search found nothing (cable)."
+  },
+  "wifiDirectTitle": "Wi-Fi Direct",
+  "@wifiDirectTitle": {
+    "description": "Wi-Fi Direct page title."
+  },
+  "wifiDirectIntro": "Connect two devices directly, without a router. Once connected, send files as usual.",
+  "@wifiDirectIntro": {
+    "description": "Wi-Fi Direct introduction."
+  },
+  "wifiDirectTry": "Try: Wi-Fi on, accept the invitation on the other device, keep both screens on and close together.",
+  "@wifiDirectTry": {
+    "description": "Wi-Fi Direct error card hint."
+  },
+  "wifiDirectRoleOwner": "This device hosts the group.",
+  "@wifiDirectRoleOwner": {
+    "description": "Wi-Fi Direct connected."
+  },
+  "wifiDirectRoleClient": "Joined the other device's group.",
+  "@wifiDirectRoleClient": {
+    "description": "Wi-Fi Direct connected."
+  },
+  "wifiDirectConnected": "Connected via Wi-Fi Direct",
+  "@wifiDirectConnected": {
+    "description": "Wi-Fi Direct connected card title."
+  },
+  "wifiDirectNetwork": "Network: {ssid}",
+  "@wifiDirectNetwork": {
+    "description": "Wi-Fi Direct group name (technical).",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiDirectHost": "Host address: {address}",
+  "@wifiDirectHost": {
+    "description": "Wi-Fi Direct owner IP (technical).",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiDirectLooking": "Looking for LanDrop devices…",
+  "@wifiDirectLooking": {
+    "description": "Wi-Fi Direct search progress."
+  },
+  "wifiDirectNone": "No LanDrop device answered yet. Make sure LanDrop is open on the other device, then search again.",
+  "@wifiDirectNone": {
+    "description": "Wi-Fi Direct: no LanDrop device found."
+  },
+  "wifiDirectSearchAgain": "Search again",
+  "@wifiDirectSearchAgain": {
+    "description": "Wi-Fi Direct button."
+  },
+  "wifiDirectDisconnect": "Disconnect",
+  "@wifiDirectDisconnect": {
+    "description": "Wi-Fi Direct button."
+  },
+  "wifiDirectTapHint": "Tap a device to connect. The other device gets an Android invitation dialog and must accept it.",
+  "@wifiDirectTapHint": {
+    "description": "Wi-Fi Direct peer list hint."
+  },
+  "wifiDirectLookingShort": "Looking…",
+  "@wifiDirectLookingShort": {
+    "description": "Wi-Fi Direct: searching."
+  },
+  "wifiDirectEmpty": "No devices found yet. Open Wi-Fi Direct on the other device too.",
+  "@wifiDirectEmpty": {
+    "description": "Wi-Fi Direct: empty list."
+  },
+  "wifiDirectInvited": "Invitation sent. Accept it on the other device.",
+  "@wifiDirectInvited": {
+    "description": "Wi-Fi Direct peer status: invited."
+  },
+  "wifiDirectStatusConnected": "connected",
+  "@wifiDirectStatusConnected": {
+    "description": "Wi-Fi Direct peer status."
+  },
+  "wifiDirectStatusFailed": "failed",
+  "@wifiDirectStatusFailed": {
+    "description": "Wi-Fi Direct peer status."
+  },
+  "wifiDirectStatusAvailable": "available",
+  "@wifiDirectStatusAvailable": {
+    "description": "Wi-Fi Direct peer status."
+  },
+  "wifiDirectStatusUnavailable": "unavailable",
+  "@wifiDirectStatusUnavailable": {
+    "description": "Wi-Fi Direct peer status."
+  },
+  "wifiDirectCreateGroup": "Create group here",
+  "@wifiDirectCreateGroup": {
+    "description": "Wi-Fi Direct button."
+  },
+  "wifiDirectCreateHint": "\"Create group here\" makes this device the host, so the other device can find and join it from its own Wi-Fi Direct screen. Keep both screens on.",
+  "@wifiDirectCreateHint": {
+    "description": "Wi-Fi Direct hint; quotes wifiDirectCreateGroup."
+  },
+  "wifiJoinNotWifiQr": "That QR code is not a Wi-Fi code. Scan the code shown by the other phone's LanDrop hotspot.",
+  "@wifiJoinNotWifiQr": {
+    "description": "Join by QR: wrong QR code."
+  },
+  "wifiJoinManualInvalid": "Enter the network name (up to 32 characters) and its password (8 to 63 characters, or none for an open network).",
+  "@wifiJoinManualInvalid": {
+    "description": "Join by QR: manual entry invalid."
+  },
+  "wifiJoinScanIntro": "On the other phone, open LanDrop > Connect without Wi-Fi > \"This device shares the hotspot\" > Start hotspot. Then point this camera at the QR code it shows.",
+  "@wifiJoinScanIntro": {
+    "description": "Join by QR: what to do on the other phone (quotes in-app labels)."
+  },
+  "wifiJoinAllowCamera": "Allow the camera",
+  "@wifiJoinAllowCamera": {
+    "description": "Join by QR: button."
+  },
+  "wifiJoinManualToggle": "Enter name and password",
+  "@wifiJoinManualToggle": {
+    "description": "Join by QR: manual entry toggle."
+  },
+  "wifiJoinNetworkName": "Network name",
+  "@wifiJoinNetworkName": {
+    "description": "Join by QR: field label."
+  },
+  "wifiJoinPasswordLabel": "Password (empty for an open network)",
+  "@wifiJoinPasswordLabel": {
+    "description": "Join by QR: field label."
+  },
+  "wifiJoinHidden": "Hidden network",
+  "@wifiJoinHidden": {
+    "description": "Join by QR: checkbox."
+  },
+  "wifiJoinContinue": "Continue",
+  "@wifiJoinContinue": {
+    "description": "Join by QR: button."
+  },
+  "wifiJoinConfirmTitle": "Join {ssid}?",
+  "@wifiJoinConfirmTitle": {
+    "description": "Join by QR: confirm title; ssid is technical.",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinExplain": "LanDrop will ask Android to join this Wi-Fi network. Android will ask you to confirm. While joined, this phone may lose its internet connection. Only LanDrop uses this network; other apps keep using your normal connection where Android allows it.",
+  "@wifiJoinExplain": {
+    "description": "Join by QR: explanation before joining."
+  },
+  "wifiJoinJoin": "Join",
+  "@wifiJoinJoin": {
+    "description": "Join by QR: button."
+  },
+  "wifiJoinJoining": "Joining {ssid}… Confirm the Android prompt when it appears.",
+  "@wifiJoinJoining": {
+    "description": "Join by QR: progress.",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinScanAgain": "Scan again",
+  "@wifiJoinScanAgain": {
+    "description": "Join by QR: button."
+  },
+  "wifiJoinJoined": "Joined {ssid}",
+  "@wifiJoinJoined": {
+    "description": "Join by QR: joined title.",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiJoinFindTitle": "Find the other device",
+  "@wifiJoinFindTitle": {
+    "description": "Join by QR: section and button."
+  },
+  "wifiJoinLeave": "Leave network",
+  "@wifiJoinLeave": {
+    "description": "Join by QR: button."
+  },
+  "errHotspotUnsupportedPlatform": "Only Android can start a hotspot from LanDrop.",
+  "@errHotspotUnsupportedPlatform": {
+    "description": "Hotspot error."
+  },
+  "errHotspotUnsupportedSdk": "This Android version cannot start a hotspot from an app. Use Settings > Hotspot instead.",
+  "@errHotspotUnsupportedSdk": {
+    "description": "Hotspot error (Android 7)."
+  },
+  "errHotspotPermissionNearby": "LanDrop needs the \"Nearby devices\" permission to start a hotspot.",
+  "@errHotspotPermissionNearby": {
+    "description": "Hotspot error."
+  },
+  "errHotspotPermissionLocation": "LanDrop needs the location permission to start a hotspot (Android requires it for Wi-Fi features; LanDrop does not use your location).",
+  "@errHotspotPermissionLocation": {
+    "description": "Hotspot error."
+  },
+  "errHotspotNoName": "The hotspot started but Android did not report its name.",
+  "@errHotspotNoName": {
+    "description": "Hotspot error."
+  },
+  "errHotspotUnavailable": "Starting a hotspot is not available here.",
+  "@errHotspotUnavailable": {
+    "description": "Hotspot error."
+  },
+  "errHotspotRefused": "Android refused: {detail}. On Android 12 and older, Location must also be switched on.",
+  "@errHotspotRefused": {
+    "description": "Hotspot error; detail is a technical reason (English).",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errHotspotPermissionMissing": "permission missing",
+  "@errHotspotPermissionMissing": {
+    "description": "Default reason inserted into errHotspotRefused."
+  },
+  "errHotspotIncompatible": "Android cannot start it right now, usually because the normal hotspot or tethering is on. Turn that off, or use it instead.",
+  "@errHotspotIncompatible": {
+    "description": "Hotspot error."
+  },
+  "errHotspotDisallowed": "Hotspots are not allowed on this device (for example by a work profile or the carrier).",
+  "@errHotspotDisallowed": {
+    "description": "Hotspot error."
+  },
+  "errHotspotNoChannel": "No free Wi-Fi channel. Try again in a moment.",
+  "@errHotspotNoChannel": {
+    "description": "Hotspot error."
+  },
+  "errHotspotBusy": "A hotspot is already starting.",
+  "@errHotspotBusy": {
+    "description": "Hotspot error."
+  },
+  "errHotspotCancelled": "The hotspot was stopped.",
+  "@errHotspotCancelled": {
+    "description": "Hotspot error."
+  },
+  "errHotspotFailed": "The hotspot could not start.",
+  "@errHotspotFailed": {
+    "description": "Hotspot error."
+  },
+  "errHotspotFailedDetail": "The hotspot could not start: {detail}.",
+  "@errHotspotFailedDetail": {
+    "description": "Hotspot error; detail is technical (English).",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errHotspotStartError": "The hotspot could not start: {error}",
+  "@errHotspotStartError": {
+    "description": "Hotspot error; error is technical (English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errWifiDirectUnsupported": "Wi-Fi Direct is not available on this device.",
+  "@errWifiDirectUnsupported": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectWifiOff": "Wi-Fi is off. Turn Wi-Fi on (no router needed), then try again.",
+  "@errWifiDirectWifiOff": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectPermission": "LanDrop needs permission to find nearby devices. Allow it, and on Android 12 and older also switch Location on.",
+  "@errWifiDirectPermission": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectBusy": "Wi-Fi Direct is busy. Wait a moment and try again, or tap Disconnect first.",
+  "@errWifiDirectBusy": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectNotReady": "Wi-Fi Direct is not ready yet. Try again.",
+  "@errWifiDirectNotReady": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectFailed": "Wi-Fi Direct failed. Turn Wi-Fi off and on, and try again.",
+  "@errWifiDirectFailed": {
+    "description": "Wi-Fi Direct error."
+  },
+  "errWifiDirectFailedDetail": "Wi-Fi Direct failed ({detail}). Turn Wi-Fi off and on, and try again.",
+  "@errWifiDirectFailedDetail": {
+    "description": "Wi-Fi Direct error; detail is technical (English).",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errWifiJoinUnsupported": "Joining a Wi-Fi network from LanDrop needs Android 7 or newer. Join it in the Wi-Fi settings instead.",
+  "@errWifiJoinUnsupported": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinCamera": "LanDrop needs the camera to scan the QR code. Allow it in the app settings, or type the name and password instead.",
+  "@errWifiJoinCamera": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinTimeout": "Android did not join the network. Check that the other phone's hotspot is on and close by, that the password is right, and that you did not decline the Android prompt. Then try again.",
+  "@errWifiJoinTimeout": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinLost": "The network went away. Check that the hotspot is still on, then scan again.",
+  "@errWifiJoinLost": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinUnsupportedSecurity": "This network uses an old security type (WEP) that Android no longer lets apps join. Join it in the Wi-Fi settings instead.",
+  "@errWifiJoinUnsupportedSecurity": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinPermission": "Android did not allow LanDrop to change the network. Join it in the Wi-Fi settings instead.",
+  "@errWifiJoinPermission": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinFailed": "Could not join the network. Try again, or join it in the Wi-Fi settings.",
+  "@errWifiJoinFailed": {
+    "description": "Join by QR error."
+  },
+  "errWifiJoinFailedDetail": "Could not join the network ({detail}). Try again, or join it in the Wi-Fi settings.",
+  "@errWifiJoinFailedDetail": {
+    "description": "Join by QR error; detail is technical (English).",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "errorWebHttpStart": "Plain HTTP for browsers could not start: {error}",
+  "@errorWebHttpStart": {
+    "description": "Advanced: last error when plain HTTP failed to start; error is technical (English).",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "pickFilesTitle": "Choose files to send",
+  "@pickFilesTitle": {
+    "description": "System file picker window title."
+  },
+  "pickFolderTitle": "Choose a folder to send",
+  "@pickFolderTitle": {
+    "description": "System folder picker window title."
+  },
+  "helperTitle": "Help me connect",
+  "@helperTitle": {
+    "description": "Connection helper page title."
+  },
+  "helperChecking": "Checking your connection…",
+  "@helperChecking": {
+    "description": "Helper: automatic check running."
+  },
+  "helperFound": "Found {name}!",
+  "@helperFound": {
+    "description": "Helper: a device appeared; name is the device name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "helperCheckFine": "Nothing looks wrong on this device.",
+  "@helperCheckFine": {
+    "description": "Helper: the check found nothing to fix."
+  },
+  "helperQ1": "Are both devices on the same Wi-Fi?",
+  "@helperQ1": {
+    "description": "Helper question 1."
+  },
+  "helperQ1Same": "Yes, same Wi-Fi",
+  "@helperQ1Same": {
+    "description": "Helper question 1 answer."
+  },
+  "helperQ1Different": "No, or there is no Wi-Fi",
+  "@helperQ1Different": {
+    "description": "Helper question 1 answer."
+  },
+  "helperQ1Cable": "I'll use a cable",
+  "@helperQ1Cable": {
+    "description": "Helper question 1 answer."
+  },
+  "helperChecklist": "Open LanDrop on the other device and keep its screen on. Turn off any VPN.",
+  "@helperChecklist": {
+    "description": "Helper: same Wi-Fi checklist."
+  },
+  "helperSearchAgain": "Search again",
+  "@helperSearchAgain": {
+    "description": "Helper: search button (same Wi-Fi)."
+  },
+  "helperSameWifiNothing": "Make sure both devices use the same Wi-Fi network (not a guest network) and LanDrop is open on both, then search again.",
+  "@helperSameWifiNothing": {
+    "description": "Helper: search found nothing on the same Wi-Fi."
+  },
+  "helperBlocked": "This Wi-Fi may keep devices apart. Let's connect them directly.",
+  "@helperBlocked": {
+    "description": "Helper: same Wi-Fi did not work."
+  },
+  "helperConnectDirectly": "Connect directly",
+  "@helperConnectDirectly": {
+    "description": "Helper: button to question 2."
+  },
+  "helperQ2": "What is the other device?",
+  "@helperQ2": {
+    "description": "Helper question 2."
+  },
+  "helperQ2Android": "An Android phone",
+  "@helperQ2Android": {
+    "description": "Helper question 2 answer."
+  },
+  "helperQ2Iphone": "An iPhone",
+  "@helperQ2Iphone": {
+    "description": "Helper question 2 answer."
+  },
+  "helperQ2Computer": "A computer",
+  "@helperQ2Computer": {
+    "description": "Helper question 2 answer."
+  },
+  "helperQ2Browser": "Only a browser",
+  "@helperQ2Browser": {
+    "description": "Helper question 2 answer."
+  },
+  "helperRecommended": "Recommended",
+  "@helperRecommended": {
+    "description": "Helper: label of the recommended way."
+  },
+  "helperMethodShareQrTitle": "Share a hotspot from this phone",
+  "@helperMethodShareQrTitle": {
+    "description": "Helper method title (Android shares, other phone scans)."
+  },
+  "helperMethodShareQrBody": "No internet is used. The other phone scans the code to join.",
+  "@helperMethodShareQrBody": {
+    "description": "Helper method body."
+  },
+  "helperMethodShareTitle": "Share a hotspot from this device",
+  "@helperMethodShareTitle": {
+    "description": "Helper method title."
+  },
+  "helperMethodShareBody": "No internet is used. The other device joins this hotspot like any Wi-Fi network.",
+  "@helperMethodShareBody": {
+    "description": "Helper method body."
+  },
+  "helperMethodJoinTitle": "Join the other device's hotspot",
+  "@helperMethodJoinTitle": {
+    "description": "Helper method title."
+  },
+  "helperMethodJoinBody": "Turn on the hotspot on the other device, then join it from this one. No internet is used.",
+  "@helperMethodJoinBody": {
+    "description": "Helper method body."
+  },
+  "helperMethodJoinQrTitle": "Scan the other phone's hotspot code",
+  "@helperMethodJoinQrTitle": {
+    "description": "Helper method title (Android)."
+  },
+  "helperMethodJoinQrBody": "When the other phone shares a hotspot with LanDrop, this phone scans its QR code and joins.",
+  "@helperMethodJoinQrBody": {
+    "description": "Helper method body (Android)."
+  },
+  "helperMethodWifiDirectTitle": "Use Wi-Fi Direct",
+  "@helperMethodWifiDirectTitle": {
+    "description": "Helper method title (Android)."
+  },
+  "helperMethodWifiDirectBody": "Phone to phone without a router. Both phones must run Android.",
+  "@helperMethodWifiDirectBody": {
+    "description": "Helper method body (Android)."
+  },
+  "helperOpenWifiDirect": "Open Wi-Fi Direct",
+  "@helperOpenWifiDirect": {
+    "description": "Helper: button."
+  },
+  "helperMethodBrowserTitle": "Use a browser on the other device",
+  "@helperMethodBrowserTitle": {
+    "description": "Helper method title."
+  },
+  "helperMethodBrowserBody": "Nothing to install: the other device opens a link in its browser to send or download files. Both devices must be on the same Wi-Fi or hotspot.",
+  "@helperMethodBrowserBody": {
+    "description": "Helper method body."
+  },
+  "helperOpenShares": "Open the Share page",
+  "@helperOpenShares": {
+    "description": "Helper: button to the Shares page."
+  },
+  "helperOnThisDevice": "On this device",
+  "@helperOnThisDevice": {
+    "description": "Helper section header."
+  },
+  "helperOnOtherDevice": "On the other device",
+  "@helperOnOtherDevice": {
+    "description": "Helper section header."
+  },
+  "helperOtherWays": "Other ways",
+  "@helperOtherWays": {
+    "description": "Helper: alternative methods header."
+  },
+  "helperTryAnother": "Try another way",
+  "@helperTryAnother": {
+    "description": "Helper: back to the questions."
+  },
+  "helperCopyReport": "Copy connection report",
+  "@helperCopyReport": {
+    "description": "Helper: copies the (English) diagnosis report."
+  },
+  "wifiJoinCameraFailed": "The camera could not start. Type the name and password below instead.",
+  "@wifiJoinCameraFailed": {
+    "description": "Join by QR: the camera preview failed to start."
   }
 }

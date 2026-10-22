@@ -353,13 +353,17 @@ void main() {
           action: cableWizardAction,
         ),
       ];
+      // The empty list's button opens the connection helper, which shows
+      // the finding; its action goes to the helper's cable steps.
       await _tap(tester, find.byKey(const Key('whyNoDevices')));
+      expect(find.byKey(const Key('connectHelper')), findsOneWidget);
       expect(find.text('Connect with a cable'), findsWidgets);
       await _tap(
         tester,
         find.byKey(const Key('findingAction-link-local-only')),
       );
-      expect(find.byKey(const Key('cableWizard')), findsOneWidget);
+      expect(find.byKey(const Key('helperMethod-cable')), findsOneWidget);
+      expect(find.byKey(const Key('kindEthernet')), findsOneWidget);
     });
   });
 }

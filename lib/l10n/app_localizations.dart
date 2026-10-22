@@ -1801,6 +1801,1170 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This report is in English so support can read it.'**
   String get diagReportNote;
+
+  /// Platform name in wizard headings.
+  ///
+  /// In en, this message translates to:
+  /// **'Android'**
+  String get platformAndroid;
+
+  /// Platform name in wizard headings.
+  ///
+  /// In en, this message translates to:
+  /// **'iPhone / iPad'**
+  String get platformIos;
+
+  /// Platform name in wizard headings.
+  ///
+  /// In en, this message translates to:
+  /// **'Mac'**
+  String get platformMac;
+
+  /// Platform name in wizard headings.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows'**
+  String get platformWindows;
+
+  /// Platform name in wizard headings.
+  ///
+  /// In en, this message translates to:
+  /// **'Linux'**
+  String get platformLinux;
+
+  /// Platform name: any other device.
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices'**
+  String get platformOther;
+
+  /// Hotspot wizard, Android shares, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap \"Start hotspot\" below: LanDrop makes a private hotspot (no mobile data is shared) and shows a QR code the other device can scan to join. This phone may leave its Wi-Fi while it runs.'**
+  String get hotspotShareAndroid1;
+
+  /// Hotspot wizard, Android shares, step 2 (Android menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Or use the normal hotspot: Settings > Network & internet > Hotspot & tethering > Wi-Fi hotspot (names differ a little by brand). Turn it on and note its name and password.'**
+  String get hotspotShareAndroid2;
+
+  /// Hotspot wizard, iPhone shares, step 1 (iOS menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". (Your mobile plan must allow hotspot use.)'**
+  String get hotspotShareIos1;
+
+  /// Hotspot wizard, iPhone shares, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep that screen open until the other device has joined: it shows the Wi-Fi password.'**
+  String get hotspotShareIos2;
+
+  /// Hotspot wizard, Mac shares, step 1; quotes the hotspotRoleJoin button.
+  ///
+  /// In en, this message translates to:
+  /// **'Easiest: do it the other way round. Let the other device share a hotspot and join it from this Mac (choose \"This device joins it\" above).'**
+  String get hotspotShareMac1;
+
+  /// Hotspot wizard, Mac shares, step 2 (macOS menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'To share from this Mac anyway: System Settings > General > Sharing, click (i) next to Internet Sharing, share your connection (for example Ethernet) to computers using Wi-Fi, set a network name and password, then turn Internet Sharing on.'**
+  String get hotspotShareMac2;
+
+  /// Hotspot wizard, Windows shares, step 1 (Windows menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Network & internet > Mobile hotspot.'**
+  String get hotspotShareWindows1;
+
+  /// Hotspot wizard, Windows shares, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on \"Mobile hotspot\". The network name and password are shown on that page.'**
+  String get hotspotShareWindows2;
+
+  /// Hotspot wizard, Linux shares, step 1; command is a shell command, never translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Wi-Fi, open the menu (⋮) and choose \"Turn On Wi-Fi Hotspot…\". On other desktops use NetworkManager: create a new Wi-Fi network with mode \"Hotspot\", or run: {command}'**
+  String hotspotShareLinux1(String command);
+
+  /// Hotspot wizard, Linux shares, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Note the network name and password.'**
+  String get hotspotShareLinux2;
+
+  /// Hotspot wizard, other device shares.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on the hotspot (\"tethering\") in this device\'s network settings and note its name and password.'**
+  String get hotspotShareOther1;
+
+  /// Hotspot wizard, Android joins (Android menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Wi-Fi and pick the other device\'s hotspot, then enter its password. Or tap the QR icon next to \"Add network\" and scan the code shown on the other device.'**
+  String get hotspotJoinAndroid1;
+
+  /// Hotspot wizard, iPhone joins (iOS menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Wi-Fi and pick the other device\'s hotspot, then enter its password. Or point the Camera at the QR code shown on the other device and tap \"Join network\".'**
+  String get hotspotJoinIos1;
+
+  /// Hotspot wizard, Mac joins.
+  ///
+  /// In en, this message translates to:
+  /// **'Click the Wi-Fi icon in the menu bar (or Control Center), pick the other device\'s hotspot and enter its password.'**
+  String get hotspotJoinMac1;
+
+  /// Hotspot wizard, Windows joins.
+  ///
+  /// In en, this message translates to:
+  /// **'Click the network icon in the taskbar, open the Wi-Fi list, pick the other device\'s hotspot and enter its password.'**
+  String get hotspotJoinWindows1;
+
+  /// Hotspot wizard, Linux joins; command is a shell command, never translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the network menu (top right) > Wi-Fi > Select network, pick the other device\'s hotspot and enter its password. Or run: {command}'**
+  String hotspotJoinLinux1(String command);
+
+  /// Hotspot wizard, other device joins.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Wi-Fi settings, pick the other device\'s hotspot and enter its password.'**
+  String get hotspotJoinOther1;
+
+  /// Hotspot wizard step after sharing.
+  ///
+  /// In en, this message translates to:
+  /// **'On the other device, join this hotspot like any Wi-Fi network (see below).'**
+  String get hotspotStepShareOther;
+
+  /// Hotspot wizard step after joining.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off any VPN. Mobile data can stay on.'**
+  String get hotspotStepVpn;
+
+  /// Hotspot wizard last step; quotes hotspotFindLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Open LanDrop on both devices, then tap \"I\'m connected, find the other device\".'**
+  String get hotspotStepOpenBoth;
+
+  /// Hotspot wizard page title.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect without Wi-Fi'**
+  String get hotspotWizardTitle;
+
+  /// Hotspot wizard introduction.
+  ///
+  /// In en, this message translates to:
+  /// **'No router needed: one device shares a Wi-Fi hotspot, the other joins it, and LanDrop finds the other device on that network. This also helps when the Wi-Fi keeps devices apart (guest, office or hotel networks). Files go directly between the two devices and do not use mobile data.'**
+  String get hotspotIntro;
+
+  /// Hotspot wizard role button.
+  ///
+  /// In en, this message translates to:
+  /// **'This device shares the hotspot'**
+  String get hotspotRoleShare;
+
+  /// Hotspot wizard role button.
+  ///
+  /// In en, this message translates to:
+  /// **'This device joins it'**
+  String get hotspotRoleJoin;
+
+  /// Wizard section header; platform is a platform name.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device ({platform})'**
+  String wizardOnThisDevice(String platform);
+
+  /// Button: opens the QR join page (Android).
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the hotspot QR code'**
+  String get hotspotScanQr;
+
+  /// Hotspot wizard: expandable steps for the other device.
+  ///
+  /// In en, this message translates to:
+  /// **'On the other device: join the hotspot'**
+  String get hotspotOtherJoin;
+
+  /// Hotspot wizard: expandable steps for the other device.
+  ///
+  /// In en, this message translates to:
+  /// **'On the other device: share a hotspot'**
+  String get hotspotOtherShare;
+
+  /// Button that searches for the other device after connecting.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m connected, find the other device'**
+  String get hotspotFindLabel;
+
+  /// Hotspot wizard: link to the cable wizard.
+  ///
+  /// In en, this message translates to:
+  /// **'Using a cable instead? Ethernet or USB'**
+  String get hotspotCableInstead;
+
+  /// Button (Android): start the LanDrop hotspot.
+  ///
+  /// In en, this message translates to:
+  /// **'Start hotspot'**
+  String get hotspotStart;
+
+  /// Hotspot card title while it runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Hotspot is on'**
+  String get hotspotOn;
+
+  /// Hotspot network name (technical, LTR).
+  ///
+  /// In en, this message translates to:
+  /// **'Name: {ssid}'**
+  String hotspotName(String ssid);
+
+  /// Hotspot without a password.
+  ///
+  /// In en, this message translates to:
+  /// **'No password'**
+  String get hotspotNoPassword;
+
+  /// Hotspot password (technical, LTR).
+  ///
+  /// In en, this message translates to:
+  /// **'Password: {password}'**
+  String hotspotPassword(String password);
+
+  /// Hotspot card hint under the QR code.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with the other device\'s camera to join (Android 10+, iPhone). The hotspot stops when you tap Stop or close LanDrop.'**
+  String get hotspotScanHint;
+
+  /// Button: stop the hotspot.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop hotspot'**
+  String get hotspotStop;
+
+  /// Screen reader label of the hotspot QR code.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code to join this hotspot'**
+  String get hotspotQrSemantics;
+
+  /// Search progress line.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking at the new network…'**
+  String get findPhaseNetwork;
+
+  /// Search progress line.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the usual hotspot addresses…'**
+  String get findPhaseProbeHotspot;
+
+  /// Search progress line.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning the network…'**
+  String get findPhaseScan;
+
+  /// Search progress line.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found. Checking why…'**
+  String get findPhaseWhy;
+
+  /// Search found nothing (hotspot).
+  ///
+  /// In en, this message translates to:
+  /// **'Check that both devices are on the same hotspot and LanDrop is open on both. Then try again, or use \"Add by IP\" with the address shown on the other device.'**
+  String get findNothingHintHotspot;
+
+  /// Search result header.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {count, plural, =1{1 device} other{{count} devices}}'**
+  String findFound(int count);
+
+  /// Button after a successful search.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to devices'**
+  String get findBackToDevices;
+
+  /// Search found nothing: title.
+  ///
+  /// In en, this message translates to:
+  /// **'No device found yet'**
+  String get findNothingTitle;
+
+  /// Cable wizard, Ethernet on a Mac, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Plug the Ethernet cable into both computers (a USB or Thunderbolt Ethernet adapter is fine). Cable or router: the same steps.'**
+  String get cableEthMac1;
+
+  /// Cable wizard, Ethernet on a Mac, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings > Network. If the adapter is not listed, click \"…\" > \"Add Service…\" (or the + button), pick the Ethernet adapter and click Create.'**
+  String get cableEthMac2;
+
+  /// Cable wizard, Ethernet on a Mac, step 3; prefix is an address prefix (169.254).
+  ///
+  /// In en, this message translates to:
+  /// **'Select it and set \"Configure IPv4\" to \"Using DHCP\". With no router the Mac gives itself an address starting with {prefix}. That is normal.'**
+  String cableEthMac3(String prefix);
+
+  /// Cable wizard, Ethernet on Windows/Linux, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Plug the Ethernet cable into both computers.'**
+  String get cableEthPlugBoth;
+
+  /// Cable wizard, Ethernet on Windows, step 2; prefix is an address prefix (169.254).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Network & internet > Ethernet. It should say \"No Internet\" or \"Unidentified network\": that is fine, Windows gives itself an address starting with {prefix}.'**
+  String cableEthWindows2(String prefix);
+
+  /// Cable wizard, Ethernet on Windows, step 3.
+  ///
+  /// In en, this message translates to:
+  /// **'Under \"IP assignment\" keep \"Automatic (DHCP)\". On the Windows Firewall prompt, allow LanDrop on Private networks. If the network is marked \"Public\", set it to Private.'**
+  String get cableEthWindows3;
+
+  /// Cable wizard, Ethernet on Linux, step 2; command is a shell command, never translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Network, pick the wired connection and open its settings > IPv4. Choose the \"Link-Local Only\" method and apply. Or run: {command}'**
+  String cableEthLinux2(String command);
+
+  /// Cable wizard, Ethernet on Linux, step 3.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the connection off and on so it gets an address.'**
+  String get cableEthLinux3;
+
+  /// Cable wizard, Ethernet on other devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Plug an Ethernet cable (with an adapter if needed) into both computers, and make sure the wired network uses automatic addresses (DHCP or \"link-local\").'**
+  String get cableEthOther1;
+
+  /// Cable wizard, USB tethering on Android, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone is the one sharing: connect it to the computer with a USB cable.'**
+  String get cableUsbAndroid1;
+
+  /// Cable wizard, USB tethering on Android, step 2 (Android menu path).
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Network & internet > Hotspot & tethering (names differ a little by brand), then turn on \"USB tethering\". It only switches on while a computer is plugged in.'**
+  String get cableUsbAndroid2;
+
+  /// Cable wizard, USB on iPhone, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect the iPhone to the computer with a USB cable and tap \"Trust\" if asked.'**
+  String get cableUsbIos1;
+
+  /// Cable wizard, USB on iPhone, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings > Personal Hotspot and turn on \"Allow Others to Join\". On a Windows PC, iTunes or the Apple Devices app must be installed.'**
+  String get cableUsbIos2;
+
+  /// Cable wizard, USB on a Mac, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect the phone to this Mac with a USB cable. On the phone turn on Personal Hotspot (iPhone) or USB tethering (Android).'**
+  String get cableUsbMac1;
+
+  /// Cable wizard, USB on a Mac, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'The Mac shows a new network adapter in System Settings > Network (for example \"iPhone USB\" or \"RNDIS/Ethernet Gadget\"). Android USB tethering needs a driver on a Mac, which is not built in; an iPhone works out of the box.'**
+  String get cableUsbMac2;
+
+  /// Cable wizard, USB on Windows, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect the phone to this PC with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).'**
+  String get cableUsbWindows1;
+
+  /// Cable wizard, USB on Windows, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows adds a new adapter (shown in Settings > Network & internet > Advanced network settings). Wait until it says Connected.'**
+  String get cableUsbWindows2;
+
+  /// Cable wizard, USB on Linux, step 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect the phone to this computer with a USB cable. On the phone turn on USB tethering (Android) or Personal Hotspot (iPhone).'**
+  String get cableUsbLinux1;
+
+  /// Cable wizard, USB on Linux, step 2.
+  ///
+  /// In en, this message translates to:
+  /// **'A new wired connection appears (named like usb0, enx… or eth1). It usually connects by itself.'**
+  String get cableUsbLinux2;
+
+  /// Cable wizard, USB on other devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect the phone with a USB cable and turn on USB tethering or Personal Hotspot; the computer then has a new network adapter.'**
+  String get cableUsbOther1;
+
+  /// Cable wizard step (Ethernet).
+  ///
+  /// In en, this message translates to:
+  /// **'Wait a few seconds: with no router it takes up to a minute for both computers to get their addresses.'**
+  String get cableStepWait;
+
+  /// Cable wizard step (USB tethering).
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off any VPN. The other device now shares its connection to this one.'**
+  String get cableStepVpn;
+
+  /// Cable wizard last step; quotes cableFindLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Open LanDrop on both devices, then tap \"The cable is connected, find the other device\".'**
+  String get cableStepOpenBoth;
+
+  /// Cable wizard introduction.
+  ///
+  /// In en, this message translates to:
+  /// **'No Wi-Fi or router needed: connect the two devices with a cable and LanDrop finds the other device on that link. Files go directly over the cable.'**
+  String get cableIntro;
+
+  /// Cable wizard choice.
+  ///
+  /// In en, this message translates to:
+  /// **'Ethernet cable'**
+  String get cableKindEthernet;
+
+  /// Cable wizard choice.
+  ///
+  /// In en, this message translates to:
+  /// **'USB tethering'**
+  String get cableKindUsb;
+
+  /// Cable wizard hint for the phone (menu paths).
+  ///
+  /// In en, this message translates to:
+  /// **'On the phone: Android > Settings > Network & internet > Hotspot & tethering > USB tethering. iPhone > Settings > Personal Hotspot.'**
+  String get cableTetherHint;
+
+  /// Cable wizard search button.
+  ///
+  /// In en, this message translates to:
+  /// **'The cable is connected, find the other device'**
+  String get cableFindLabel;
+
+  /// Search progress line (cable).
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the usual cable and USB addresses…'**
+  String get cablePhaseProbe;
+
+  /// Search found nothing (cable).
+  ///
+  /// In en, this message translates to:
+  /// **'Check the cable, that the adapter shows as connected, and that LanDrop is open on both devices. A direct cable can take up to a minute to get addresses. Then try again, or use \"Add by IP\" with the address shown on the other device.'**
+  String get cableNothingHint;
+
+  /// Wi-Fi Direct page title.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct'**
+  String get wifiDirectTitle;
+
+  /// Wi-Fi Direct introduction.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect two devices directly, without a router. Once connected, send files as usual.'**
+  String get wifiDirectIntro;
+
+  /// Wi-Fi Direct error card hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Try: Wi-Fi on, accept the invitation on the other device, keep both screens on and close together.'**
+  String get wifiDirectTry;
+
+  /// Wi-Fi Direct connected.
+  ///
+  /// In en, this message translates to:
+  /// **'This device hosts the group.'**
+  String get wifiDirectRoleOwner;
+
+  /// Wi-Fi Direct connected.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined the other device\'s group.'**
+  String get wifiDirectRoleClient;
+
+  /// Wi-Fi Direct connected card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected via Wi-Fi Direct'**
+  String get wifiDirectConnected;
+
+  /// Wi-Fi Direct group name (technical).
+  ///
+  /// In en, this message translates to:
+  /// **'Network: {ssid}'**
+  String wifiDirectNetwork(String ssid);
+
+  /// Wi-Fi Direct owner IP (technical).
+  ///
+  /// In en, this message translates to:
+  /// **'Host address: {address}'**
+  String wifiDirectHost(String address);
+
+  /// Wi-Fi Direct search progress.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for LanDrop devices…'**
+  String get wifiDirectLooking;
+
+  /// Wi-Fi Direct: no LanDrop device found.
+  ///
+  /// In en, this message translates to:
+  /// **'No LanDrop device answered yet. Make sure LanDrop is open on the other device, then search again.'**
+  String get wifiDirectNone;
+
+  /// Wi-Fi Direct button.
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get wifiDirectSearchAgain;
+
+  /// Wi-Fi Direct button.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get wifiDirectDisconnect;
+
+  /// Wi-Fi Direct peer list hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a device to connect. The other device gets an Android invitation dialog and must accept it.'**
+  String get wifiDirectTapHint;
+
+  /// Wi-Fi Direct: searching.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking…'**
+  String get wifiDirectLookingShort;
+
+  /// Wi-Fi Direct: empty list.
+  ///
+  /// In en, this message translates to:
+  /// **'No devices found yet. Open Wi-Fi Direct on the other device too.'**
+  String get wifiDirectEmpty;
+
+  /// Wi-Fi Direct peer status: invited.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation sent. Accept it on the other device.'**
+  String get wifiDirectInvited;
+
+  /// Wi-Fi Direct peer status.
+  ///
+  /// In en, this message translates to:
+  /// **'connected'**
+  String get wifiDirectStatusConnected;
+
+  /// Wi-Fi Direct peer status.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get wifiDirectStatusFailed;
+
+  /// Wi-Fi Direct peer status.
+  ///
+  /// In en, this message translates to:
+  /// **'available'**
+  String get wifiDirectStatusAvailable;
+
+  /// Wi-Fi Direct peer status.
+  ///
+  /// In en, this message translates to:
+  /// **'unavailable'**
+  String get wifiDirectStatusUnavailable;
+
+  /// Wi-Fi Direct button.
+  ///
+  /// In en, this message translates to:
+  /// **'Create group here'**
+  String get wifiDirectCreateGroup;
+
+  /// Wi-Fi Direct hint; quotes wifiDirectCreateGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'\"Create group here\" makes this device the host, so the other device can find and join it from its own Wi-Fi Direct screen. Keep both screens on.'**
+  String get wifiDirectCreateHint;
+
+  /// Join by QR: wrong QR code.
+  ///
+  /// In en, this message translates to:
+  /// **'That QR code is not a Wi-Fi code. Scan the code shown by the other phone\'s LanDrop hotspot.'**
+  String get wifiJoinNotWifiQr;
+
+  /// Join by QR: manual entry invalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the network name (up to 32 characters) and its password (8 to 63 characters, or none for an open network).'**
+  String get wifiJoinManualInvalid;
+
+  /// Join by QR: what to do on the other phone (quotes in-app labels).
+  ///
+  /// In en, this message translates to:
+  /// **'On the other phone, open LanDrop > Connect without Wi-Fi > \"This device shares the hotspot\" > Start hotspot. Then point this camera at the QR code it shows.'**
+  String get wifiJoinScanIntro;
+
+  /// Join by QR: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow the camera'**
+  String get wifiJoinAllowCamera;
+
+  /// Join by QR: manual entry toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter name and password'**
+  String get wifiJoinManualToggle;
+
+  /// Join by QR: field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Network name'**
+  String get wifiJoinNetworkName;
+
+  /// Join by QR: field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Password (empty for an open network)'**
+  String get wifiJoinPasswordLabel;
+
+  /// Join by QR: checkbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden network'**
+  String get wifiJoinHidden;
+
+  /// Join by QR: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get wifiJoinContinue;
+
+  /// Join by QR: confirm title; ssid is technical.
+  ///
+  /// In en, this message translates to:
+  /// **'Join {ssid}?'**
+  String wifiJoinConfirmTitle(String ssid);
+
+  /// Join by QR: explanation before joining.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop will ask Android to join this Wi-Fi network. Android will ask you to confirm. While joined, this phone may lose its internet connection. Only LanDrop uses this network; other apps keep using your normal connection where Android allows it.'**
+  String get wifiJoinExplain;
+
+  /// Join by QR: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get wifiJoinJoin;
+
+  /// Join by QR: progress.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining {ssid}… Confirm the Android prompt when it appears.'**
+  String wifiJoinJoining(String ssid);
+
+  /// Join by QR: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan again'**
+  String get wifiJoinScanAgain;
+
+  /// Join by QR: joined title.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined {ssid}'**
+  String wifiJoinJoined(String ssid);
+
+  /// Join by QR: section and button.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the other device'**
+  String get wifiJoinFindTitle;
+
+  /// Join by QR: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave network'**
+  String get wifiJoinLeave;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'Only Android can start a hotspot from LanDrop.'**
+  String get errHotspotUnsupportedPlatform;
+
+  /// Hotspot error (Android 7).
+  ///
+  /// In en, this message translates to:
+  /// **'This Android version cannot start a hotspot from an app. Use Settings > Hotspot instead.'**
+  String get errHotspotUnsupportedSdk;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop needs the \"Nearby devices\" permission to start a hotspot.'**
+  String get errHotspotPermissionNearby;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop needs the location permission to start a hotspot (Android requires it for Wi-Fi features; LanDrop does not use your location).'**
+  String get errHotspotPermissionLocation;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'The hotspot started but Android did not report its name.'**
+  String get errHotspotNoName;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting a hotspot is not available here.'**
+  String get errHotspotUnavailable;
+
+  /// Hotspot error; detail is a technical reason (English).
+  ///
+  /// In en, this message translates to:
+  /// **'Android refused: {detail}. On Android 12 and older, Location must also be switched on.'**
+  String errHotspotRefused(String detail);
+
+  /// Default reason inserted into errHotspotRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'permission missing'**
+  String get errHotspotPermissionMissing;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'Android cannot start it right now, usually because the normal hotspot or tethering is on. Turn that off, or use it instead.'**
+  String get errHotspotIncompatible;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'Hotspots are not allowed on this device (for example by a work profile or the carrier).'**
+  String get errHotspotDisallowed;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'No free Wi-Fi channel. Try again in a moment.'**
+  String get errHotspotNoChannel;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'A hotspot is already starting.'**
+  String get errHotspotBusy;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'The hotspot was stopped.'**
+  String get errHotspotCancelled;
+
+  /// Hotspot error.
+  ///
+  /// In en, this message translates to:
+  /// **'The hotspot could not start.'**
+  String get errHotspotFailed;
+
+  /// Hotspot error; detail is technical (English).
+  ///
+  /// In en, this message translates to:
+  /// **'The hotspot could not start: {detail}.'**
+  String errHotspotFailedDetail(String detail);
+
+  /// Hotspot error; error is technical (English).
+  ///
+  /// In en, this message translates to:
+  /// **'The hotspot could not start: {error}'**
+  String errHotspotStartError(String error);
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct is not available on this device.'**
+  String get errWifiDirectUnsupported;
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi is off. Turn Wi-Fi on (no router needed), then try again.'**
+  String get errWifiDirectWifiOff;
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop needs permission to find nearby devices. Allow it, and on Android 12 and older also switch Location on.'**
+  String get errWifiDirectPermission;
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct is busy. Wait a moment and try again, or tap Disconnect first.'**
+  String get errWifiDirectBusy;
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct is not ready yet. Try again.'**
+  String get errWifiDirectNotReady;
+
+  /// Wi-Fi Direct error.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct failed. Turn Wi-Fi off and on, and try again.'**
+  String get errWifiDirectFailed;
+
+  /// Wi-Fi Direct error; detail is technical (English).
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct failed ({detail}). Turn Wi-Fi off and on, and try again.'**
+  String errWifiDirectFailedDetail(String detail);
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining a Wi-Fi network from LanDrop needs Android 7 or newer. Join it in the Wi-Fi settings instead.'**
+  String get errWifiJoinUnsupported;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop needs the camera to scan the QR code. Allow it in the app settings, or type the name and password instead.'**
+  String get errWifiJoinCamera;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'Android did not join the network. Check that the other phone\'s hotspot is on and close by, that the password is right, and that you did not decline the Android prompt. Then try again.'**
+  String get errWifiJoinTimeout;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'The network went away. Check that the hotspot is still on, then scan again.'**
+  String get errWifiJoinLost;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'This network uses an old security type (WEP) that Android no longer lets apps join. Join it in the Wi-Fi settings instead.'**
+  String get errWifiJoinUnsupportedSecurity;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'Android did not allow LanDrop to change the network. Join it in the Wi-Fi settings instead.'**
+  String get errWifiJoinPermission;
+
+  /// Join by QR error.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not join the network. Try again, or join it in the Wi-Fi settings.'**
+  String get errWifiJoinFailed;
+
+  /// Join by QR error; detail is technical (English).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not join the network ({detail}). Try again, or join it in the Wi-Fi settings.'**
+  String errWifiJoinFailedDetail(String detail);
+
+  /// Advanced: last error when plain HTTP failed to start; error is technical (English).
+  ///
+  /// In en, this message translates to:
+  /// **'Plain HTTP for browsers could not start: {error}'**
+  String errorWebHttpStart(String error);
+
+  /// System file picker window title.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose files to send'**
+  String get pickFilesTitle;
+
+  /// System folder picker window title.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a folder to send'**
+  String get pickFolderTitle;
+
+  /// Connection helper page title.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me connect'**
+  String get helperTitle;
+
+  /// Helper: automatic check running.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking your connection…'**
+  String get helperChecking;
+
+  /// Helper: a device appeared; name is the device name.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {name}!'**
+  String helperFound(String name);
+
+  /// Helper: the check found nothing to fix.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing looks wrong on this device.'**
+  String get helperCheckFine;
+
+  /// Helper question 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Are both devices on the same Wi-Fi?'**
+  String get helperQ1;
+
+  /// Helper question 1 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, same Wi-Fi'**
+  String get helperQ1Same;
+
+  /// Helper question 1 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'No, or there is no Wi-Fi'**
+  String get helperQ1Different;
+
+  /// Helper question 1 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ll use a cable'**
+  String get helperQ1Cable;
+
+  /// Helper: same Wi-Fi checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'Open LanDrop on the other device and keep its screen on. Turn off any VPN.'**
+  String get helperChecklist;
+
+  /// Helper: search button (same Wi-Fi).
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get helperSearchAgain;
+
+  /// Helper: search found nothing on the same Wi-Fi.
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure both devices use the same Wi-Fi network (not a guest network) and LanDrop is open on both, then search again.'**
+  String get helperSameWifiNothing;
+
+  /// Helper: same Wi-Fi did not work.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wi-Fi may keep devices apart. Let\'s connect them directly.'**
+  String get helperBlocked;
+
+  /// Helper: button to question 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect directly'**
+  String get helperConnectDirectly;
+
+  /// Helper question 2.
+  ///
+  /// In en, this message translates to:
+  /// **'What is the other device?'**
+  String get helperQ2;
+
+  /// Helper question 2 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'An Android phone'**
+  String get helperQ2Android;
+
+  /// Helper question 2 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'An iPhone'**
+  String get helperQ2Iphone;
+
+  /// Helper question 2 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'A computer'**
+  String get helperQ2Computer;
+
+  /// Helper question 2 answer.
+  ///
+  /// In en, this message translates to:
+  /// **'Only a browser'**
+  String get helperQ2Browser;
+
+  /// Helper: label of the recommended way.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get helperRecommended;
+
+  /// Helper method title (Android shares, other phone scans).
+  ///
+  /// In en, this message translates to:
+  /// **'Share a hotspot from this phone'**
+  String get helperMethodShareQrTitle;
+
+  /// Helper method body.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet is used. The other phone scans the code to join.'**
+  String get helperMethodShareQrBody;
+
+  /// Helper method title.
+  ///
+  /// In en, this message translates to:
+  /// **'Share a hotspot from this device'**
+  String get helperMethodShareTitle;
+
+  /// Helper method body.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet is used. The other device joins this hotspot like any Wi-Fi network.'**
+  String get helperMethodShareBody;
+
+  /// Helper method title.
+  ///
+  /// In en, this message translates to:
+  /// **'Join the other device\'s hotspot'**
+  String get helperMethodJoinTitle;
+
+  /// Helper method body.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on the hotspot on the other device, then join it from this one. No internet is used.'**
+  String get helperMethodJoinBody;
+
+  /// Helper method title (Android).
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the other phone\'s hotspot code'**
+  String get helperMethodJoinQrTitle;
+
+  /// Helper method body (Android).
+  ///
+  /// In en, this message translates to:
+  /// **'When the other phone shares a hotspot with LanDrop, this phone scans its QR code and joins.'**
+  String get helperMethodJoinQrBody;
+
+  /// Helper method title (Android).
+  ///
+  /// In en, this message translates to:
+  /// **'Use Wi-Fi Direct'**
+  String get helperMethodWifiDirectTitle;
+
+  /// Helper method body (Android).
+  ///
+  /// In en, this message translates to:
+  /// **'Phone to phone without a router. Both phones must run Android.'**
+  String get helperMethodWifiDirectBody;
+
+  /// Helper: button.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Wi-Fi Direct'**
+  String get helperOpenWifiDirect;
+
+  /// Helper method title.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a browser on the other device'**
+  String get helperMethodBrowserTitle;
+
+  /// Helper method body.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to install: the other device opens a link in its browser to send or download files. Both devices must be on the same Wi-Fi or hotspot.'**
+  String get helperMethodBrowserBody;
+
+  /// Helper: button to the Shares page.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the Share page'**
+  String get helperOpenShares;
+
+  /// Helper section header.
+  ///
+  /// In en, this message translates to:
+  /// **'On this device'**
+  String get helperOnThisDevice;
+
+  /// Helper section header.
+  ///
+  /// In en, this message translates to:
+  /// **'On the other device'**
+  String get helperOnOtherDevice;
+
+  /// Helper: alternative methods header.
+  ///
+  /// In en, this message translates to:
+  /// **'Other ways'**
+  String get helperOtherWays;
+
+  /// Helper: back to the questions.
+  ///
+  /// In en, this message translates to:
+  /// **'Try another way'**
+  String get helperTryAnother;
+
+  /// Helper: copies the (English) diagnosis report.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy connection report'**
+  String get helperCopyReport;
+
+  /// Join by QR: the camera preview failed to start.
+  ///
+  /// In en, this message translates to:
+  /// **'The camera could not start. Type the name and password below instead.'**
+  String get wifiJoinCameraFailed;
 }
 
 class _AppLocalizationsDelegate
