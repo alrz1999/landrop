@@ -5,6 +5,8 @@ import 'dart:io';
 import 'dart:math' show min;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'api.dart';
 import 'diagnosis.dart';
 import 'discovery.dart';
@@ -119,6 +121,10 @@ class LanDropCoreOptions {
   final Duration webSessionTtl;
   final Duration webStreamWindow;
 
+  /// Test seam: clock for the expiry of nearby nonces, tickets, grants and
+  /// prompts. Null: the system clock.
+  final DateTime Function()? webClock;
+
   /// JSON file where shares are kept across restarts (DESIGN.md 4.8). Null:
   /// shares live in memory only. See [LanDropCore.setSharesPersistence].
   final String? sharesStorePath;
@@ -198,6 +204,7 @@ class LanDropCoreOptions {
     this.maxOfferBytes = 1 << 50,
     this.requestRateLimit = 10,
     this.freeSpace,
+    this.webClock,
   });
 }
 
@@ -389,6 +396,8 @@ class LanDropCoreImpl implements LanDropCore {
     upload: (req, owner) => _handleUpload(req, owner: owner),
     onSessionEnded: _onWebSessionEnded,
     storePath: options.sharesStorePath,
+    now: options.webClock,
+    knownAlias: (fp) => _peers[fp]?.info.alias,
   );
 
   /// A browser signed out or was disconnected: its receive session (if any)
@@ -418,6 +427,21 @@ class LanDropCoreImpl implements LanDropCore {
           ttl: ttl, maxDownloads: maxDownloads, nearby: nearby);
   @override
   void setShareNearby(String id, bool on) => _web.setShareNearby(id, on);
+  @override
+  void setNearbyTrusted(Set<String> fingerprints) =>
+      _web.setNearbyAllowed(fingerprints);
+  @override
+  void revokeNearbyAccess(String fp) => _web.revokeNearbyAccess(fp);
+  @override
+  Stream<NearbyAccessRequest> get nearbyRequests => _web.nearbyRequests;
+  @override
+  void respondNearbyAccess(String id, NearbyDecision decision) =>
+      _web.respondNearbyAccess(id, decision);
+
+  /// Test seam: the browser/nearby service.
+  @visibleForTesting
+  WebService get debugWeb => _web;
+
   @override
   void revokeShare(String id) => _web.revokeShare(id);
   @override

@@ -409,6 +409,42 @@ class NearbyShare {
   });
 }
 
+/// What a nearby device listed for this app: shares plus the ticket for
+/// downloading them. The ticket is a secret: memory only, never logged.
+class NearbyListing {
+  final String peerFingerprint;
+  final List<NearbyShare> shares;
+  final String? ticket;
+  final DateTime? ticketExpires;
+  const NearbyListing({
+    required this.peerFingerprint,
+    required this.shares,
+    this.ticket,
+    this.ticketExpires,
+  });
+}
+
+/// A proven but not yet allowed app asking to see this device's nearby
+/// shares. Answer with [LanDropCore.respondNearbyAccess].
+class NearbyAccessRequest {
+  final String id;
+  final String fingerprint;
+
+  /// Sanitised, at most 64 characters; may be empty.
+  final String alias;
+  final String remoteIp;
+  final DateTime at;
+  const NearbyAccessRequest({
+    required this.id,
+    required this.fingerprint,
+    required this.alias,
+    required this.remoteIp,
+    required this.at,
+  });
+}
+
+enum NearbyDecision { deny, allowOnce, alwaysAllow }
+
 abstract class LanDropCore {
   /// Start HTTPS server, multicast discovery. Received files go to [saveDir].
   Future<void> start({required String alias, required String saveDir});
@@ -515,6 +551,18 @@ abstract class LanDropCore {
   /// Shows or hides a share to nearby devices (trusted apps, paired
   /// browsers) right away.
   void setShareNearby(String id, bool on);
+
+  /// Fingerprints of the trusted devices that may list nearby shares
+  /// (replaces the set; access of removed devices ends at once).
+  void setNearbyTrusted(Set<String> fingerprints);
+
+  /// Ends the access (grant, tickets, pending prompt) of device [fp].
+  void revokeNearbyAccess(String fp);
+
+  /// Apps that proved their identity but are not allowed yet; the owner
+  /// answers with [respondNearbyAccess].
+  Stream<NearbyAccessRequest> get nearbyRequests;
+  void respondNearbyAccess(String id, NearbyDecision decision);
 
   /// Whether shares are saved and restored across restarts (only when the
   /// core has a store, e.g. `LanDropCoreOptions.sharesStorePath`). Turning it

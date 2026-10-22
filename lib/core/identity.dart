@@ -74,6 +74,14 @@ List<int> senderProofMessage(String receiverFp, String senderFp,
   return utf8.encode('landrop-prepare-v1\n$receiverFp\n$senderFp\n$digest');
 }
 
+/// What an app signs to list a device's nearby shares (PROTOCOL.md "Nearby
+/// shares"): binds the request to this receiver, the requester, the method
+/// and path, and a single-use server nonce.
+List<int> nearbyProofMessage(String receiverFp, String requesterFp,
+        String method, String path, String nonce) =>
+    utf8.encode(
+        'landrop-nearby-v1\n$receiverFp\n$requesterFp\n$method $path\n$nonce');
+
 class TlsIdentity {
   final String certPem;
   final String keyPem;

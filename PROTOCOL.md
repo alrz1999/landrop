@@ -199,3 +199,38 @@ Headers on every web response (page, JSON, file bytes, errors):
   401s on upload endpoints, unknown/expired/exhausted share tokens or file ids count as attempts;
   at 10 within 1 minute every web API request from that IP gets 429 (the page itself still loads).
 - Requests other than GET/HEAD with an `Origin` header whose host:port differs from `Host` get 403.
+
+## Nearby shares (LanDrop apps only; docs/NEARBY_PLAN.md)
+
+An owner can mark a share "Show to nearby devices". Trusted LanDrop apps (or apps the owner
+approves for an hour) list it with a signed request; everyone else gets the same answer as
+"no shares". HTTPS only: on the plain HTTP listener every `/api/landrop/v1/nearby/*` path is
+the same 404 as an unknown path. Nothing under `/api/localsend/v2` is affected.
+
+1. `POST /api/landrop/v1/nearby/challenge`, body `{"fingerprint": "<64 lowercase hex>"}`
+   (at most 1024 bytes, not the receiver's own fingerprint). Answer
+   `{"nonce": "<random>", "expiresIn": 30}`. The nonce is single use, bound to that
+   fingerprint and the caller's address, valid 30 s. At most 20 challenges per minute per
+   address (429), 4 outstanding nonces per address and 64 in all (503).
+2. `POST /api/landrop/v1/nearby/list`, body (at most 24576 bytes)
+   `{"fingerprint", "nonce", "cert": "<base64 DER, <=16384 chars>", "sig": "<base64, <=1024 chars>", "alias": "<optional, <=64>"}`.
+   The signature is SHA-256/RSA (PKCS#1 v1.5) by the key of `cert` over these exact UTF-8 bytes
+   (`\n` is a line feed; no trailing newline):
+
+   ```
+   landrop-nearby-v1\n<receiverFp>\n<requesterFp>\nPOST /api/landrop/v1/nearby/list\n<nonce>
+   ```
+
+   with `receiverFp` = fingerprint of the listing device, `requesterFp` = lowercase hex SHA-256
+   of `cert`. The receiver removes the nonce first, then checks nonce/fingerprint/address,
+   then `sha256(cert) == fingerprint`, then the signature (RSA key 2048 to 4096 bit), then
+   whether the requester is trusted or granted. Any failure, an untrusted requester, and a
+   trusted requester with nothing to list all get status 200 and exactly this body:
+   `{"shares":[],"ticket":null,"ticketExpiresIn":0}`. A listing:
+   `{"shares":[{"id","createdAt","expiresAt","downloadsLeft","truncated","files":[{"id","name","size","mime"}]}],"ticket":"lt1.<random>","ticketExpiresIn":600}`
+   (at most 50 shares, 1000 files per share; never a path or share token).
+3. `GET|HEAD /api/landrop/v1/nearby/shares/<shareId>/files/<fileId>` with the header
+   `Authorization: LanDrop-Ticket <ticket>` (never in the URL). Range and the download limit
+   work as for browsers. The ticket lives 10 minutes (fixed), belongs to the requester's
+   address, and every request re-checks that the requester is still allowed and the share is
+   still live and nearby. Any failure is `404 {"message":"not found"}`.

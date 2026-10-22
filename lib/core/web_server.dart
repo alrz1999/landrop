@@ -9,9 +9,11 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'api.dart';
 import 'guarded_server.dart';
+import 'identity.dart';
 import 'util.dart';
 import 'web_assets.dart';
 
@@ -377,6 +379,26 @@ class _Share {
       maxDownloads == null || maxDownloads! - downloads - inFlight > 0;
 }
 
+class _NearbyNonce {
+  final String fp;
+  final String ip;
+  final DateTime expires;
+  _NearbyNonce(this.fp, this.ip, this.expires);
+}
+
+class _NearbyTicket {
+  final String fp;
+  final String ip;
+  final DateTime expires;
+  _NearbyTicket(this.fp, this.ip, this.expires);
+}
+
+class _NearbyPending {
+  final NearbyAccessRequest request;
+  final Timer timer;
+  _NearbyPending(this.request, this.timer);
+}
+
 class _WebSession {
   final String id;
   final String token;
@@ -440,7 +462,22 @@ class WebService {
     required this.upload,
     this.onSessionEnded,
     this.storePath,
-  }) : _httpEnabled = config.httpPort != null;
+    DateTime Function()? now,
+    this.knownAlias,
+  })  : _now = now ?? DateTime.now,
+        _httpEnabled = config.httpPort != null {
+    _nearbyLimiter = AttemptLimiter(
+        limit: 20,
+        window: const Duration(minutes: 1),
+        maxKeys: 1024,
+        clock: _now);
+  }
+
+  /// Clock for every expiry decision of the nearby code (injectable).
+  final DateTime Function() _now;
+
+  /// Alias of an already known device (by fingerprint), for the owner prompt.
+  final String? Function(String fp)? knownAlias;
 
   /// JSON file the shares are kept in across restarts; null = memory only.
   /// Written atomically (temporary file + rename, owner-only where chmod
@@ -468,6 +505,25 @@ class WebService {
   final Map<String, _Pairing> _pairings = {}; // by id
   final Map<String, List<DateTime>> _failures = {}; // by remote IP
 
+  // Nearby (app protocol). All in memory; never persisted or logged. Secrets
+  // (nonces, tickets) are keyed by webTokenKey, never by the raw value.
+  static const _emptyNearby = '{"shares":[],"ticket":null,"ticketExpiresIn":0}';
+  static const _nonceLife = Duration(seconds: 30);
+  static const _ticketLife = Duration(minutes: 10);
+  static const _grantLife = Duration(hours: 1);
+  static const _denyCooldown = Duration(minutes: 10);
+  static const _promptLife = Duration(seconds: 60);
+  static final _fpRe = RegExp(r'^[0-9a-f]{64}$');
+  static const _nearbyListPath = '$webApiBase/nearby/list';
+  late final AttemptLimiter _nearbyLimiter;
+  Set<String> _nearbyAllowed = {};
+  final Map<String, DateTime> _nearbyGrants = {}; // by fingerprint
+  final Map<String, DateTime> _nearbyDenyUntil = {};
+  final Map<String, _NearbyPending> _nearbyPending = {}; // by request id
+  final Map<String, _NearbyNonce> _nearbyNonces = {}; // by webTokenKey(nonce)
+  final Map<String, _NearbyTicket> _nearbyTickets = {}; // by webTokenKey(ticket)
+  final _nearbyReqCtrl = StreamController<NearbyAccessRequest>.broadcast();
+
   bool _running = false;
   bool _httpEnabled;
   GuardedHttpServer? _http;
@@ -477,6 +533,7 @@ class WebService {
 
   Stream<WebPairingRequest> get pairing => _pairCtrl.stream;
   Stream<List<Share>> get sharesChanged => _sharesCtrl.stream;
+  Stream<NearbyAccessRequest> get nearbyRequests => _nearbyReqCtrl.stream;
 
   bool get httpEnabled => _httpEnabled;
   int? get httpPort => _http?.port;
@@ -519,10 +576,12 @@ class WebService {
       }
     }
     _pairings.clear();
+    _dropAllPending();
   }
 
   Future<void> dispose() async {
     await stop();
+    await _nearbyReqCtrl.close();
     await _pairCtrl.close();
     await _sharesCtrl.close();
     await _sessionsCtrl.close();
@@ -616,6 +675,7 @@ class WebService {
       l.removeWhere((t) => now.difference(t) >= config.rateWindow);
       return l.isEmpty;
     });
+    _pruneNearby();
   }
 
   // ------------------------------------------------------------ shares
@@ -863,7 +923,8 @@ class WebService {
       path == '/' ||
       path == '/index.html' ||
       path.startsWith('$webApiBase/web/') ||
-      path.startsWith('$webApiBase/shares/');
+      path.startsWith('$webApiBase/shares/') ||
+      path.startsWith('$webApiBase/nearby/');
 
   static String _remoteIp(HttpRequest req) =>
       req.connectionInfo?.remoteAddress.address ?? '0.0.0.0';
@@ -918,7 +979,28 @@ class WebService {
       // ['api', 'landrop', 'v1', ...rest]
       final rest = segs.length > 3 ? segs.sublist(3) : const <String>[];
       final get = m == 'GET';
+      // App-to-app nearby endpoints exist on HTTPS only; on plain HTTP they
+      // are indistinguishable from an unknown path.
+      if (!secure && rest.firstOrNull == 'nearby') {
+        throw HttpStatusError(404, 'not found');
+      }
       switch (rest) {
+        case ['nearby', 'challenge'] when m == 'POST':
+          bodyRead = true;
+          await _nearbyChallenge(req, ip);
+        case ['nearby', 'list'] when m == 'POST':
+          bodyRead = true;
+          await _nearbyList(req, ip);
+        case ['nearby', 'shares', final shareId, 'files', final fileId]
+            when get || m == 'HEAD':
+          await drainBounded(req);
+          bodyRead = true;
+          final s = _ticketShare(req, ip, shareId);
+          if (s == null) {
+            _fail(ip);
+            throw _notFound;
+          }
+          await _serveFile(req, ip, s, fileId, head: m == 'HEAD');
         case ['web', 'info'] when get:
           await drainBounded(req);
           bodyRead = true;
@@ -1225,11 +1307,20 @@ class WebService {
   /// A live, nearby share by id; unknown, hidden and expired look the same.
   _Share? _nearbyShare(String id) {
     if (id.length > 64) return null;
-    final now = DateTime.now();
+    final now = _now();
     for (final s in _sharesByToken.values) {
       if (s.id == id) return s.nearby && !s.expired(now) ? s : null;
     }
     return null;
+  }
+
+  /// Nearby shares that can still be downloaded, newest first.
+  List<_Share> _liveNearby() {
+    final now = _now();
+    return [
+      for (final s in _sharesByToken.values)
+        if (s.nearby && !s.expired(now) && s.available) s
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   /// GET web/nearby: nearby shares for a paired browser.
@@ -1238,14 +1329,280 @@ class WebService {
       _fail(ip);
       throw HttpStatusError(401, 'not paired');
     }
-    final now = DateTime.now();
-    final live = [
-      for (final s in _sharesByToken.values)
-        if (s.nearby && !s.expired(now) && s.available) s
-    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     _json(req.response, 200, {
-      'shares': [for (final s in live.take(50)) s.toNearbyJson()],
+      'shares': [for (final s in _liveNearby().take(50)) s.toNearbyJson()],
     });
+  }
+
+  // ------------------------------------------------------------ nearby (app)
+
+  /// Test seam: the stored ticket keys (hashes, never the tickets).
+  @visibleForTesting
+  Iterable<String> get debugNearbyTicketKeys => _nearbyTickets.keys.toList();
+
+  /// Test seam: a ticket for [fp] bound to [ip], without the list protocol.
+  @visibleForTesting
+  String debugIssueTicket(String fp, String ip) => _issueTicket(fp, ip);
+
+  /// Test seam: stores a nonce as if it had been issued, without the caps.
+  @visibleForTesting
+  void debugAddNonce(String nonce, String fp, String ip) =>
+      _nearbyNonces[webTokenKey(nonce)] =
+          _NearbyNonce(fp, ip, _now().add(_nonceLife));
+
+  static void _raw(HttpResponse res, int status, String body) {
+    try {
+      final bytes = utf8.encode(body);
+      res.statusCode = status;
+      res.headers.contentType = ContentType.json;
+      res.contentLength = bytes.length;
+      res.add(bytes);
+      res.close().catchError((_) {});
+    } catch (_) {}
+  }
+
+  bool _nearbyPermitted(String fp) {
+    if (_nearbyAllowed.contains(fp)) return true;
+    final g = _nearbyGrants[fp];
+    return g != null && _now().isBefore(g);
+  }
+
+  /// Replaces the set of trusted fingerprints; the grants, tickets and
+  /// pending prompts of removed ones end at once.
+  void setNearbyAllowed(Set<String> fingerprints) {
+    final removed = _nearbyAllowed.difference(fingerprints);
+    _nearbyAllowed = {...fingerprints};
+    for (final fp in removed) {
+      _dropNearbyAccess(fp);
+    }
+  }
+
+  /// Ends all access of [fp] (trust, grant, tickets, pending prompt).
+  void revokeNearbyAccess(String fp) {
+    _nearbyAllowed.remove(fp);
+    _dropNearbyAccess(fp);
+  }
+
+  void _dropNearbyAccess(String fp) {
+    _nearbyGrants.remove(fp);
+    _nearbyTickets.removeWhere((_, t) => t.fp == fp);
+    _nearbyPending.removeWhere((_, p) {
+      if (p.request.fingerprint != fp) return false;
+      p.timer.cancel();
+      return true;
+    });
+  }
+
+  void _dropAllPending() {
+    for (final p in _nearbyPending.values) {
+      p.timer.cancel();
+    }
+    _nearbyPending.clear();
+  }
+
+  void _pruneNearby() {
+    final now = _now();
+    _nearbyNonces.removeWhere((_, n) => !now.isBefore(n.expires));
+    _nearbyTickets.removeWhere((_, t) => !now.isBefore(t.expires));
+    _nearbyGrants.removeWhere((_, t) => !now.isBefore(t));
+    _nearbyDenyUntil.removeWhere((_, t) => !now.isBefore(t));
+    _nearbyLimiter.prune();
+  }
+
+  /// POST nearby/challenge: a single-use nonce for [fingerprint].
+  Future<void> _nearbyChallenge(HttpRequest req, String ip) async {
+    if (_nearbyLimiter.limited(ip)) {
+      req.response.persistentConnection = false; // body not read
+      throw HttpStatusError(429, 'too many attempts');
+    }
+    _nearbyLimiter.hit(ip); // every call counts
+    final body = await _readJson(req, max: 1024);
+    final fp = body['fingerprint'];
+    if (fp is! String ||
+        !_fpRe.hasMatch(fp) ||
+        fp == selfInfo().fingerprint) {
+      throw HttpStatusError(400, 'invalid fingerprint');
+    }
+    final now = _now();
+    _nearbyNonces.removeWhere((_, n) => !now.isBefore(n.expires));
+    if (_nearbyNonces.length >= 64 ||
+        _nearbyNonces.values.where((n) => n.ip == ip).length >= 4) {
+      throw HttpStatusError(503, 'busy');
+    }
+    final nonce = randomToken(32);
+    _nearbyNonces[webTokenKey(nonce)] =
+        _NearbyNonce(fp, ip, now.add(_nonceLife));
+    _json(req.response, 200,
+        {'nonce': nonce, 'expiresIn': _nonceLife.inSeconds});
+  }
+
+  /// POST nearby/list. The order of the checks is part of the security
+  /// design: nothing expensive runs before the nonce, the fingerprint and
+  /// the key size have passed (SECURITY.md S3, S24).
+  Future<void> _nearbyList(HttpRequest req, String ip) async {
+    final res = req.response;
+    if (_nearbyLimiter.limited(ip)) {
+      res.persistentConnection = false; // body not read
+      throw HttpStatusError(429, 'too many attempts');
+    }
+    Map<String, dynamic> body;
+    try {
+      body = await _readJson(req, max: 24576);
+    } on HttpStatusError catch (e) {
+      if (e.status == 400 || e.status == 413) _nearbyLimiter.hit(ip);
+      rethrow;
+    }
+    final fp = body['fingerprint'];
+    final nonce = body['nonce'];
+    final cert = body['cert'];
+    final sig = body['sig'];
+    final alias = body['alias'];
+    if (fp is! String ||
+        !_fpRe.hasMatch(fp) ||
+        nonce is! String ||
+        nonce.isEmpty ||
+        nonce.length > 128 ||
+        cert is! String ||
+        cert.isEmpty ||
+        cert.length > 16384 ||
+        sig is! String ||
+        sig.isEmpty ||
+        sig.length > 1024 ||
+        (alias != null && (alias is! String || alias.length > 64))) {
+      _nearbyLimiter.hit(ip);
+      throw HttpStatusError(400, 'invalid body');
+    }
+    void deny({required bool hit}) {
+      if (hit) _nearbyLimiter.hit(ip);
+      _raw(res, 200, _emptyNearby);
+    }
+
+    // 1. Single use, even when the rest fails.
+    final n = _nearbyNonces.remove(webTokenKey(nonce));
+    // 2. Bound to this fingerprint and address, and fresh.
+    if (n == null || !_now().isBefore(n.expires) || n.fp != fp || n.ip != ip) {
+      return deny(hit: true);
+    }
+    // 3. The certificate is the one the fingerprint names.
+    final List<int> certDer;
+    final List<int> sigBytes;
+    try {
+      certDer = base64Decode(cert);
+      sigBytes = base64Decode(sig);
+    } catch (_) {
+      return deny(hit: true);
+    }
+    if (fingerprintOfDer(certDer) != fp) return deny(hit: true);
+    // 4. Its key signed this receiver, this requester, this request, this nonce.
+    if (!verifyCertSignature(
+        certDer,
+        nearbyProofMessage(
+            selfInfo().fingerprint, fp, 'POST', _nearbyListPath, nonce),
+        sigBytes)) {
+      return deny(hit: true);
+    }
+    // 5. Proven. Is it allowed?
+    if (!_nearbyPermitted(fp)) {
+      // 6. Maybe ask the owner; the requester learns nothing either way.
+      _maybePrompt(fp, alias as String?, ip);
+      return deny(hit: false);
+    }
+    final live = _liveNearby();
+    if (live.isEmpty) return deny(hit: false);
+    final ticket = _issueTicket(fp, ip);
+    _raw(
+        res,
+        200,
+        jsonEncode({
+          'shares': [for (final s in live.take(50)) s.toNearbyJson()],
+          'ticket': ticket,
+          'ticketExpiresIn': _ticketLife.inSeconds,
+        }));
+  }
+
+  String _issueTicket(String fp, String ip) {
+    final now = _now();
+    _nearbyTickets.removeWhere((_, t) => !now.isBefore(t.expires));
+    // Oldest first (insertion order): at most 4 per device, 256 in all.
+    final mine = [
+      for (final e in _nearbyTickets.entries)
+        if (e.value.fp == fp) e.key
+    ];
+    for (final k in mine.take(max(0, mine.length - 3))) {
+      _nearbyTickets.remove(k);
+    }
+    while (_nearbyTickets.length >= 256) {
+      _nearbyTickets.remove(_nearbyTickets.keys.first);
+    }
+    final ticket = 'lt1.${randomToken(32)}';
+    _nearbyTickets[webTokenKey(ticket)] =
+        _NearbyTicket(fp, ip, now.add(_ticketLife));
+    return ticket;
+  }
+
+  /// The nearby share a ticket request may read, or null (unknown or
+  /// expired ticket, other address, access ended, share gone or hidden).
+  /// Everything is re-checked on every request.
+  _Share? _ticketShare(HttpRequest req, String ip, String shareId) {
+    final auth = req.headers[HttpHeaders.authorizationHeader];
+    if (auth == null || auth.length != 1) return null;
+    final h = auth.single;
+    const prefix = 'LanDrop-Ticket ';
+    if (h.length > 256 || !h.startsWith(prefix)) return null;
+    final t = h.substring(prefix.length).trim();
+    if (t.isEmpty) return null;
+    final key = webTokenKey(t);
+    final tk = _nearbyTickets[key];
+    if (tk == null) return null;
+    if (!_now().isBefore(tk.expires)) {
+      _nearbyTickets.remove(key);
+      return null;
+    }
+    if (tk.ip != ip || !_nearbyPermitted(tk.fp)) return null;
+    return _nearbyShare(shareId);
+  }
+
+  void _maybePrompt(String fp, String? bodyAlias, String ip) {
+    if (!_nearbyReqCtrl.hasListener ||
+        _nearbyPending.length >= 3 ||
+        _nearbyPending.values.any((p) => p.request.fingerprint == fp) ||
+        _liveNearby().isEmpty) {
+      return;
+    }
+    final now = _now();
+    final until = _nearbyDenyUntil[fp];
+    if (until != null && now.isBefore(until)) return;
+    final id = randomToken(16);
+    final r = NearbyAccessRequest(
+      id: id,
+      fingerprint: fp,
+      alias: sanitizeDisplayText(knownAlias?.call(fp) ?? bodyAlias ?? '',
+          max: 64),
+      remoteIp: ip,
+      at: now,
+    );
+    // Expires as a deny without cooldown.
+    final timer = Timer(_promptLife, () => _nearbyPending.remove(id));
+    _nearbyPending[id] = _NearbyPending(r, timer);
+    _nearbyReqCtrl.add(r);
+  }
+
+  /// The owner's answer to a [NearbyAccessRequest]. Unknown or expired ids
+  /// are ignored. [NearbyDecision.alwaysAllow] gives the same one hour grant
+  /// here; the controller adds the device to the trusted set.
+  void respondNearbyAccess(String id, NearbyDecision decision) {
+    final p = _nearbyPending.remove(id);
+    if (p == null) return;
+    p.timer.cancel();
+    final fp = p.request.fingerprint;
+    final now = _now();
+    switch (decision) {
+      case NearbyDecision.deny:
+        _nearbyDenyUntil[fp] = now.add(_denyCooldown);
+      case NearbyDecision.allowOnce:
+      case NearbyDecision.alwaysAllow:
+        _nearbyGrants[fp] = now.add(_grantLife);
+    }
   }
 
   void _listing(HttpResponse res, String ip, String token) {

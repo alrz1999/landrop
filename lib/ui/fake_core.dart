@@ -535,6 +535,22 @@ class FakeCore implements LanDropCore {
     _sharesCtrl.add(shares);
   }
 
+  final _nearbyReqCtrl = StreamController<NearbyAccessRequest>.broadcast();
+  Set<String> nearbyTrusted = {};
+
+  @override
+  void setNearbyTrusted(Set<String> fingerprints) =>
+      nearbyTrusted = {...fingerprints};
+
+  @override
+  void revokeNearbyAccess(String fp) {}
+
+  @override
+  Stream<NearbyAccessRequest> get nearbyRequests => _nearbyReqCtrl.stream;
+
+  @override
+  void respondNearbyAccess(String id, NearbyDecision decision) {}
+
   @override
   void revokeShare(String id) {
     _shares.removeWhere((s) => s.id == id);

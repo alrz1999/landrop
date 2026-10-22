@@ -67,6 +67,10 @@ Status: fixed (with the test that covers it), accepted (reason in section 3), op
 | S21 | Info | TLS | TLS 1.2 non-forward-secret RSA key exchange and CBC ciphers are accepted if a client asks; certificate valid 10 years, no rotation. | accepted | |
 | S22 | Info | /info, /capabilities | Unauthenticated: alias, model, fingerprint, LAN addresses, hotspot SSID. | accepted | |
 | S23 | Info | plain HTTP listener | Traffic (pairing code, session cookie, share tokens) is readable on the network. | accepted | |
+| S24 | High | nearby list (app protocol) | The nearby listing must not be a CPU DoS (RSA verify on attacker certs) or an oracle for who is trusted: nonce first (single use, bound to fingerprint and IP, 30 s), then fingerprint of the cert, then signature (bound to path and receiver); a denied, untrusted or empty answer is one constant body. | fixed | security_c_test.dart: C2, C3, C4, C5, C6, C7 |
+| S25 | Medium | nearby challenge | Challenge endpoint abuse: unlimited nonces, rate. | fixed | security_c_test.dart: C8, C9, C10 |
+| S26 | Medium | nearby tickets | Download tickets: hashed storage, 10 min fixed life, bound to IP, header only, re-checked on every request (revoked on stop sharing, toggle off, untrust). | fixed | security_c_test.dart: C12, C13, C14, C15, C16 |
+| S27 | Medium | nearby endpoints | Listing caps (50 shares, 1000 files), Host check (421), HTTPS only (plain HTTP gives the unknown-path 404), no path or token in the listing. | fixed | security_c_test.dart: C11, C18, C19 (C1 for the browser listing) |
 
 ## 3. Accepted risks and out of scope
 

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:landrop/core/identity.dart';
 import 'package:landrop/core/landrop_core.dart';
 
 const nearbyApi = '/api/landrop/v1';
@@ -12,8 +13,12 @@ const nearbyApi = '/api/landrop/v1';
 LanDropCoreOptions nearbyOpts({
   String? sharesStorePath,
   int rateLimit = 1000,
+  DateTime Function()? clock,
+  int? httpPort,
 }) => LanDropCoreOptions(
   sharesStorePath: sharesStorePath,
+  webClock: clock,
+  httpPort: httpPort,
   port: 0,
   bindAddress: InternetAddress.loopbackIPv4,
   advertiseIp: '127.0.0.1',
@@ -125,3 +130,88 @@ class NearbyEnv {
 Map<String, String> cookie(String token) => {
   'cookie': 'landrop_session=$token',
 };
+
+// ---------------------------------------------------------------- app client
+
+final _identities = <int, TlsIdentity>{};
+
+/// A test identity (RSA key generation is slow, so each is made once).
+TlsIdentity testIdentity([int i = 0]) =>
+    _identities[i] ??= TlsIdentity.generate(commonName: 'Test $i');
+
+const nearbyListPath = '$nearbyApi/nearby/list';
+
+/// The exact bytes of a denied or empty listing.
+const emptyNearbyBody = '{"shares":[],"ticket":null,"ticketExpiresIn":0}';
+
+/// POST nearby/challenge for [fp]; the nonce on success.
+Future<String> nearbyNonce(String base, String fp) async {
+  final r = await ncall(
+    'POST',
+    '$base$nearbyApi/nearby/challenge',
+    json: {'fingerprint': fp},
+  );
+  expect(r.status, 200);
+  return r.json!['nonce'] as String;
+}
+
+/// The body of POST nearby/list, signed by [id] (overrides let a test sign
+/// the wrong thing or claim another fingerprint).
+Map<String, dynamic> nearbyListBody(
+  LanDropCoreImpl c,
+  TlsIdentity id,
+  String nonce, {
+  String? receiverFp,
+  String path = nearbyListPath,
+  String? claimFp,
+  String? alias = 'Tester',
+  TlsIdentity? signer,
+}) {
+  final sig = (signer ?? id).sign(
+    nearbyProofMessage(
+      receiverFp ?? c.self.fingerprint,
+      claimFp ?? id.fingerprint,
+      'POST',
+      path,
+      nonce,
+    ),
+  );
+  return {
+    'fingerprint': claimFp ?? id.fingerprint,
+    'nonce': nonce,
+    'cert': base64Encode(id.certDer),
+    'sig': base64Encode(sig),
+    'alias': ?alias,
+  };
+}
+
+/// Challenge plus signed list, as a LanDrop app does it.
+Future<NResp> nearbyList(
+  String base,
+  LanDropCoreImpl c,
+  TlsIdentity id, {
+  String? receiverFp,
+  String path = nearbyListPath,
+  String? alias = 'Tester',
+}) async {
+  final nonce = await nearbyNonce(base, id.fingerprint);
+  return ncall(
+    'POST',
+    '$base$nearbyApi/nearby/list',
+    json: nearbyListBody(
+      c,
+      id,
+      nonce,
+      receiverFp: receiverFp,
+      path: path,
+      alias: alias,
+    ),
+  );
+}
+
+Map<String, String> ticketHeader(String ticket) => {
+  'authorization': 'LanDrop-Ticket $ticket',
+};
+
+String nearbyFileUrl(String base, String shareId, String fileId) =>
+    '$base$nearbyApi/nearby/shares/$shareId/files/$fileId';

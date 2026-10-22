@@ -5,6 +5,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:landrop/core/api.dart';
+import 'package:landrop/core/landrop_core.dart';
 import 'package:landrop/l10n/app_localizations.dart';
 
 import 'helpers/nearby_harness.dart';
@@ -246,6 +248,157 @@ void main() {
       await t.pumpAndSettle();
       expect(core.shareNearbyCalls, [false]);
       expect(core.shares.single.nearby, isFalse);
+    });
+  });
+
+  group('app protocol (server side)', () {
+    final id0 = testIdentity(0);
+    setUpAll(() => testIdentity(0));
+
+    test('N5 Range through a ticket gives 206 with the right bytes', () async {
+      final bytes = List<int>.generate(256, (i) => i);
+      final a = await env.startCore(nearbyOpts());
+      final s = a.createShare([env.file('r.bin', bytes).path], nearby: true);
+      a.setNearbyTrusted({id0.fingerprint});
+      final r = await nearbyList(env.base(a), a, id0);
+      final ticket = r.json!['ticket'] as String;
+      final url = nearbyFileUrl(env.base(a), s.id, s.files.single.id);
+      final part = await ncall(
+        'GET',
+        url,
+        headers: {...ticketHeader(ticket), 'range': 'bytes=10-19'},
+      );
+      expect(part.status, 206);
+      expect(part.body, bytes.sublist(10, 20));
+      expect(part.h('content-range'), 'bytes 10-19/256');
+      final whole = await ncall('GET', url, headers: ticketHeader(ticket));
+      expect(whole.status, 200);
+      expect(whole.body, bytes);
+      final bad = await ncall(
+        'GET',
+        url,
+        headers: {...ticketHeader(ticket), 'range': 'bytes=999-'},
+      );
+      expect(bad.status, 416);
+    });
+
+    test('N6 the download limit applies to ticket downloads', () async {
+      final a = await env.startCore(nearbyOpts());
+      final s = a.createShare(
+        [env.file('l.bin', [5, 6, 7]).path],
+        nearby: true,
+        maxDownloads: 1,
+      );
+      a.setNearbyTrusted({id0.fingerprint});
+      final ticket =
+          (await nearbyList(env.base(a), a, id0)).json!['ticket'] as String;
+      final url = nearbyFileUrl(env.base(a), s.id, s.files.single.id);
+      final first = await ncall('GET', url, headers: ticketHeader(ticket));
+      expect(first.status, 200);
+      expect(first.body, [5, 6, 7]);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        (await ncall('GET', url, headers: ticketHeader(ticket))).status,
+        404,
+      );
+      // Used up: no longer listed either.
+      expect(
+        (await nearbyList(env.base(a), a, id0)).text,
+        emptyNearbyBody,
+      );
+    });
+
+    group('N7 owner prompt (server part)', () {
+      late DateTime now;
+      setUp(() => now = DateTime.now());
+
+      Future<(dynamic, List<NearbyAccessRequest>)> setup({
+        bool nearby = true,
+      }) async {
+        final a = await env.startCore(nearbyOpts(clock: () => now));
+        a.createShare([env.file('p.bin', [1, 2]).path], nearby: nearby);
+        final asked = <NearbyAccessRequest>[];
+        final sub = a.nearbyRequests.listen(asked.add);
+        addTearDown(sub.cancel);
+        return (a, asked);
+      }
+
+      Future<void> settle() =>
+          Future<void>.delayed(const Duration(milliseconds: 30));
+
+      test('asks once; allowOnce lets the next list succeed', () async {
+        final (a0, asked) = await setup();
+        final a = a0 as LanDropCoreImpl;
+        final base = env.base(a);
+        expect((await nearbyList(base, a, id0, alias: 'Tester')).text,
+            emptyNearbyBody);
+        await settle();
+        expect(asked, hasLength(1));
+        expect(asked.single.fingerprint, id0.fingerprint);
+        expect(asked.single.alias, 'Tester');
+        expect(asked.single.remoteIp, '127.0.0.1');
+        // Still pending: no second prompt, still the empty body.
+        expect((await nearbyList(base, a, id0)).text, emptyNearbyBody);
+        await settle();
+        expect(asked, hasLength(1));
+        a.respondNearbyAccess(asked.single.id, NearbyDecision.allowOnce);
+        final r = await nearbyList(base, a, id0);
+        expect(r.json!['ticket'], isNotNull);
+        expect(r.json!['shares'], hasLength(1));
+        // The grant is one hour: gone after that.
+        now = now.add(const Duration(hours: 1, seconds: 1));
+        expect((await nearbyList(base, a, id0)).text, emptyNearbyBody);
+        await settle();
+        expect(asked, hasLength(2)); // asks again
+      });
+
+      test('no prompt without a nearby share', () async {
+        final (a0, asked) = await setup(nearby: false);
+        final a = a0 as LanDropCoreImpl;
+        expect((await nearbyList(env.base(a), a, id0)).text, emptyNearbyBody);
+        await settle();
+        expect(asked, isEmpty);
+      });
+
+      test('no prompt without a listener', () async {
+        final a = await env.startCore(nearbyOpts(clock: () => now));
+        a.createShare([env.file('q.bin', [1]).path], nearby: true);
+        expect((await nearbyList(env.base(a), a, id0)).text, emptyNearbyBody);
+        // Someone starts listening later: still nothing was queued.
+        final asked = <NearbyAccessRequest>[];
+        final sub = a.nearbyRequests.listen(asked.add);
+        await settle();
+        expect(asked, isEmpty);
+        await sub.cancel();
+      });
+
+      test('deny: silent for 10 minutes, then asks again', () async {
+        final (a0, asked) = await setup();
+        final a = a0 as LanDropCoreImpl;
+        final base = env.base(a);
+        await nearbyList(base, a, id0);
+        await settle();
+        a.respondNearbyAccess(asked.single.id, NearbyDecision.deny);
+        now = now.add(const Duration(minutes: 9));
+        expect((await nearbyList(base, a, id0)).text, emptyNearbyBody);
+        await settle();
+        expect(asked, hasLength(1));
+        now = now.add(const Duration(minutes: 2));
+        expect((await nearbyList(base, a, id0)).text, emptyNearbyBody);
+        await settle();
+        expect(asked, hasLength(2));
+      });
+
+      test('at most 3 prompts pending', () async {
+        final (a0, asked) = await setup();
+        final a = a0 as LanDropCoreImpl;
+        for (var i = 0; i < 4; i++) {
+          final id = testIdentity(i);
+          await nearbyList(env.base(a), a, id);
+        }
+        await settle();
+        expect(asked, hasLength(3));
+      });
     });
   });
 }
