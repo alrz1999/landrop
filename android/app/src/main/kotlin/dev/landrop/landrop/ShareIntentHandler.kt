@@ -193,7 +193,7 @@ class ShareIntentHandler(private val context: Context) {
                     dir.deleteRecursively()
                     return reply(emptyList(), text, "failed")
                 }
-                if (uri.scheme != "content") {
+                if (uri.scheme != "content" || isOwnProvider(uri)) {
                     error = "unreadable"
                     continue
                 }
@@ -226,6 +226,42 @@ class ShareIntentHandler(private val context: Context) {
         }
         if (files.isEmpty()) dir.deleteRecursively()
         return reply(files, text, error)
+    }
+
+    /**
+     * True when [uri] belongs to a content provider of this app (or one whose
+     * owner cannot be determined). Another app could otherwise share
+     * `content://<our authority>/...` and make LanDrop read its own private
+     * files, which the sender has no access to (confused deputy,
+     * SECURITY.md S10).
+     */
+    private fun isOwnProvider(uri: Uri): Boolean {
+        val authority = uri.authority ?: return true
+        if (ownAuthorities.any { it.equals(authority, ignoreCase = true) }) return true
+        return try {
+            // Visible providers resolve; one of ours always does. Other apps'
+            // providers may not be visible (package visibility): allowed.
+            context.packageManager.resolveContentProvider(authority, 0)
+                ?.packageName == context.packageName
+        } catch (e: RuntimeException) {
+            false
+        }
+    }
+
+    /** Authorities of every provider declared by this app (incl. plugins). */
+    private val ownAuthorities: Set<String> by lazy {
+        try {
+            @Suppress("DEPRECATION")
+            val info = context.packageManager.getPackageInfo(
+                context.packageName, android.content.pm.PackageManager.GET_PROVIDERS
+            )
+            info.providers.orEmpty()
+                .flatMap { (it.authority ?: "").split(';') }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
     }
 
     private fun reply(files: List<String>, text: String?, error: String?): Map<String, Any?> =

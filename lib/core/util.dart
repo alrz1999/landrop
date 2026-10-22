@@ -1,7 +1,9 @@
 // Small pure helpers used by the core.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 final Random _rng = Random.secure();
 
@@ -44,25 +46,179 @@ String? textPreview(Object? raw, {int maxBytes = 64 * 1024}) {
   return clean.trim().isEmpty ? null : clean;
 }
 
+/// Invisible characters that reorder or hide text: bidi embeddings,
+/// overrides and isolates (U+202A-U+202E, U+2066-U+2069), the Arabic letter
+/// mark, zero-width space, line/paragraph separators, BOM, interlinear
+/// annotation marks. They let `invoice\u202Efdp.exe` look like
+/// `invoiceexe.pdf` (SECURITY.md S6). ZWNJ/ZWJ (U+200C/U+200D) and LRM/RLM
+/// are kept: Persian text and emoji need them and they cannot reorder a
+/// run on their own.
+final RegExp _spoofChars =
+    RegExp('[\u061C\u200B\u2028\u2029\u202A-\u202E\u2066-\u2069\uFEFF\uFFF9-\uFFFB]');
+
+/// C0 and C1 control characters and DEL.
+final RegExp _controlChars = RegExp('[\u0000-\u001F\u007F-\u009F]');
+
+/// Windows device names, reserved with any extension (`CON`, `nul.txt`).
+final RegExp _windowsReserved =
+    RegExp(r'^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$', caseSensitive: false);
+
+/// Largest file name (UTF-8 bytes) kept; most file systems allow 255 and
+/// the receiver adds `.`/`.part` and ` (n)`.
+const maxFileNameBytes = 200;
+
+/// [s] cut to at most [maxBytes] UTF-8 bytes without splitting a character.
+String truncateUtf8(String s, int maxBytes) {
+  if (utf8.encode(s).length <= maxBytes) return s;
+  final out = StringBuffer();
+  var n = 0;
+  for (final r in s.runes) {
+    final len = utf8.encode(String.fromCharCode(r)).length;
+    if (n + len > maxBytes) break;
+    n += len;
+    out.writeCharCode(r);
+  }
+  return out.toString();
+}
+
 /// Reduce an untrusted, sender-supplied file name to a safe single path
-/// component: no directories, no traversal, no control/reserved characters.
+/// component: no directories, no traversal, no control/reserved characters,
+/// no bidi spoofing characters, no Windows device names, at most
+/// [maxFileNameBytes] UTF-8 bytes.
 String sanitizeFileName(String raw) {
   var name = raw.replaceAll('\\', '/');
   final slash = name.lastIndexOf('/');
   if (slash >= 0) name = name.substring(slash + 1);
-  name = name.replaceAll(RegExp(r'[\x00-\x1f\x7f<>:"|?*]'), '_');
+  name = name.replaceAll(_spoofChars, '');
+  name = name.replaceAll(_controlChars, '_');
+  name = name.replaceAll(RegExp(r'[<>:"|?*]'), '_');
   // Strip leading dots/spaces (no hidden files, no "..") and trailing
   // dots/spaces (Windows silently drops them).
   name = name.replaceAll(RegExp(r'^[.\s]+'), '');
   name = name.replaceAll(RegExp(r'[.\s]+$'), '');
-  if (name.length > 200) {
+  if (utf8.encode(name).length > maxFileNameBytes) {
     final dot = name.lastIndexOf('.');
     final ext = (dot > 0 && name.length - dot <= 16) ? name.substring(dot) : '';
-    name = name.substring(0, 200 - ext.length) + ext;
+    final stem = dot > 0 && ext.isNotEmpty ? name.substring(0, dot) : name;
+    name = truncateUtf8(stem, maxFileNameBytes - utf8.encode(ext).length) +
+        ext;
+    name = name.replaceAll(RegExp(r'[.\s]+$'), '');
   }
+  if (_windowsReserved.hasMatch(name)) name = '_$name';
   if (name.isEmpty) name = 'file';
   return name;
 }
+
+/// An untrusted name to display (peer alias, device model): control and
+/// bidi/format characters removed, whitespace collapsed, at most [max]
+/// characters (never splitting a surrogate pair). Empty when nothing is
+/// left.
+String sanitizeDisplayText(String raw, {int max = 64}) {
+  var s = raw
+      .replaceAll(_spoofChars, '')
+      .replaceAll(_controlChars, ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final runes = s.runes.toList();
+  if (runes.length > max) s = String.fromCharCodes(runes.take(max)).trim();
+  return s;
+}
+
+/// True when [s] contains a character from the bidi/format spoofing set or
+/// a control character (used to refuse such text as a link).
+bool hasSpoofingChars(String s) =>
+    _spoofChars.hasMatch(s) || _controlChars.hasMatch(s);
+
+/// Counts failed or suspicious attempts per key (remote IP) within
+/// [window]; [limited] is true once [limit] were recorded. Memory is
+/// bounded: at most [maxKeys] keys (the oldest is dropped) and 2 x [limit]
+/// timestamps per key.
+class AttemptLimiter {
+  AttemptLimiter(
+      {this.limit = 10,
+      this.window = const Duration(minutes: 1),
+      this.maxKeys = 1024,
+      DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now;
+  final int limit;
+  final Duration window;
+  final int maxKeys;
+  final DateTime Function() _clock;
+  final Map<String, List<DateTime>> _hits = {};
+
+  bool limited(String key) {
+    final l = _hits[key];
+    if (l == null) return false;
+    final now = _clock();
+    l.removeWhere((t) => now.difference(t) >= window);
+    if (l.isEmpty) {
+      _hits.remove(key);
+      return false;
+    }
+    return l.length >= limit;
+  }
+
+  void hit(String key) {
+    if (!_hits.containsKey(key) && _hits.length >= maxKeys) {
+      _hits.remove(_hits.keys.first);
+    }
+    final l = _hits[key] ??= [];
+    l.add(_clock());
+    if (l.length > limit * 2) l.removeAt(0);
+  }
+
+  void prune() {
+    final now = _clock();
+    _hits.removeWhere((_, l) {
+      l.removeWhere((t) => now.difference(t) >= window);
+      return l.isEmpty;
+    });
+  }
+}
+
+/// Reads a request body of at most [max] bytes within [timeout] (total, not
+/// per chunk). Throws [HttpStatusError] 413 (too large) or 408 (too slow);
+/// the caller should then close the connection.
+Future<List<int>> readBodyBounded(Stream<List<int>> body,
+    {required int max,
+    Duration timeout = const Duration(seconds: 30),
+    bool keep = true}) {
+  final b = BytesBuilder(copy: false);
+  var n = 0;
+  final done = Completer<List<int>>();
+  late StreamSubscription<List<int>> sub;
+  final timer = Timer(timeout, () {
+    if (done.isCompleted) return;
+    sub.cancel();
+    done.completeError(HttpStatusError(408, 'request body too slow'));
+  });
+  sub = body.listen((c) {
+    n += c.length;
+    if (n > max) {
+      timer.cancel();
+      sub.cancel();
+      if (!done.isCompleted) {
+        done.completeError(HttpStatusError(413, 'body too large'));
+      }
+      return;
+    }
+    if (keep) b.add(c);
+  }, onError: (Object e) {
+    timer.cancel();
+    if (!done.isCompleted) done.completeError(e);
+  }, onDone: () {
+    timer.cancel();
+    if (!done.isCompleted) done.complete(b.takeBytes());
+  }, cancelOnError: true);
+  return done.future;
+}
+
+/// Discards a request body that should be empty or small (GET, cancel,
+/// error answers): at most [max] bytes within [timeout], else 413/408.
+Future<void> drainBounded(Stream<List<int>> body,
+        {int max = 64 * 1024,
+        Duration timeout = const Duration(seconds: 10)}) =>
+    readBodyBounded(body, max: max, timeout: timeout, keep: false);
 
 /// Split an untrusted, sender-supplied relative path (folder transfers use
 /// `Photos/2024/a.jpg`) into safe path segments. Backslashes count as
@@ -328,5 +484,27 @@ Future<List<InternetAddress>> localIPv4Addresses() async {
     return rankedIPv4([for (final i in ifaces) (i.name, i.addresses)]);
   } catch (_) {
     return [];
+  }
+}
+
+/// Free bytes available to this user in the file system holding [dir], from
+/// `df -Pk` (macOS, Linux, Android); null when unknown (Windows, iOS, no
+/// `df`, unparsable output). Never throws.
+Future<int?> freeDiskBytes(String dir) async {
+  if (!(Platform.isMacOS || Platform.isLinux || Platform.isAndroid)) {
+    return null;
+  }
+  try {
+    final r = await Process.run('df', ['-Pk', dir])
+        .timeout(const Duration(seconds: 3));
+    if (r.exitCode != 0) return null;
+    final lines = '${r.stdout}'.trim().split('\n');
+    if (lines.length < 2) return null;
+    final cols = lines.last.trim().split(RegExp(r'\s+'));
+    if (cols.length < 4) return null;
+    final kb = int.tryParse(cols[3]);
+    return kb == null ? null : kb * 1024;
+  } catch (_) {
+    return null;
   }
 }

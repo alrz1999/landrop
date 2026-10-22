@@ -52,28 +52,41 @@ class PeerCapabilities {
   /// is not a capability record.
   static PeerCapabilities? fromJson(Object? j) {
     if (j is! Map) return null;
+    // Peer data: every list and string is bounded (SECURITY.md S19).
+    bool short(Object? s, int max) => s is String && s.length <= max;
+    String? clean(Object? s, int max) => short(s, max) &&
+            !RegExp('[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]')
+                .hasMatch(s as String)
+        ? s
+        : null;
     final v = j['v'];
     final ts = <TransportCapability>[];
     final rawTs = j['transports'];
     if (rawTs is List) {
-      for (final t in rawTs) {
-        if (t is! Map || t['id'] is! String) continue;
+      for (final t in rawTs.take(16)) {
+        if (t is! Map || !short(t['id'], 32)) continue;
         final addrs = t['addrs'];
         final port = t['port'];
-        final ssid = t['ssid'];
-        final gateway = t['gateway'];
         ts.add(TransportCapability(t['id'] as String,
-            addrs: addrs is List ? addrs.whereType<String>().toList() : const [],
-            port: port is int ? port : null,
-            ssid: ssid is String ? ssid : null,
-            gateway: gateway is String ? gateway : null));
+            addrs: addrs is List
+                ? addrs
+                    .where((a) => short(a, 64))
+                    .cast<String>()
+                    .take(16)
+                    .toList()
+                : const [],
+            port: port is int && port > 0 && port <= 65535 ? port : null,
+            ssid: clean(t['ssid'], 64),
+            gateway: clean(t['gateway'], 64)));
       }
     }
     final f = j['features'];
     return PeerCapabilities(
       version: v is int ? v : 1,
       transports: ts,
-      features: f is List ? f.whereType<String>().toSet() : const {},
+      features: f is List
+          ? f.where((x) => short(x, 32)).cast<String>().take(32).toSet()
+          : const {},
     );
   }
 }

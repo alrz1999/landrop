@@ -96,12 +96,22 @@ Future<void> _settle() =>
 
 void _expectSecurityHeaders(_Resp r) {
   expect(r.h('content-security-policy'), webCsp);
-  expect(
-    r.h('content-security-policy'),
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-    "media-src 'self'; frame-ancestors 'none'",
-  );
+  // Inline script and style only by hash (SECURITY.md S14).
+  final csp = r.h('content-security-policy')!;
+  expect(csp, isNot(contains('unsafe-inline')));
+  expect(csp, matches(RegExp(r"script-src 'self' 'sha256-[A-Za-z0-9+/=]+'")));
+  expect(csp, matches(RegExp(r"style-src 'self' 'sha256-[A-Za-z0-9+/=]+'")));
+  for (final d in [
+    "default-src 'self'",
+    "img-src 'self' data:",
+    "media-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ]) {
+    expect(csp, contains(d));
+  }
   expect(r.h('referrer-policy'), 'no-referrer');
   expect(r.h('x-frame-options'), 'DENY');
   expect(r.h('x-content-type-options'), 'nosniff');

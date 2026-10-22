@@ -7,18 +7,35 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import 'api.dart';
+import 'guarded_server.dart';
 import 'util.dart';
 import 'web_assets.dart';
 
 const webApiBase = '/api/landrop/v1';
 
-/// Sent with every web response (page, JSON, file bytes, errors).
-const webCsp = "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-    "media-src 'self'; frame-ancestors 'none'";
+/// CSP source for the inline `<tag>` block of the page: its SHA-256 hash,
+/// so no other inline script or style can run (SECURITY.md S14).
+String _inlineHash(String tag) {
+  final m = RegExp('<$tag>(.*?)</$tag>', dotAll: true).firstMatch(webPageHtml);
+  if (m == null) return "'none'";
+  return "'sha256-${base64Encode(sha256.convert(utf8.encode(m.group(1)!)).bytes)}'";
+}
+
+/// Sent with every web response (page, JSON, file bytes, errors). Inline
+/// script and style are allowed only by hash; no plugins, no `<base>`, forms
+/// only to this origin, no framing.
+final String webCsp = "default-src 'self'; style-src 'self' ${_inlineHash('style')}; "
+    "script-src 'self' ${_inlineHash('script')}; img-src 'self' data:; "
+    "media-src 'self'; object-src 'none'; base-uri 'none'; "
+    "form-action 'self'; frame-ancestors 'none'";
+
+/// Token -> map key. Secrets are looked up by their SHA-256, so the map's
+/// hashing and equality never run on the secret itself (SECURITY.md S17).
+String webTokenKey(String token) => sha256.convert(utf8.encode(token)).toString();
 
 const webSessionCookie = 'landrop_session';
 
@@ -49,7 +66,11 @@ class WebConfig {
 
   /// See the download counting rule on [WebService].
   final Duration streamWindow;
+
+  /// Connection limits of the plain HTTP listener (SECURITY.md S1).
+  final ServerLimits serverLimits;
   const WebConfig({
+    this.serverLimits = const ServerLimits(),
     this.httpPort,
     this.bindAddress,
     this.pairingTimeout = const Duration(seconds: 60),
@@ -132,6 +153,30 @@ String contentDisposition(String name, {required bool inline}) {
       "filename*=UTF-8''$encoded";
 }
 
+/// Host header values the web endpoints answer: an IPv4 or bracketed IPv6
+/// literal, `localhost`, or an mDNS `.local` name, with an optional port.
+/// Any other name can only reach this device through DNS rebinding.
+bool validWebHost(String? host) {
+  if (host == null || host.isEmpty || host.length > 255) return false;
+  var h = host.toLowerCase();
+  if (h.startsWith('[')) {
+    final end = h.indexOf(']');
+    if (end < 0) return false;
+    final rest = h.substring(end + 1);
+    if (rest.isNotEmpty && !RegExp(r'^:\d{1,5}$').hasMatch(rest)) return false;
+    return InternetAddress.tryParse(h.substring(1, end))?.type ==
+        InternetAddressType.IPv6;
+  }
+  final m = RegExp(r'^([^:]+)(:\d{1,5})?$').firstMatch(h);
+  if (m == null) return false;
+  h = m.group(1)!;
+  if (h.endsWith('.')) h = h.substring(0, h.length - 1);
+  if (h == 'localhost' || h.endsWith('.localhost')) return true;
+  if (RegExp(r'^[a-z0-9-]+(\.[a-z0-9-]+)*\.local$').hasMatch(h)) return true;
+  return RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(h) &&
+      InternetAddress.tryParse(h) != null;
+}
+
 /// Short, fixed-vocabulary summary of a User-Agent ("Chrome on Android").
 /// Never echoes the raw header, so it is safe to display anywhere.
 String summarizeUserAgent(String? ua) {
@@ -184,6 +229,17 @@ class _ShareFile {
   final int size;
   final String mime;
   _ShareFile(this.id, this.name, this.path, this.size, this.mime);
+}
+
+/// True when [path] is a real path: resolving symlinks gives [path] again.
+bool _samePath(String path) {
+  try {
+    return File(path).resolveSymbolicLinksSync() == path &&
+        FileSystemEntity.typeSync(path, followLinks: false) ==
+            FileSystemEntityType.file;
+  } catch (_) {
+    return false;
+  }
 }
 
 class _Share {
@@ -275,7 +331,11 @@ class _Share {
         return null;
       }
       final st = File(path).statSync();
-      if (st.type != FileSystemEntityType.file || st.size != size) return null;
+      if (st.type != FileSystemEntityType.file ||
+          st.size != size ||
+          !_samePath(path)) {
+        return null;
+      }
       files.add(_ShareFile(fid, name, path, size, mime));
     }
     final created = j['createdAt'];
@@ -379,14 +439,14 @@ class WebService {
   final _sharesCtrl = StreamController<List<Share>>.broadcast();
   final _sessionsCtrl = StreamController<List<WebSessionInfo>>.broadcast();
 
-  final Map<String, _Share> _sharesByToken = {};
-  final Map<String, _WebSession> _sessions = {}; // by token
+  final Map<String, _Share> _sharesByToken = {}; // by webTokenKey(token)
+  final Map<String, _WebSession> _sessions = {}; // by webTokenKey(token)
   final Map<String, _Pairing> _pairings = {}; // by id
   final Map<String, List<DateTime>> _failures = {}; // by remote IP
 
   bool _running = false;
   bool _httpEnabled;
-  HttpServer? _http;
+  GuardedHttpServer? _http;
   Timer? _pruneTimer;
 
   static final List<int> _pageBytes = utf8.encode(webPageHtml);
@@ -487,22 +547,20 @@ class WebService {
 
   Future<void> _bindHttp() async {
     final addr = config.bindAddress ?? InternetAddress.anyIPv4;
-    HttpServer server;
+    GuardedHttpServer server;
     try {
-      server =
-          await HttpServer.bind(addr, config.httpPort ?? defaultWebHttpPort);
+      server = await bindGuarded(addr, config.httpPort ?? defaultWebHttpPort,
+          limits: config.serverLimits);
     } on SocketException {
-      server = await HttpServer.bind(addr, 0);
+      server = await bindGuarded(addr, 0, limits: config.serverLimits);
     }
     _http = server;
-    server.listen((req) async {
+    server.http.listen((req) async {
       if (handles(req.uri.path)) {
         await handle(req, secure: false);
       } else {
         // Never the device API (LocalSend endpoints) on plain HTTP.
-        try {
-          await req.drain<void>();
-        } catch (_) {}
+        await _drainQuietly(req);
         setWebSecurityHeaders(req.response.headers);
         _json(req.response, 404, const {'message': 'not found'});
       }
@@ -604,7 +662,10 @@ class WebService {
     } catch (e) {
       // Corrupt or unreadable: start without shares; the next save replaces
       // the file.
-      stderr.writeln('LanDrop: ignoring unreadable share store: $e');
+      // Only the error type: a parse error quotes the file, which holds
+      // share tokens and local paths (SECURITY.md S16).
+      stderr.writeln('LanDrop: ignoring unreadable share store '
+          '(${e.runtimeType})');
       return;
     }
     final list = data is Map ? data['shares'] : null;
@@ -613,8 +674,8 @@ class WebService {
     for (final j in list) {
       try {
         final s = _Share.fromJson(j, now);
-        if (s != null && !_sharesByToken.containsKey(s.token)) {
-          _sharesByToken[s.token] = s;
+        if (s != null && !_sharesByToken.containsKey(webTokenKey(s.token))) {
+          _sharesByToken[webTokenKey(s.token)] = s;
         }
       } catch (_) {
         // one bad entry never blocks the others
@@ -643,7 +704,7 @@ class WebService {
       tmp.renameSync(p); // atomic replace; keeps the temp file's mode
       _lastSaved = json;
     } catch (e) {
-      stderr.writeln('LanDrop: could not save shares: $e');
+      stderr.writeln('LanDrop: could not save shares (${e.runtimeType})');
     }
   }
 
@@ -677,7 +738,11 @@ class WebService {
       do {
         id = randomHex(8);
       } while (!ids.add(id));
-      files.add(_ShareFile(id, name, f.absolute.path, st.size, guessMime(name)));
+      // The real path (symlinks resolved) is kept; serving checks that it
+      // still is one, so a file swapped for a symlink later is refused
+      // (SECURITY.md S12).
+      files.add(_ShareFile(
+          id, name, f.resolveSymbolicLinksSync(), st.size, guessMime(name)));
     }
 
     for (final p in paths) {
@@ -706,7 +771,7 @@ class WebService {
     if (files.isEmpty) throw ArgumentError('nothing to share');
     final s = _Share(randomHex(8), randomToken(16), files,
         ttl == null ? null : DateTime.now().add(ttl), maxDownloads);
-    _sharesByToken[s.token] = s;
+    _sharesByToken[webTokenKey(s.token)] = s;
     _emitShares();
     return _snapshot(s);
   }
@@ -719,10 +784,12 @@ class WebService {
 
   /// Unknown, expired and revoked look the same (null).
   _Share? _liveShare(String token) {
-    final s = _sharesByToken[token];
+    if (token.length > 128) return null;
+    final key = webTokenKey(token);
+    final s = _sharesByToken[key];
     if (s == null) return null;
     if (s.expired(DateTime.now())) {
-      _sharesByToken.remove(token);
+      _sharesByToken.remove(key);
       _emitShares();
       return null;
     }
@@ -765,6 +832,11 @@ class WebService {
   /// A state-changing request from a browser must come from our own page:
   /// when an Origin header is present, its host:port must equal Host.
   static bool _sameOrigin(HttpRequest req) {
+    // Fetch metadata: browsers say whether the request comes from another
+    // site; only our own page (same-origin) or a direct navigation/tool
+    // (no header, `none`) may change state.
+    final site = req.headers.value('sec-fetch-site');
+    if (site != null && site != 'same-origin' && site != 'none') return false;
     final origin = req.headers.value('origin');
     if (origin == null) return true; // non-browser client
     final host = req.headers.value(HttpHeaders.hostHeader);
@@ -781,8 +853,13 @@ class WebService {
     var bodyRead = false;
     try {
       setWebSecurityHeaders(res.headers);
+      // DNS rebinding: a page served from a host name that resolves to this
+      // device would otherwise be same-origin with the API (SECURITY.md S2).
+      if (!validWebHost(req.headers.value(HttpHeaders.hostHeader))) {
+        throw HttpStatusError(421, 'unknown host');
+      }
       if (path == '/' || path == '/index.html') {
-        await req.drain<void>();
+        await drainBounded(req);
         bodyRead = true;
         if (m != 'GET' && m != 'HEAD') {
           throw HttpStatusError(405, 'method not allowed');
@@ -804,11 +881,11 @@ class WebService {
       final get = m == 'GET';
       switch (rest) {
         case ['web', 'info'] when get:
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           _json(res, 200, {'alias': selfInfo().alias});
         case ['web', 'session'] when get:
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           final s = _sessionOf(req, ip);
           if (s == null) throw HttpStatusError(401, 'not paired');
@@ -817,15 +894,15 @@ class WebService {
             'expiresIn': s.expires.difference(DateTime.now()).inSeconds,
           });
         case ['web', 'logout'] when m == 'POST':
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           _logout(req, ip, secure: secure);
         case ['web', 'pair'] when m == 'POST':
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           _pair(req, ip);
         case ['web', 'pair', final id] when get:
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           await _pairStatus(req, ip, id, secure: secure);
         case ['web', 'upload-prepare'] when m == 'POST':
@@ -845,19 +922,23 @@ class WebService {
           bodyRead = true; // the core's upload handler consumes the body
           await upload(req, s.id);
         case ['shares', final token] when get:
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           _listing(res, ip, token);
         case ['shares', final token, 'files', final fileId]
             when get || m == 'HEAD':
-          await req.drain<void>();
+          await drainBounded(req);
           bodyRead = true;
           await _file(req, ip, token, fileId, head: m == 'HEAD');
         default:
           throw HttpStatusError(404, 'not found');
       }
     } on HttpStatusError catch (e) {
-      if (!bodyRead) await _drainQuietly(req);
+      if (e.status == 408 || e.status == 413) {
+        res.persistentConnection = false; // body not (fully) read
+      } else if (!bodyRead) {
+        await _drainQuietly(req);
+      }
       _json(res, e.status, {'message': e.message, ...?e.extra});
     } catch (_) {
       if (!bodyRead) await _drainQuietly(req);
@@ -865,10 +946,15 @@ class WebService {
     }
   }
 
+  /// Discards an unread body (at most 64 MB within 60 s); a larger or
+  /// slower one closes the connection instead.
   static Future<void> _drainQuietly(HttpRequest req) async {
     try {
-      await req.drain<void>();
-    } catch (_) {}
+      await drainBounded(req,
+          max: 64 << 20, timeout: const Duration(seconds: 60));
+    } catch (_) {
+      req.response.persistentConnection = false;
+    }
   }
 
   static void _json(HttpResponse res, int status, Map<String, dynamic> body) {
@@ -886,15 +972,9 @@ class WebService {
 
   static Future<Map<String, dynamic>> _readJson(HttpRequest req,
       {int max = 1 << 20}) async {
-    final b = BytesBuilder(copy: false);
-    var n = 0;
-    await for (final c in req) {
-      n += c.length;
-      if (n > max) throw HttpStatusError(413, 'body too large');
-      b.add(c);
-    }
+    final bytes = await readBodyBounded(req, max: max);
     try {
-      final v = jsonDecode(utf8.decode(b.takeBytes()));
+      final v = jsonDecode(utf8.decode(bytes));
       if (v is Map<String, dynamic>) return v;
     } on FormatException {
       // fall through
@@ -911,12 +991,13 @@ class WebService {
       token = auth.substring(7).trim();
     }
     token ??= _cookie(req, webSessionCookie);
-    if (token == null || token.isEmpty) return null;
-    final s = _sessions[token];
+    if (token == null || token.isEmpty || token.length > 256) return null;
+    final key = webTokenKey(token);
+    final s = _sessions[key];
     if (s == null) return null;
     final now = DateTime.now();
     if (!now.isBefore(s.expires)) {
-      _sessions.remove(token);
+      _sessions.remove(key);
       _emitSessions();
       return null;
     }
@@ -983,7 +1064,7 @@ class WebService {
         final token = randomToken(32);
         final s = _WebSession(randomHex(8), token, ip, r.userAgent,
             DateTime.now().add(config.sessionTtl));
-        _sessions[token] = s;
+        _sessions[webTokenKey(token)] = s;
         p.session = s;
         p.set(_PairState.approved);
         _emitSessions();
@@ -1112,9 +1193,12 @@ class WebService {
       _fail(ip);
       throw _notFound;
     }
-    // The file must still be the one that was shared.
+    // The file must still be the one that was shared, at the same real
+    // path (no symlink put in its place or in a parent).
     final st = await File(f.path).stat();
-    if (st.type != FileSystemEntityType.file || st.size != f.size) {
+    if (st.type != FileSystemEntityType.file ||
+        st.size != f.size ||
+        !_samePath(f.path)) {
       throw _notFound;
     }
     ByteRange? range;

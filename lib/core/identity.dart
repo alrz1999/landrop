@@ -31,12 +31,27 @@ RSAPublicKey? rsaPublicKeyOfCert(List<int> der) {
   return null;
 }
 
+/// Keys a sender proof may use: modulus 2048 to 4096 bit, an odd public
+/// exponent of at most 32 bit (65537 in practice). A peer-supplied key with
+/// a huge modulus or exponent would make the pure-Dart verification take
+/// seconds to minutes (SECURITY.md S3).
+bool acceptableRsaKey(RSAPublicKey key) {
+  final n = key.modulus;
+  final e = key.publicExponent;
+  if (n == null || e == null) return false;
+  return n.bitLength >= 2048 &&
+      n.bitLength <= 4096 &&
+      e.isOdd &&
+      e > BigInt.one &&
+      e.bitLength <= 32;
+}
+
 /// True when [signature] is a SHA-256/RSA signature of [data] by the key of
 /// the certificate [certDer]. Never throws.
 bool verifyCertSignature(
     List<int> certDer, List<int> data, List<int> signature) {
   final key = rsaPublicKeyOfCert(certDer);
-  if (key == null) return false;
+  if (key == null || !acceptableRsaKey(key)) return false;
   try {
     return CryptoUtils.rsaVerify(key, Uint8List.fromList(data),
         Uint8List.fromList(signature));
@@ -110,8 +125,11 @@ class TlsIdentity {
     final sep = Platform.pathSeparator;
     await Directory(dir).create(recursive: true);
     final keyFile = File('$dir${sep}key.pem');
-    await keyFile.writeAsString(keyPem);
+    // Created empty and restricted first, so the key is never on disk with
+    // the default (often world-readable) mode (SECURITY.md S11).
+    await keyFile.writeAsString('');
     await restrictToOwner(keyFile.path);
+    await keyFile.writeAsString(keyPem, flush: true);
     await File('$dir${sep}cert.pem').writeAsString(certPem);
   }
 

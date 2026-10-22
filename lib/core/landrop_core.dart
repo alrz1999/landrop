@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'api.dart';
 import 'diagnosis.dart';
 import 'discovery.dart';
+import 'guarded_server.dart';
 import 'mdns.dart';
 import 'identity.dart';
 import 'transport.dart';
@@ -22,6 +23,7 @@ export 'identity.dart' show TlsIdentity, fingerprintOfDer;
 export 'transport.dart'
     show Transport, LanHttpsTransport, TransportSelector, InfoProbe;
 export 'util.dart' show sanitizeFileName, sanitizeRelativePath;
+export 'guarded_server.dart' show ServerLimits;
 export 'web_server.dart' show parseRange, ByteRange, RangeNotSatisfiable;
 
 const _apiBase = '/api/localsend/v2';
@@ -130,6 +132,28 @@ class LanDropCoreOptions {
   final Duration selectTimeout;
   final Duration linkCacheTtl;
 
+  /// Connection limits of the HTTPS server and the HTTP listener
+  /// (SECURITY.md S1).
+  final ServerLimits serverLimits;
+
+  /// Most peers kept in the peer table (SECURITY.md S4).
+  final int maxPeers;
+
+  /// Prepare-upload: most files in one request, and the largest declared
+  /// size of one file and of all files together (SECURITY.md S5).
+  final int maxOfferFiles;
+  final int maxOfferBytes;
+
+  /// Per remote IP: declined, withdrawn or unanswered prepare-uploads and
+  /// failed token checks allowed within [webRateWindow] before 429
+  /// (SECURITY.md S15).
+  final int requestRateLimit;
+
+  /// Free bytes in a folder, or null when unknown (test seam; default
+  /// [freeDiskBytes]). A transfer larger than the free space is refused
+  /// with 507 (SECURITY.md S18).
+  final Future<int?> Function(String dir)? freeSpace;
+
   const LanDropCoreOptions({
     this.port = 53317,
     this.portFallbackRange = 20,
@@ -168,6 +192,12 @@ class LanDropCoreOptions {
     this.transports = const [LanHttpsTransport()],
     this.selectTimeout = const Duration(seconds: 2),
     this.linkCacheTtl = const Duration(minutes: 5),
+    this.serverLimits = const ServerLimits(),
+    this.maxPeers = 256,
+    this.maxOfferFiles = 10000,
+    this.maxOfferBytes = 1 << 50,
+    this.requestRateLimit = 10,
+    this.freeSpace,
   });
 }
 
@@ -279,7 +309,7 @@ class LanDropCoreImpl implements LanDropCore {
   final _progressCtrl = StreamController<TransferProgress>.broadcast();
 
   final Map<String, _Peer> _peers = {}; // keyed by fingerprint
-  HttpServer? _server;
+  GuardedHttpServer? _server;
   DiscoveryTransport? _discovery;
   TlsIdentity? _identity;
   DeviceInfo? _self;
@@ -305,6 +335,24 @@ class LanDropCoreImpl implements LanDropCore {
 
   /// Devices mDNS reported, by fingerprint (for the diagnosis).
   final Map<String, MdnsPeerObservation> _mdnsSeen = {};
+
+  /// Failed or refused requests per remote IP (SECURITY.md S15).
+  late final AttemptLimiter _limiter = AttemptLimiter(
+      limit: options.requestRateLimit, window: options.webRateWindow);
+
+  /// Throttle for the outbound verifications that untrusted discovery data
+  /// (UDP announce, mDNS, register) causes (SECURITY.md S4).
+  final Map<String, DateTime> _verifyFailed = {};
+  final Set<String> _verifyRunning = {};
+  final Map<String, int> _verifyPerIp = {};
+  DateTime _lastUdpReply = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _maxVerifyInflight = 16;
+  static const _maxVerifyPerIp = 4;
+  static const _verifyRetryAfter = Duration(seconds: 5);
+  static const _maxMdnsSeen = 64;
+
+  /// Free space kept after a transfer (SECURITY.md S18).
+  static const _freeSpaceMargin = 64 << 20;
 
   /// Addresses advertised in the capability record (set on start).
   List<String> _capAddrs = const [];
@@ -333,6 +381,7 @@ class LanDropCoreImpl implements LanDropCore {
       rateWindow: options.webRateWindow,
       sessionTtl: options.webSessionTtl,
       streamWindow: options.webStreamWindow,
+      serverLimits: options.serverLimits,
     ),
     selfInfo: () => self,
     prepareUpload: (req, sender, files, owner) =>
@@ -461,7 +510,7 @@ class LanDropCoreImpl implements LanDropCore {
         ip: ip,
         port: server.port);
 
-    server.listen(_handle, onError: (_) {});
+    server.http.listen(_handle, onError: (_) {});
     await _web.start();
     await _startDiscovery();
     await _startMdns();
@@ -576,8 +625,7 @@ class LanDropCoreImpl implements LanDropCore {
           known.addrs.containsKey(ip) &&
           known.info.port == c.port) {
         _seenAt(known, ip, 'mdns');
-        _mdnsSeen[c.fingerprint] =
-            MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port);
+        _noteMdns(MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port));
         continue;
       }
       unawaited(_verifyMdns(c, ip));
@@ -585,12 +633,15 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   Future<void> _verifyMdns(MdnsCandidate c, String ip) async {
-    final info = await _fetchInfo(ip, c.port,
-        expectFp: c.fingerprint, timeout: options.probeTimeout);
-    if (!_running) return;
+    var ran = false;
+    final info = await _gatedVerify(ip, c.port, c.fingerprint, () {
+      ran = true;
+      return _fetchInfo(ip, c.port,
+          expectFp: c.fingerprint, timeout: options.probeTimeout);
+    });
+    if (!_running || (info == null && !ran)) return;
     if (info != null) {
-      _mdnsSeen[c.fingerprint] =
-          MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port);
+      _noteMdns(MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port));
       _upsertPeer(info, via: 'mdns');
       return;
     }
@@ -606,9 +657,8 @@ class LanDropCoreImpl implements LanDropCore {
           };
     // Another address may have verified it meanwhile: keep that.
     if (!_peers.containsKey(c.fingerprint)) {
-      _mdnsSeen[c.fingerprint] = MdnsPeerObservation(
-          c.alias, c.fingerprint, ip, c.port,
-          failure: failure);
+      _noteMdns(MdnsPeerObservation(c.alias, c.fingerprint, ip, c.port,
+          failure: failure));
     }
   }
 
@@ -1628,14 +1678,21 @@ class LanDropCoreImpl implements LanDropCore {
 
   DeviceInfo? _infoFromJson(Map<String, dynamic> j, String ip, int port) {
     final fp = j['fingerprint'];
-    if (fp is! String || fp.isEmpty) return null;
-    final alias = j['alias'];
+    if (fp is! String || fp.isEmpty || fp.length > 128) return null;
+    // Peer-supplied names are shown in the UI: no control or bidi spoofing
+    // characters, bounded length (SECURITY.md S6, S19).
+    final rawAlias = j['alias'];
+    final alias = rawAlias is String ? sanitizeDisplayText(rawAlias) : '';
     final type = j['deviceType'];
     final model = j['deviceModel'];
+    final cleanModel =
+        model is String ? sanitizeDisplayText(model, max: 64) : '';
     return DeviceInfo(
-      alias: alias is String && alias.isNotEmpty ? alias : ip,
-      deviceType: type is String ? type : 'desktop',
-      deviceModel: model is String ? model : null,
+      alias: alias.isNotEmpty ? alias : ip,
+      deviceType: type is String && RegExp(r'^[a-z]{1,16}$').hasMatch(type)
+          ? type
+          : 'desktop',
+      deviceModel: cleanModel.isEmpty ? null : cleanModel,
       fingerprint: fp.toLowerCase(),
       ip: ip,
       port: port,
@@ -1653,6 +1710,7 @@ class LanDropCoreImpl implements LanDropCore {
     if (!_running || info.fingerprint == _self?.fingerprint) return;
     final existing = _peers[info.fingerprint];
     if (existing == null) {
+      if (_peers.length >= options.maxPeers) return; // SECURITY.md S4
       _peers[info.fingerprint] = _Peer(info)..via.addAll([?via]);
       _emitPeers();
       return;
@@ -1765,6 +1823,104 @@ class LanDropCoreImpl implements LanDropCore {
 
   // ------------------------------------------------------------ discovery
 
+  /// Runs [verify] for a peer claimed by untrusted data at [ip]:[port] with
+  /// fingerprint [fp], unless the same claim is being checked or failed
+  /// within [_verifyRetryAfter], or too many checks run (16 at once, 4 per
+  /// address). Null when skipped.
+  Future<DeviceInfo?> _gatedVerify(String ip, int port, String fp,
+      Future<DeviceInfo?> Function() verify) async {
+    final key = '$ip|$port|$fp';
+    final now = DateTime.now();
+    final failed = _verifyFailed[key];
+    if (failed != null && now.difference(failed) < _verifyRetryAfter) {
+      return null;
+    }
+    if (_verifyRunning.contains(key) ||
+        _verifyRunning.length >= _maxVerifyInflight ||
+        (_verifyPerIp[ip] ?? 0) >= _maxVerifyPerIp) {
+      return null;
+    }
+    _verifyRunning.add(key);
+    _verifyPerIp[ip] = (_verifyPerIp[ip] ?? 0) + 1;
+    DeviceInfo? info;
+    try {
+      info = await verify();
+    } finally {
+      _verifyRunning.remove(key);
+      final n = (_verifyPerIp[ip] ?? 1) - 1;
+      if (n <= 0) {
+        _verifyPerIp.remove(ip);
+      } else {
+        _verifyPerIp[ip] = n;
+      }
+    }
+    if (info == null) {
+      if (_verifyFailed.length >= 1024) {
+        final t = DateTime.now();
+        _verifyFailed.removeWhere((_, v) => t.difference(v) >= _verifyRetryAfter);
+        if (_verifyFailed.length >= 1024) {
+          _verifyFailed.remove(_verifyFailed.keys.first);
+        }
+      }
+      _verifyFailed[key] = DateTime.now();
+    } else {
+      _verifyFailed.remove(key);
+    }
+    return info;
+  }
+
+  /// A spoofed announce of a known peer must not make us connect to it for
+  /// every datagram: one register per peer address every 2 seconds. The map
+  /// only holds addresses of known peers, so it is bounded by the peer table.
+  final Map<String, DateTime> _lastRegister = {};
+  bool _registerDue(String key) {
+    final now = DateTime.now();
+    final last = _lastRegister[key];
+    if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+      return false;
+    }
+    if (_lastRegister.length >= 4096) _lastRegister.clear();
+    _lastRegister[key] = now;
+    return true;
+  }
+
+  static final _hexFp = RegExp(r'^[0-9a-f]{64}$');
+  static bool _validPort(Object? p) => p is int && p > 0 && p <= 65535;
+
+  void _noteMdns(MdnsPeerObservation o) {
+    if (!_mdnsSeen.containsKey(o.fingerprint) &&
+        _mdnsSeen.length >= _maxMdnsSeen) {
+      _mdnsSeen.remove(_mdnsSeen.keys.first);
+    }
+    _mdnsSeen[o.fingerprint] = o;
+  }
+
+  /// A JSON object request body of at most [max] bytes, read within 30 s.
+  static Future<Map<String, dynamic>> _readJsonBody(HttpRequest req,
+      {int max = 1 << 20}) async {
+    final bytes = await readBodyBounded(req, max: max);
+    Object? v;
+    try {
+      v = jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      throw _HttpError(400, 'invalid JSON');
+    }
+    if (v is! Map<String, dynamic>) throw _HttpError(400, 'expected object');
+    return v;
+  }
+
+  /// Discards a refused request's body (at most 64 MB within 60 s, so a
+  /// sender still reads the answer); a larger or slower one closes the
+  /// connection instead. Repeated refusals hit the per-IP limit.
+  static Future<void> _discard(HttpRequest req) async {
+    try {
+      await drainBounded(req,
+          max: 64 << 20, timeout: const Duration(seconds: 60));
+    } catch (_) {
+      req.response.persistentConnection = false;
+    }
+  }
+
   Future<void> _announce() async {
     final d = _discovery;
     if (d == null || !_running) return;
@@ -1774,8 +1930,11 @@ class LanDropCoreImpl implements LanDropCore {
   void _onDiscoveryMessage(Map<String, dynamic> msg, InternetAddress from) {
     if (!_running) return;
     final fp = (msg['fingerprint'] as Object?)?.toString().toLowerCase();
-    if (fp == null || fp.isEmpty || fp == _self?.fingerprint) return;
-    final port = msg['port'] is int ? msg['port'] as int : 53317;
+    // Only a certificate fingerprint can ever be verified.
+    if (fp == null || !_hexFp.hasMatch(fp) || fp == _self?.fingerprint) return;
+    final rawPort = msg['port'];
+    if (rawPort != null && !_validPort(rawPort)) return;
+    final port = rawPort is int ? rawPort : 53317;
     final ip = from.address;
     final announce = msg['announce'] == true || msg['announcement'] == true;
     // LanDrop senders tag each datagram with how it was sent; others don't.
@@ -1789,17 +1948,29 @@ class LanDropCoreImpl implements LanDropCore {
         known.info.port == port) {
       // Already verified at this address; refresh without reconnecting.
       _seenAt(known, ip, via);
-      if (announce) unawaited(_register(ip, port, fp));
+      if (announce && _registerDue('$ip|$port|$fp')) {
+        unawaited(_register(ip, port, fp));
+      }
       return;
     }
-    // Verify over HTTPS (pinning the announced fingerprint) before adding.
-    final Future<DeviceInfo?> verify = announce
-        ? _register(ip, port, fp)
-        : _fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout);
-    verify.then((info) async {
-      if (info == null && announce) {
-        // HTTP reply failed: answer over UDP so the announcer can probe us.
-        await _discovery?.broadcast({..._selfJson(), 'announce': false});
+    if (known == null && _peers.length >= options.maxPeers) return;
+    // Verify over HTTPS (pinning the announced fingerprint) before adding;
+    // throttled, since the datagram's source may be spoofed.
+    var skipped = true;
+    _gatedVerify(ip, port, fp, () {
+      skipped = false;
+      return announce
+          ? _register(ip, port, fp)
+          : _fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout);
+    }).then((info) async {
+      if (info == null && announce && !skipped) {
+        // HTTP reply failed: answer over UDP so the announcer can probe us
+        // (at most once a second, so it cannot be used to amplify).
+        final now = DateTime.now();
+        if (now.difference(_lastUdpReply) >= const Duration(seconds: 1)) {
+          _lastUdpReply = now;
+          await _discovery?.broadcast({..._selfJson(), 'announce': false});
+        }
       }
       if (info != null) _upsertPeer(info, via: via);
     });
@@ -1807,26 +1978,37 @@ class LanDropCoreImpl implements LanDropCore {
 
   // ------------------------------------------------------------ server
 
-  Future<HttpServer> _bind(SecurityContext ctx) async {
+  Future<GuardedHttpServer> _bind(SecurityContext ctx) async {
     final addr = options.bindAddress ?? InternetAddress.anyIPv4;
-    if (options.port == 0) return HttpServer.bindSecure(addr, 0, ctx);
+    // Connection caps, TLS handshake and idle timeouts (SECURITY.md S1).
+    Future<GuardedHttpServer> bind(int p) =>
+        bindGuarded(addr, p, context: ctx, limits: options.serverLimits);
+    if (options.port == 0) return bind(0);
     SocketException? last;
     for (var i = 0; i <= options.portFallbackRange; i++) {
       final p = options.port + i;
       if (p > 65535) break;
       try {
-        return await HttpServer.bindSecure(addr, p, ctx);
+        return await bind(p);
       } on SocketException catch (e) {
         last = e;
       }
     }
     // Last resort: any free port.
     try {
-      return await HttpServer.bindSecure(addr, 0, ctx);
+      return await bind(0);
     } on SocketException {
       throw last ?? const SocketException('no free port');
     }
   }
+
+  /// Endpoints whose failures count toward the per-IP limit.
+  static const _limitedPaths = {
+    '$_apiBase/prepare-upload',
+    '$_apiBase/upload',
+    '$_apiBase/cancel',
+    '$_landropBase/upload-status',
+  };
 
   Future<void> _handle(HttpRequest req) async {
     final res = req.response;
@@ -1834,8 +2016,13 @@ class LanDropCoreImpl implements LanDropCore {
     try {
       final path = req.uri.path;
       final m = req.method;
+      if (_limitedPaths.contains(path) && _limiter.limited(_remoteIp(req))) {
+        // Answered without reading the body; the connection is closed.
+        res.persistentConnection = false;
+        throw _HttpError(429, 'too many attempts');
+      }
       if (path == '$_apiBase/info' && (m == 'GET' || m == 'POST')) {
-        await req.drain<void>();
+        await drainBounded(req);
         _json(res, 200, _selfJson());
       } else if (path == '$_apiBase/register' && m == 'POST') {
         await _handleRegister(req);
@@ -1846,16 +2033,23 @@ class LanDropCoreImpl implements LanDropCore {
       } else if (path == '$_landropBase/upload-status' && m == 'GET') {
         await _handleUploadStatus(req);
       } else if (path == '$_landropBase/capabilities' && m == 'GET') {
-        await req.drain<void>();
+        await drainBounded(req);
         _json(res, 200, _capabilities().toJson());
       } else if (path == '$_apiBase/cancel' && m == 'POST') {
-        await req.drain<void>();
+        await drainBounded(req);
         _handleCancel(req);
       } else {
-        await req.drain<void>();
+        await _discard(req);
         throw _HttpError(404, 'not found');
       }
     } on _HttpError catch (e) {
+      // Too large or too slow: the rest of the body is not read, so the
+      // connection cannot be reused.
+      if (e.status == 408 || e.status == 413) res.persistentConnection = false;
+      if (_limitedPaths.contains(req.uri.path) &&
+          (e.status == 400 || e.status == 403 || e.status == 413)) {
+        _limiter.hit(_remoteIp(req));
+      }
       _json(res, e.status, {'message': e.message, ...?e.extra});
     } catch (e) {
       _json(res, 500, {'message': 'internal error'});
@@ -1877,13 +2071,17 @@ class LanDropCoreImpl implements LanDropCore {
       req.connectionInfo?.remoteAddress.address ?? '0.0.0.0';
 
   Future<void> _handleRegister(HttpRequest req) async {
-    final body = await _readJsonStream(req);
+    final body = await _readJsonBody(req, max: 64 * 1024);
     _json(req.response, 200, _selfJson());
     // The caller's identity is unverified (no client certs), so probe it back
     // and only add it if its HTTPS cert matches the claimed fingerprint.
     final fp = (body['fingerprint'] as Object?)?.toString().toLowerCase();
-    final port = body['port'] is int ? body['port'] as int : 53317;
-    if (fp == null || fp == _self?.fingerprint) return;
+    final rawPort = body['port'];
+    if (rawPort != null && !_validPort(rawPort)) return;
+    final port = rawPort is int ? rawPort : 53317;
+    if (fp == null || !_hexFp.hasMatch(fp) || fp == _self?.fingerprint) {
+      return;
+    }
     final ip = _remoteIp(req);
     final known = _peers[fp];
     if (known != null &&
@@ -1892,14 +2090,16 @@ class LanDropCoreImpl implements LanDropCore {
       _seenAt(known, ip, 'register');
       return;
     }
-    unawaited(_fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout)
+    if (known == null && _peers.length >= options.maxPeers) return;
+    unawaited(_gatedVerify(ip, port, fp,
+            () => _fetchInfo(ip, port, expectFp: fp, timeout: options.probeTimeout))
         .then((info) {
       if (info != null) _upsertPeer(info, via: 'register');
     }));
   }
 
   Future<void> _handlePrepare(HttpRequest req) async {
-    final body = await _readJsonStream(req, max: 16 << 20);
+    final body = await _readJsonBody(req, max: 16 << 20);
     if (_pendingDecision || _session != null) {
       throw _HttpError(409, 'busy');
     }
@@ -1931,9 +2131,16 @@ class LanDropCoreImpl implements LanDropCore {
     if (proof is! Map || self == null || sender.fingerprint.isEmpty) {
       return false;
     }
+    // No hashing work for a request that is refused for its size anyway.
+    if (filesJson.length > options.maxOfferFiles) return false;
     try {
-      final cert = base64Decode(proof['cert'] as String);
-      final sig = base64Decode(proof['sig'] as String);
+      final certB64 = proof['cert'] as String;
+      final sigB64 = proof['sig'] as String;
+      // A certificate of a few KB and an RSA signature of at most 4096 bit
+      // (SECURITY.md S3); the key size is checked by verifyCertSignature.
+      if (certB64.length > 16384 || sigB64.length > 1024) return false;
+      final cert = base64Decode(certB64);
+      final sig = base64Decode(sigB64);
       if (fingerprintOfDer(cert) != sender.fingerprint) return false;
       final files = <(String, String, int)>[];
       for (final e in filesJson.entries) {
@@ -1959,16 +2166,38 @@ class LanDropCoreImpl implements LanDropCore {
     }
     final offers = <String, FileOffer>{};
     final segments = <String, List<String>>{};
+    // Bounded work and memory per request, and no 64-bit overflow of the
+    // total size, which the auto-accept limit relies on (SECURITY.md S5).
+    if (filesJson.length > options.maxOfferFiles) {
+      throw _HttpError(413, 'too many files');
+    }
+    var total = 0;
     for (final entry in filesJson.entries) {
       final f = entry.value;
       if (f is! Map) throw _HttpError(400, 'invalid file');
       final id = (f['id'] ?? entry.key).toString();
       final name = f['fileName'];
       final size = f['size'];
-      if (name is! String || size is! int || size < 0 || id.isEmpty) {
+      if (name is! String ||
+          size is! int ||
+          size < 0 ||
+          id.isEmpty ||
+          id.length > 128 ||
+          name.length > 4096) {
         throw _HttpError(400, 'invalid file');
       }
-      final type = f['fileType'];
+      // total <= max always holds here, so neither side can overflow.
+      if (size > options.maxOfferBytes ||
+          size > options.maxOfferBytes - total) {
+        throw _HttpError(413, 'too large');
+      }
+      total += size;
+      final rawType = f['fileType'];
+      final type = rawType is String &&
+              rawType.length <= 128 &&
+              !hasSpoofingChars(rawType)
+          ? rawType
+          : null;
       // Folder transfers carry relative paths; every segment is sanitised.
       final segs = sanitizeRelativePath(name);
       segments[id] = segs;
@@ -1983,6 +2212,13 @@ class LanDropCoreImpl implements LanDropCore {
         offers.length == 1 &&
         offers.values.single.preview != null &&
         offers.values.single.fileType.startsWith('text/plain');
+    // Refuse what cannot fit before asking anyone (SECURITY.md S18).
+    if (!isText && total > 0) {
+      final free = await (options.freeSpace ?? freeDiskBytes)(_saveDir);
+      if (free != null && total > free - _freeSpaceMargin) {
+        throw _HttpError(507, 'not enough free space');
+      }
+    }
 
     final sessionId = randomHex(16);
     final request = IncomingRequest(sessionId, sender, offers.values.toList(),
@@ -2015,6 +2251,8 @@ class LanDropCoreImpl implements LanDropCore {
         request.decision.complete(false);
       }
     }
+    // A 403 counts toward the per-IP limit in [_handle], so a sender cannot
+    // keep a dialog on screen by asking again and again (SECURITY.md S15).
     if (!accepted || !_running) throw _HttpError(403, 'declined');
     if (isText) {
       // The text was shown: nothing to upload, nothing written to disk.
@@ -2156,7 +2394,7 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   Future<void> _handleUploadStatus(HttpRequest req) async {
-    await req.drain<void>();
+    await drainBounded(req);
     final (_, f) = _authFile(req);
     _json(req.response, 200, {
       'received': await _partLength(f),
@@ -2191,22 +2429,22 @@ class LanDropCoreImpl implements LanDropCore {
     try {
       (s, f) = _authFile(req, owner: owner);
     } catch (_) {
-      await req.drain<void>();
+      await _discard(req);
       rethrow;
     }
     if (f.finished) {
-      await req.drain<void>();
+      await _discard(req);
       throw _HttpError(409, 'file already uploaded');
     }
     if (f.active) {
-      await req.drain<void>();
+      await _discard(req);
       throw _HttpError(
           409, 'upload in progress', {'received': await _partLength(f)});
     }
     final offsetParam = req.uri.queryParameters['offset'];
     final offset = offsetParam == null ? null : int.tryParse(offsetParam);
     if (offsetParam != null && (offset == null || offset < 0)) {
-      await req.drain<void>();
+      await _discard(req);
       throw _HttpError(400, 'invalid offset');
     }
     f.active = true;
@@ -2229,9 +2467,16 @@ class LanDropCoreImpl implements LanDropCore {
       final dir = await _dirFor(s, f);
       // Written under a hidden temporary name, renamed when complete.
       f.part ??= await reserveUniqueFile(dir.path, '.${f.name}.part');
+      // Never write through a symlink planted in place of the .part file.
+      if (FileSystemEntity.typeSync(f.part!.path, followLinks: false) !=
+          FileSystemEntityType.file) {
+        fatal = true;
+        await _discard(req);
+        throw _HttpError(403, 'unsafe path');
+      }
       final have = await f.part!.length();
       if (offset != null && offset != have) {
-        await req.drain<void>();
+        await _discard(req);
         throw _HttpError(409, 'offset mismatch', {'received': have});
       }
       // No offset (plain LocalSend sender): start over.

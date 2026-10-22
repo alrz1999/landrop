@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import '../core/util.dart' show hasSpoofingChars;
+
 /// Runs a program without a shell (test seam for [SystemFileOpener]).
 typedef ProcessRunner = Future<ProcessResult> Function(
     String executable, List<String> arguments);
@@ -30,10 +32,42 @@ bool isWebLink(String text) {
   final s = text.trim();
   if (s.isEmpty || s.length > 2048) return false;
   if (RegExp(r'[\s\u0000-\u001F\u007F]').hasMatch(s)) return false;
+  // Bidi overrides and other invisible characters would show a different
+  // link than the one opened (SECURITY.md S7).
+  if (hasSpoofingChars(s)) return false;
   final uri = Uri.tryParse(s);
   if (uri == null || !uri.hasAuthority || uri.host.isEmpty) return false;
   final scheme = uri.scheme.toLowerCase();
   return scheme == 'http' || scheme == 'https';
+}
+
+/// Extensions whose default action runs code (programs, scripts,
+/// installers, shortcuts, launchers) on macOS, Windows or Linux.
+const _runnableExtensions = {
+  // macOS
+  'app', 'command', 'dmg', 'tool', 'terminal', 'workflow', 'action', 'pkg', 'mpkg',
+  'scpt', 'scptd', 'applescript', 'prefpane', 'kext', 'webloc', 'inetloc',
+  'fileloc',
+  // Windows
+  'exe', 'com', 'bat', 'cmd', 'msi', 'msp', 'msix', 'appx', 'ps1', 'psm1',
+  'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta', 'scr', 'pif', 'cpl', 'lnk',
+  'url', 'reg', 'inf', 'appref-ms', 'application', 'gadget', 'msc', 'library-ms',
+  'settingcontent-ms',
+  // Linux and cross-platform
+  'desktop', 'sh', 'bash', 'zsh', 'csh', 'ksh', 'run', 'bin', 'appimage',
+  'jar', 'py', 'pyw', 'pl', 'rb', 'deb', 'rpm', 'flatpakref',
+};
+
+/// Whether opening [path] with its default application would run code
+/// (an executable, script, installer, shortcut or app bundle such as a
+/// received folder `Evil.app`). "Open" shows such files in their folder
+/// instead (SECURITY.md S8).
+bool isRunnablePath(String path) {
+  final trimmed = path.replaceAll(RegExp(r'[\\/]+$'), '');
+  final name = trimmed.split(RegExp(r'[\\/]')).last.toLowerCase();
+  final dot = name.lastIndexOf('.');
+  if (dot < 0) return false;
+  return _runnableExtensions.contains(name.substring(dot + 1));
 }
 
 /// Desktop implementation with no extra package: `open` / `open -R` on
@@ -91,8 +125,25 @@ class SystemFileOpener implements FileOpener {
     }
   }
 
+  /// Opens [path], except a runnable one ([isRunnablePath]), which is only
+  /// shown in its folder: a received file must never run by a click on
+  /// "Open".
   @override
-  Future<bool> open(String path) => _exec(openCommand(path), path);
+  Future<bool> open(String path) => isRunnablePath(path) || _hasExecBit(path)
+      ? reveal(path)
+      : _exec(openCommand(path), path);
+
+  /// A file with an execute permission bit (never set on received files)
+  /// could be run by `open` / `xdg-open` even without a known extension.
+  static bool _hasExecBit(String path) {
+    if (Platform.isWindows) return false;
+    try {
+      final st = FileStat.statSync(path);
+      return st.type == FileSystemEntityType.file && (st.mode & 0x49) != 0;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Future<bool> reveal(String path) => _exec(revealCommand(path), path);
