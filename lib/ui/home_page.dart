@@ -7,6 +7,7 @@ import '../core/api.dart';
 import 'connect_helper.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
+import 'app_controller.dart' show TransferSession;
 import 'cable_wizard.dart';
 import 'finding_text.dart';
 import 'hotspot_wizard.dart';
@@ -41,6 +42,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   StreamSubscription<IncomingRequest>? _sub;
   StreamSubscription<WebPairingRequest>? _pairSub;
+  StreamSubscription<TransferSession>? _autoSub;
 
   /// Incoming transfer requests and browser pairings, one dialog at a time.
   final Queue<Object> _pending = Queue();
@@ -58,7 +60,25 @@ class _HomePageState extends State<HomePage> {
       _pending.add(r);
       _drainIncoming();
     });
+    // Every transfer accepted without asking is announced, with a way to
+    // stop it (UX.md 3.7).
+    _autoSub ??= c.autoAccepted.listen((s) {
+      if (!mounted) return;
+      final l = context.l;
+      _snack(l.autoAcceptedSnack(l.isoName(s.peerAlias)),
+          key: const Key('autoAcceptSnack'),
+          action: SnackBarAction(
+              label: l.autoAcceptStop,
+              onPressed: () => AppScope.read(context)
+                  .setAutoAccept(s.peerFingerprint, false)));
+    });
   }
+
+  void _openSettings() => Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => SettingsPage(
+              pickFiles: widget.pickFiles, pickFolder: widget.pickFolder)));
 
   Future<void> _drainIncoming() async {
     if (_dialogOpen) return;
@@ -75,9 +95,14 @@ class _HomePageState extends State<HomePage> {
       final req = next as IncomingRequest;
       if (req.decision.isCompleted) continue; // e.g. timed out by core
       final c = AppScope.read(context);
-      final ok = await showIncomingDialog(context, req, saveDir: c.saveDir);
+      final d = await showIncomingDecision(context, req,
+          saveDir: c.saveDir,
+          trust: c.trustOf(req),
+          conflictName: c.aliasConflict(req)?.name,
+          onChangeFolder: _openSettings);
       if (!mounted) break;
-      c.respond(req, ok);
+      final ok = d.accept;
+      c.respond(req, ok, alwaysAccept: d.alwaysAccept);
       if (ok) {
         final l = context.l;
         _snack(l.homeReceiving(req.files.length, l.isoName(req.sender.alias)));
@@ -90,13 +115,16 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _sub?.cancel();
     _pairSub?.cancel();
+    _autoSub?.cancel();
     super.dispose();
   }
 
-  void _snack(String msg, {bool error = false, SnackBarAction? action}) {
+  void _snack(String msg,
+      {bool error = false, SnackBarAction? action, Key? key}) {
     if (!mounted) return;
     final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      key: key,
       content: Text(msg),
       backgroundColor: error ? scheme.error : null,
       action: action,
@@ -359,12 +387,7 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             tooltip: l.settingsTitle,
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => SettingsPage(
-                        pickFiles: widget.pickFiles,
-                        pickFolder: widget.pickFolder))),
+            onPressed: _openSettings,
           ),
         ],
       ),

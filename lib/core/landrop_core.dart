@@ -227,6 +227,18 @@ class _InFile {
   _InFile(this.offer, this.token, this.dirSegs, this.name);
 }
 
+/// A send in progress (after the receiver accepted), so
+/// [LanDropCoreImpl.cancelSession] can stop it.
+class _OutSend {
+  final _Route route;
+  final String? cancelSecret;
+  bool cancelled = false;
+
+  /// The upload request currently streaming, aborted on cancel.
+  HttpClientRequest? current;
+  _OutSend(this.route, this.cancelSecret);
+}
+
 class _InSession {
   final String id;
   final DeviceInfo sender;
@@ -238,6 +250,9 @@ class _InSession {
   /// Directories this session created (deleted again if left empty).
   final List<String> createdDirs = [];
   bool cancelled = false;
+
+  /// Why the session ended early, for the progress events of its files.
+  SendErrorCode? endCode;
   Timer? idle;
 
   /// Browser session that created it (browser uploads only).
@@ -269,6 +284,9 @@ class LanDropCoreImpl implements LanDropCore {
 
   bool _pendingDecision = false;
   _InSession? _session;
+
+  /// Sends the receiver accepted and that are still uploading, by session id.
+  final Map<String, _OutSend> _outgoing = {};
   String? _discoveryError;
 
   MdnsService? _mdns;
@@ -318,6 +336,7 @@ class LanDropCoreImpl implements LanDropCore {
   void _onWebSessionEnded(String owner) {
     final s = _session;
     if (s != null && s.owner == owner) {
+      s.endCode = SendErrorCode.cancelled;
       _endSession(s, reason: 'browser disconnected');
     }
   }
@@ -751,9 +770,11 @@ class LanDropCoreImpl implements LanDropCore {
     final client = _newClient(expectFp: to.fingerprint);
     String? sessionId;
     String? cancelSecret;
+    _OutSend? out;
     try {
       // 1. prepare-upload (waits for the receiver's decision). When the
       // connection cannot be made, the next link is tried.
+      final identity = _identity;
       final body = {
         'info': _selfJson(),
         'files': {
@@ -765,6 +786,18 @@ class LanDropCoreImpl implements LanDropCore {
               'fileType': e.value.$2.fileType,
             }
         },
+        // Proves to the receiver that this request comes from the holder of
+        // our certificate's key (PROTOCOL.md "Sender proof"); LocalSend
+        // receivers ignore it.
+        if (identity != null)
+          'landropProof': {
+            'cert': base64Encode(identity.certDer),
+            'sig': base64Encode(identity.sign(senderProofMessage(
+                to.fingerprint, identity.fingerprint, [
+              for (final e in files.entries)
+                (e.key, e.value.$2.fileName, e.value.$2.size)
+            ]))),
+          },
       };
       (int, Map<String, dynamic>?) prep;
       while (true) {
@@ -803,17 +836,51 @@ class LanDropCoreImpl implements LanDropCore {
       sessionId = sid;
       final secret = prep.$2!['cancelSecret'];
       cancelSecret = secret is String ? secret : null;
+      out = _OutSend(route, cancelSecret);
+      _outgoing[sid] = out;
       try {
         onSession?.call(sid);
       } catch (_) {}
+      // Every file with its size at once, so the UI knows the total (time
+      // left) before the first byte goes out.
+      for (final e in files.entries) {
+        if (tokens[e.key] is! String) continue;
+        _progressCtrl.add(TransferProgress(sid, e.key, 0, e.value.$2.size,
+            fileName: e.value.$2.fileName));
+      }
 
       // 2. upload each file (resuming broken connections)
+      final finished = <String>{};
       for (final e in files.entries) {
         final token = tokens[e.key];
         if (token is! String) continue; // receiver skipped this file
-        final err = await _uploadOne(client, peer, route, sid, e.key, token,
-            e.value.$1, e.value.$2.size, e.value.$2.fileName);
+        final started = !out.cancelled;
+        final err = started
+            ? await _uploadOne(client, peer, route, sid, e.key, token,
+                e.value.$1, e.value.$2.size, e.value.$2.fileName, out)
+            : _cancelledError;
+        // _uploadOne sent this file's final event itself.
+        if (err == null || started) finished.add(e.key);
         if (err != null) {
+          if (out.cancelled) {
+            // cancelSession already told the receiver. Files not started
+            // yet end as cancelled too.
+            for (final f in files.entries) {
+              if (tokens[f.key] is! String || finished.contains(f.key)) {
+                continue;
+              }
+              _progressCtrl.add(TransferProgress(sid, f.key, 0, f.value.$2.size,
+                  done: true,
+                  error: _cancelledError,
+                  errorCode: SendErrorCode.cancelled,
+                  fileName: f.value.$2.fileName));
+            }
+            return SendResult(
+                ok: false,
+                sessionId: sid,
+                error: _cancelledError,
+                errorCode: SendErrorCode.cancelled);
+          }
           _selector.invalidate(to.fingerprint);
           unawaited(_sendCancel(route.link, sid, cancelSecret));
           return SendResult(
@@ -825,6 +892,13 @@ class LanDropCoreImpl implements LanDropCore {
       }
       return SendResult(ok: true, sessionId: sid);
     } catch (e) {
+      if (out != null && out.cancelled) {
+        return SendResult(
+            ok: false,
+            sessionId: sessionId,
+            error: _cancelledError,
+            errorCode: SendErrorCode.cancelled);
+      }
       _selector.invalidate(to.fingerprint);
       if (sessionId != null) {
         unawaited(_sendCancel(route.link, sessionId, cancelSecret));
@@ -835,7 +909,27 @@ class LanDropCoreImpl implements LanDropCore {
           error: '$e',
           errorCode: _sendExceptionCode(e));
     } finally {
+      if (sessionId != null) _outgoing.remove(sessionId);
       client.close(force: true);
+    }
+  }
+
+  static const _cancelledError = 'cancelled';
+
+  @override
+  Future<void> cancelSession(String sessionId) async {
+    final out = _outgoing[sessionId];
+    if (out != null) {
+      if (out.cancelled) return;
+      out.cancelled = true;
+      out.current?.abort(const SocketException('cancelled'));
+      await _sendCancel(out.route.link, sessionId, out.cancelSecret);
+      return;
+    }
+    final s = _session;
+    if (s != null && s.id == sessionId && !s.allFinished) {
+      s.endCode = SendErrorCode.cancelled;
+      _endSession(s, reason: _cancelledError, includeActive: true);
     }
   }
 
@@ -1092,20 +1186,23 @@ class LanDropCoreImpl implements LanDropCore {
       String token,
       File file,
       int size,
-      String name) async {
+      String name,
+      _OutSend out) async {
     final q = {'sessionId': sessionId, 'fileId': fileId, 'token': token};
-    void emit(int sent, {bool done = false, String? error}) =>
+    void emit(int sent,
+            {bool done = false, String? error, SendErrorCode? code}) =>
         _progressCtrl.add(TransferProgress(sessionId, fileId, sent, size,
-            done: done, error: error, fileName: name));
+            done: done, error: error, errorCode: code, fileName: name));
 
     emit(0);
     var offset = 0;
     var broken = false;
     String lastError = 'upload failed';
     for (var attempt = 0; attempt <= options.uploadRetries; attempt++) {
+      if (out.cancelled) break;
       if (attempt > 0) {
         await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
-        if (!_running) break;
+        if (!_running || out.cancelled) break;
         if (broken) await _switchLink(peer, route);
         try {
           final st = await _uploadStatus(route.link, q);
@@ -1123,8 +1220,8 @@ class LanDropCoreImpl implements LanDropCore {
           break; // session gone: not resumable
         }
       }
-      final (outcome, msg) = await _uploadAttempt(
-          client, route.link, q, fileId, file, offset, size, attempt, emit);
+      final (outcome, msg) = await _uploadAttempt(client, route.link, q,
+          fileId, file, offset, size, attempt, emit, out);
       if (outcome == _Attempt.ok) {
         emit(size, done: true);
         return null;
@@ -1133,7 +1230,13 @@ class LanDropCoreImpl implements LanDropCore {
       if (outcome == _Attempt.fatal) break;
       broken = outcome == _Attempt.broken;
     }
-    emit(offset, done: true, error: lastError);
+    if (out.cancelled) {
+      emit(offset,
+          done: true, error: _cancelledError, code: SendErrorCode.cancelled);
+      return _cancelledError;
+    }
+    emit(offset,
+        done: true, error: lastError, code: _uploadErrorCode(lastError));
     return lastError;
   }
 
@@ -1146,7 +1249,8 @@ class LanDropCoreImpl implements LanDropCore {
       int offset,
       int size,
       int attempt,
-      void Function(int sent) emit) async {
+      void Function(int sent) emit,
+      _OutSend out) async {
     var sent = offset;
     var lastEmit = offset;
     var lastActivity = DateTime.now();
@@ -1158,6 +1262,8 @@ class LanDropCoreImpl implements LanDropCore {
           .timeout(options.probeTimeout * 2);
       req.contentLength = size - offset;
       req.headers.contentType = ContentType.binary;
+      out.current = req;
+      if (out.cancelled) req.abort(const SocketException('cancelled'));
       final tick = Duration(
           milliseconds:
               (options.stallTimeout.inMilliseconds ~/ 4).clamp(50, 1000));
@@ -1198,6 +1304,7 @@ class LanDropCoreImpl implements LanDropCore {
       return (_Attempt.broken, stalled ? 'upload stalled' : '$e');
     } finally {
       watchdog?.cancel();
+      out.current = null;
     }
   }
 
@@ -1691,7 +1798,36 @@ class LanDropCoreImpl implements LanDropCore {
     final sender = _infoFromJson(infoJson, ip,
         infoJson['port'] is int ? infoJson['port'] as int : 53317);
     if (sender == null) throw _HttpError(400, 'invalid sender info');
-    await _prepareIncoming(req, sender, filesJson);
+    await _prepareIncoming(req, sender, filesJson,
+        verified: _senderProven(sender, filesJson, body['landropProof']));
+  }
+
+  /// Checks the optional sender proof of prepare-upload (PROTOCOL.md
+  /// "Sender proof"): the certificate must have the claimed fingerprint and
+  /// its key must have signed this receiver's fingerprint, the claimed
+  /// fingerprint and the offered files. False when absent or wrong; the
+  /// request is still handled (as an unverified sender).
+  bool _senderProven(
+      DeviceInfo sender, Map<dynamic, dynamic> filesJson, Object? proof) {
+    final self = _self;
+    if (proof is! Map || self == null || sender.fingerprint.isEmpty) {
+      return false;
+    }
+    try {
+      final cert = base64Decode(proof['cert'] as String);
+      final sig = base64Decode(proof['sig'] as String);
+      if (fingerprintOfDer(cert) != sender.fingerprint) return false;
+      final files = <(String, String, int)>[];
+      for (final e in filesJson.entries) {
+        final f = e.value as Map;
+        files.add(((f['id'] ?? e.key).toString(), f['fileName'] as String,
+            f['size'] as int));
+      }
+      return verifyCertSignature(cert,
+          senderProofMessage(self.fingerprint, sender.fingerprint, files), sig);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Validates and sanitises an offered file list, asks the UI (Accept
@@ -1699,7 +1835,7 @@ class LanDropCoreImpl implements LanDropCore {
   /// prepare-upload and browser uploads ([owner] = browser session id).
   Future<void> _prepareIncoming(
       HttpRequest req, DeviceInfo sender, Map<dynamic, dynamic> filesJson,
-      {String? owner}) async {
+      {String? owner, bool verified = false}) async {
     if (_pendingDecision || _session != null) {
       throw _HttpError(409, 'busy');
     }
@@ -1724,7 +1860,8 @@ class LanDropCoreImpl implements LanDropCore {
     if (offers.isEmpty) throw _HttpError(400, 'no files');
 
     final sessionId = randomHex(16);
-    final request = IncomingRequest(sessionId, sender, offers.values.toList());
+    final request = IncomingRequest(sessionId, sender, offers.values.toList(),
+        verified: verified && owner == null);
     if (!_incomingCtrl.hasListener) throw _HttpError(403, 'declined');
 
     _pendingDecision = true;
@@ -1782,24 +1919,29 @@ class LanDropCoreImpl implements LanDropCore {
       if (s.anyActive) {
         _touch(s);
       } else {
+        s.endCode = SendErrorCode.timeout;
         _endSession(s, reason: 'timed out');
       }
     });
   }
 
   /// Ends [s]. Unfinished files get an error progress event (when [reason]
-  /// is given) and their `.part` files are deleted, as are directories the
-  /// session created that are still empty.
-  void _endSession(_InSession s, {String? reason}) {
+  /// is given; files still uploading report their own, unless
+  /// [includeActive]) and their `.part` files are deleted, as are
+  /// directories the session created that are still empty.
+  void _endSession(_InSession s, {String? reason, bool includeActive = false}) {
     s.idle?.cancel();
     if (identical(_session, s)) _session = null;
     if (s.allFinished) return;
     s.cancelled = true;
     if (reason != null) {
       for (final f in s.files.values) {
-        if (!f.finished && f.part != null && !f.active) {
+        if (!f.finished && (includeActive || !f.active)) {
           _progressCtrl.add(TransferProgress(s.id, f.offer.id, 0, f.offer.size,
-              done: true, error: reason, fileName: f.offer.fileName));
+              done: true,
+              error: reason,
+              errorCode: s.endCode,
+              fileName: f.offer.fileName));
         }
       }
     }
@@ -1929,9 +2071,13 @@ class LanDropCoreImpl implements LanDropCore {
     var received = 0;
     var lastEmit = 0;
     var fatal = false;
-    void emit({bool done = false, String? error}) =>
+    void emit({bool done = false, String? error, String? savedPath}) =>
         _progressCtrl.add(TransferProgress(s.id, fileId, received, size,
-            done: done, error: error, fileName: f.offer.fileName));
+            done: done,
+            error: error,
+            errorCode: error == null ? null : s.endCode ?? SendErrorCode.unknown,
+            fileName: f.offer.fileName,
+            savedPath: savedPath));
     try {
       final dir = await _dirFor(s, f);
       // Written under a hidden temporary name, renamed when complete.
@@ -1976,7 +2122,7 @@ class LanDropCoreImpl implements LanDropCore {
       await f.part!.rename(target.path);
       f.finished = true;
       f.active = false;
-      emit(done: true);
+      emit(done: true, savedPath: target.path);
       if (s.allFinished) _endSession(s);
       _json(req.response, 200, {});
     } catch (e) {
@@ -2013,6 +2159,7 @@ class LanDropCoreImpl implements LanDropCore {
       throw _HttpError(403, 'invalid session or cancel secret');
     }
     s.cancelled = true;
+    s.endCode = SendErrorCode.cancelled;
     _endSession(s, reason: 'cancelled by sender');
     _json(req.response, 200, {});
   }

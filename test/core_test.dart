@@ -617,6 +617,155 @@ void main() {
         .$1, 200);
   });
 
+  Future<void> waitFor(bool Function() done) async {
+    for (var i = 0; i < 100 && !done(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  test('sender cancels mid-upload: receiver drops the .part, sender cancelled',
+      () async {
+    late LanDropCoreImpl c;
+    String? sid;
+    var cancelledAt = 0;
+    c = LanDropCoreImpl(_opts(0, kill: (_, sent, _) {
+      if (cancelledAt == 0 && sid != null && sent >= 4 << 20) {
+        cancelledAt = sent;
+        unawaited(c.cancelSession(sid!));
+      }
+      return false;
+    }));
+    await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+    final sendProg = <TransferProgress>[];
+    final recvProg = <TransferProgress>[];
+    final s1 = c.progress.listen(sendProg.add);
+    final s2 = b.progress.listen(recvProg.add);
+    try {
+      final src = await _randomFile('${tmp.path}/cancel.bin', 32 << 20, 9);
+      answerB(true);
+      final peer = (await c.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final r = await c.sendFiles(peer, [SendItem(src.path)],
+          onSession: (s) => sid = s);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cancelledAt, greaterThan(0));
+      expect(r.ok, isFalse);
+      expect(r.sessionId, sid);
+      expect(r.errorCode, SendErrorCode.cancelled);
+      // The sender's last event for the file says "cancelled".
+      expect(sendProg.last.done, isTrue);
+      expect(sendProg.last.errorCode, SendErrorCode.cancelled);
+      expect(sendProg.last.sentBytes, lessThan(32 << 20));
+      // The receiver deleted the partial file and reported the cancel.
+      await waitFor(() =>
+          _tree(dirB).isEmpty &&
+          recvProg.any((p) => p.errorCode == SendErrorCode.cancelled));
+      expect(_tree(dirB), isEmpty);
+      expect(recvProg.where((p) => p.error != null).last.errorCode,
+          SendErrorCode.cancelled);
+      // Receiver is free for the next transfer.
+      final small = File('${tmp.path}/ok.txt')..writeAsStringSync('ok');
+      expect(await c.send(peer, [small.path]), isTrue);
+      // Unknown and finished ids are ignored.
+      await c.cancelSession('nope');
+      await c.cancelSession(sid!);
+    } finally {
+      await s1.cancel();
+      await s2.cancel();
+      await c.dispose();
+    }
+  });
+
+  test('receiver cancels mid-upload: sender stops with a clear error',
+      () async {
+    late LanDropCoreImpl c;
+    String? sid;
+    var cancelledAt = 0;
+    c = LanDropCoreImpl(_opts(0, kill: (_, sent, _) {
+      if (cancelledAt == 0 && sid != null && sent >= 4 << 20) {
+        cancelledAt = sent;
+        unawaited(b.cancelSession(sid!));
+      }
+      return false;
+    }));
+    await c.start(alias: 'Carol', saveDir: '${tmp.path}/c');
+    final sendProg = <TransferProgress>[];
+    final recvProg = <TransferProgress>[];
+    final s1 = c.progress.listen(sendProg.add);
+    final s2 = b.progress.listen(recvProg.add);
+    try {
+      final src = await _randomFile('${tmp.path}/cancel.bin', 32 << 20, 10);
+      final second = await _randomFile('${tmp.path}/second.bin', 1000, 11);
+      answerB(true);
+      final peer = (await c.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final r = await c.sendFiles(
+          peer, [SendItem(src.path), SendItem(second.path)],
+          onSession: (s) => sid = s);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cancelledAt, greaterThan(0));
+      expect(r.ok, isFalse);
+      expect(r.errorCode, SendErrorCode.cancelled, reason: r.error);
+      expect(sendProg.last.errorCode, SendErrorCode.cancelled);
+      // Both files got a final "cancelled" event on the receiver.
+      final ended = {
+        for (final p in recvProg)
+          if (p.errorCode == SendErrorCode.cancelled) p.fileId
+      };
+      expect(ended, hasLength(2));
+      await waitFor(() => _tree(dirB).isEmpty);
+      expect(_tree(dirB), isEmpty);
+      final small = File('${tmp.path}/ok.txt')..writeAsStringSync('ok');
+      expect(await c.send(peer, [small.path]), isTrue);
+    } finally {
+      await s1.cancel();
+      await s2.cancel();
+      await c.dispose();
+    }
+  });
+
+  test('sender proof: LanDrop senders are verified, bare claims are not',
+      () async {
+    final requests = <IncomingRequest>[];
+    autoAnswer = b.incoming.listen((r) {
+      requests.add(r);
+      r.decision.complete(true);
+    });
+    final src = File('${tmp.path}/p.txt')..writeAsStringSync('proof');
+    final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+    expect(await a.send(peer, [src.path]), isTrue);
+    expect(requests.single.verified, isTrue);
+    expect(requests.single.sender.fingerprint, a.self.fingerprint);
+
+    // Claiming Alice's fingerprint without her key: not verified.
+    Map<String, dynamic> claim(Object? proof) => {
+          ..._mallory({'f1': 'm.txt'}),
+          'info': {
+            ...(_mallory({})['info'] as Map<String, dynamic>),
+            'fingerprint': a.self.fingerprint,
+          },
+          'landropProof': ?proof,
+        };
+    Future<void> prepareAndCancel(Object? proof) async {
+      final (status, body) =
+          await _raw('POST', b.self, '/prepare-upload', json: claim(proof));
+      expect(status, 200);
+      await _raw('POST', b.self, '/cancel', query: {
+        'sessionId': body!['sessionId'] as String,
+        'cancelSecret': body['cancelSecret'] as String,
+      });
+    }
+
+    await prepareAndCancel(null);
+    expect(requests.last.verified, isFalse);
+    expect(requests.last.sender.fingerprint, a.self.fingerprint);
+    // Bob's own certificate (another fingerprint) with a junk signature.
+    await prepareAndCancel({
+      'cert': base64Encode(utf8.encode('not a certificate')),
+      'sig': base64Encode([1, 2, 3]),
+    });
+    expect(requests.last.verified, isFalse);
+    expect(requests, hasLength(3));
+  });
+
   test('folder transfer recreates nested dirs byte-identically', () async {
     final root = Directory('${tmp.path}/src/Photos');
     final files = {

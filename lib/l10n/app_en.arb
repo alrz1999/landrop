@@ -2376,5 +2376,217 @@
   "wifiJoinCameraFailed": "The camera could not start. Type the name and password below instead.",
   "@wifiJoinCameraFailed": {
     "description": "Join by QR: the camera preview failed to start."
+  },
+  "transferCancelled": "Cancelled",
+  "@transferCancelled": {
+    "description": "Transfer card status: stopped by either side (Cancel button)."
+  },
+  "transferSentTo": "Sent to {name}",
+  "@transferSentTo": {
+    "description": "Transfer card title when an outgoing transfer is done.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferReceivedFrom": "Received from {name}",
+  "@transferReceivedFrom": {
+    "description": "Transfer card title when an incoming transfer is done.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferPercent": "{percent}%",
+  "@transferPercent": {
+    "description": "Transfer card status while running, before the speed is known. {percent} is already formatted (Persian digits in fa).",
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "transferPercentSpeed": "{percent}% · {speed}",
+  "@transferPercentSpeed": {
+    "description": "Transfer card status while running: percent and speed (e.g. 4.2 MB/s).",
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "transferTimeLeft": "{time} left",
+  "@transferTimeLeft": {
+    "description": "Transfer card: estimated time left (e.g. \"1 min left\").",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "transferCancelAction": "Cancel",
+  "@transferCancelAction": {
+    "description": "Transfer card button that stops a running transfer."
+  },
+  "transferCancelling": "Cancelling…",
+  "@transferCancelling": {
+    "description": "Transfer card status after Cancel, until the other side has stopped."
+  },
+  "transferOpen": "Open",
+  "@transferOpen": {
+    "description": "Transfer card button: opens the received file (or the folder for several files)."
+  },
+  "transferShowInFolder": "Show in folder",
+  "@transferShowInFolder": {
+    "description": "Transfer card button: shows the received file in the file manager."
+  },
+  "transferCopyPath": "Copy path",
+  "@transferCopyPath": {
+    "description": "Transfer card button (phones): copies where the received files are."
+  },
+  "transferPathCopied": "Path copied",
+  "@transferPathCopied": {
+    "description": "Snackbar after Copy path."
+  },
+  "transferOpenFailed": "Couldn't open it. The files are in {path}.",
+  "@transferOpenFailed": {
+    "description": "Snackbar when Open / Show in folder failed; {path} stays left to right.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "transferAutoAccepted": "Accepted automatically",
+  "@transferAutoAccepted": {
+    "description": "Transfer card note on a transfer accepted without asking (trusted device)."
+  },
+  "transferFileFailed": "Failed",
+  "@transferFileFailed": {
+    "description": "Transfer card: a single file that failed."
+  },
+  "incomingFirstTime": "First time from this device",
+  "@incomingFirstTime": {
+    "description": "Incoming dialog badge: never accepted files from this device before."
+  },
+  "incomingTrusted": "Trusted device",
+  "@incomingTrusted": {
+    "description": "Incoming dialog badge: files were accepted from this device before (same security code)."
+  },
+  "incomingUnverified": "Identity not confirmed",
+  "@incomingUnverified": {
+    "description": "Incoming dialog badge: the sender could not prove which device it is (e.g. another app)."
+  },
+  "incomingAlwaysAccept": "Always accept from this device",
+  "@incomingAlwaysAccept": {
+    "description": "Incoming dialog checkbox: accept future transfers from this device without asking."
+  },
+  "incomingAliasWarning": "This device uses the name of \"{name}\" but is not the same device.",
+  "@incomingAliasWarning": {
+    "description": "Incoming dialog warning: the sender has the name of a trusted device but another security code.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingChangeFolder": "Change",
+  "@incomingChangeFolder": {
+    "description": "Incoming dialog: button next to the save folder, opens Settings."
+  },
+  "incomingDetails": "Details",
+  "@incomingDetails": {
+    "description": "Incoming dialog: expands the address and security code of the sender."
+  },
+  "autoAcceptedSnack": "Accepted from {name} automatically",
+  "@autoAcceptedSnack": {
+    "description": "Snackbar when a trusted device's transfer was accepted without asking.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "autoAcceptStop": "Stop auto-accept",
+  "@autoAcceptStop": {
+    "description": "Snackbar / transfer card action: ask again next time for this device."
+  },
+  "settingsTrustedDevices": "Trusted devices",
+  "@settingsTrustedDevices": {
+    "description": "Settings row and page title: devices files were accepted from."
+  },
+  "settingsTrustedDevicesSub": "{count, plural, =0{None yet} =1{1 device} other{{count} devices}}",
+  "@settingsTrustedDevicesSub": {
+    "description": "Settings row subtitle: number of trusted devices.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "trustedEmpty": "Devices you accept files from appear here.",
+  "@trustedEmpty": {
+    "description": "Trusted devices page without devices."
+  },
+  "trustedIntro": "A device counts as the same only with the same security code, never by its name alone.",
+  "@trustedIntro": {
+    "description": "Trusted devices page: how trust works."
+  },
+  "trustedAutoAccept": "Accept automatically",
+  "@trustedAutoAccept": {
+    "description": "Trusted devices page: switch per device."
+  },
+  "trustedAutoAcceptSub": "Saved without asking. You'll see a notice each time.",
+  "@trustedAutoAcceptSub": {
+    "description": "Trusted devices page: subtitle of the auto-accept switch."
+  },
+  "trustedRename": "Rename",
+  "@trustedRename": {
+    "description": "Trusted devices page: rename button (display name only)."
+  },
+  "trustedRenameLabel": "Name shown on this device",
+  "@trustedRenameLabel": {
+    "description": "Rename dialog field label."
+  },
+  "trustedRemove": "Remove",
+  "@trustedRemove": {
+    "description": "Trusted devices page: forget this device."
+  },
+  "trustedRemoved": "{name} removed",
+  "@trustedRemoved": {
+    "description": "Snackbar after removing a trusted device.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trustedDeviceName": "Device name: {alias}",
+  "@trustedDeviceName": {
+    "description": "Trusted devices page: the name the device announces, when renamed here.",
+    "placeholders": {
+      "alias": {
+        "type": "String"
+      }
+    }
+  },
+  "trustedLarge": "Also accept large transfers automatically",
+  "@trustedLarge": {
+    "description": "Trusted devices page: switch that lifts the size limit for auto-accept."
+  },
+  "trustedLargeSub": "Off: transfers over {size} always ask.",
+  "@trustedLargeSub": {
+    "description": "Trusted devices page: subtitle of the large-transfer switch.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
   }
 }

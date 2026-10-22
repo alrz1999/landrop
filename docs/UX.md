@@ -1034,7 +1034,9 @@ English copy byte-identical until a step explicitly changes copy, and update the
 l10n work; 235 after L1/L5/R1-infra: +22 in `test/l10n_test.dart`, +1 send error-code test in
 `test/core_test.dart`; the suite total also includes tests added by parallel steps; 262 after
 the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens; 295 after U4 and L4: +22 in
-`test/connect_helper_test.dart`, +11 in `test/l10n_test.dart`).
+`test/connect_helper_test.dart`, +11 in `test/l10n_test.dart`; 344 after U6 and U7: +3 in
+`test/core_test.dart`, +24 in the new `test/transfer_test.dart`, +15 in the new
+`test/trust_test.dart`, +7 in `test/l10n_test.dart`).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1235,6 +1237,65 @@ messages. *Gaps:* the Android notification texts are L6; the copied report stays
 `AppController.lastError` for core start/send failures is the raw exception text (technical, shown
 only in Advanced); Persian OS paths need a native review on real Samsung/Xiaomi menus.
 
+**U6 implemented:** core `LanDropCore.cancelSession(sessionId)` (api, real core, `FakeCore`):
+on the sending side it aborts the running upload, posts `/cancel` with the `cancelSecret` and
+`sendFiles` returns `SendErrorCode.cancelled`; on the receiving side it ends the session, deletes the
+`.part` files and refuses further uploads (the running upload is answered 409 / dropped, later
+uploads and `upload-status` get 403), so the sender stops with `cancelled`. Every unfinished file
+gets a final `TransferProgress` with the new `errorCode` (`cancelled`, `timeout` for an idle
+receive session); finished received files carry `savedPath` (the unique name actually used). The
+sender now emits a 0-byte event for every file right after the receiver accepts, so totals (and
+time left) are known at once. `AppController.cancel(session)` (also before the receiver accepted:
+cancelled as soon as the session id arrives), `TransferSession.state` (`TransferState`: waiting,
+running, done, declined, cancelled, failed), `SpeedMeter` (3 s window, injectable `clock`),
+`speed`, `timeLeft`, `openPath`, a history of at most `AppController.maxHistory` (20) finished
+transfers ("Clear finished" unchanged). `TransferSessionCard`: title "To / From {name}", "Sent to /
+Received from {name}" when done (`title-<id>`); a state icon (`stateIcon-<id>`: hourglass, swap,
+check, block, cancel, error) and text (`status-<id>`: "Waiting for {name} to accept…", "64% · 4.2
+MB/s", "Done", "Declined by {name}", "Cancelled", "Failed: {localized reason}"), never colour
+alone; "{time} left" (`timeLeft-<id>`); overall bar + "n of m files" for every multi-file transfer,
+per-file bars, per-file "Cancelled"/"Failed" instead of the raw English error; `cancel-<id>`
+("Cancel", then "Cancelling…"); "Accepted automatically" (`autoAccepted-<id>`) with
+`stopAutoAccept-<id>`. Received and done: `open-<id>` ("Open": the file, or the folder holding
+several files) and `reveal-<id>` ("Show in folder") through the injectable `FileOpener`
+(`lib/ui/file_opener.dart`, `SystemFileOpener`: `open` / `open -R` on macOS, `explorer` /
+`explorer /select,` on Windows, `xdg-open` (file / its folder) on Linux, arguments without a shell,
+absolute paths only; a failure shows "Couldn't open it. The files are in {path}."). *Gaps:* Android
+and iOS have no "Open" without a new dependency (a `FileProvider` / document-interaction plugin):
+`canOpen` is false there and the card shows the full saved path (`savedTo-<id>`, LTR) with
+`copyPath-<id>` ("Copy path"); no "Try again" / "Details" on failed cards; cancelling while the
+receiver's dialog is still open only takes effect once it accepts (the dialog stays up there);
+speed is computed from progress events (every 256 KB), so it is not updated during a full stall;
+Open / Show in folder were not tried on real Windows/Linux desktops.
+
+**U7 implemented:** the incoming dialog (`showIncomingDecision`, `IncomingDecision`;
+`showIncomingDialog` stays as a bool wrapper) shows the sender name (auto direction), kind
+(`incomingSender`, unchanged), a badge `incomingBadge-<firstTime|trusted|unverified>` ("First time
+from this device", "Trusted device", "Identity not confirmed"; none for browsers), the strong
+warning `incomingAliasWarning` ('This device uses the name of "{name}" but is not the same
+device.') when the sender uses the name or display name of a trusted device without being it,
+the files, "Saves to {folder}" with `incomingChangeFolder` ("Change", opens Settings over the
+dialog; the line follows the new folder), `alwaysAccept` ("Always accept from this device") only
+for a proven device never accepted before and never next to the warning, and the address and
+security code only under the collapsed `incomingDetails` (`incomingAddress`,
+`incomingSecurityCode`). Buttons got keys `incomingDecline` / `incomingAccept`. Trust store:
+`TrustedDevice {fingerprint, alias, trustedAt, autoAccept, displayName?}` in the settings JSON
+(`trustedDevices`, plus `autoAcceptLarge`) through `SettingsStore`; accepting a proven device
+remembers it ("Trusted" next time), the box turns on auto-accept. The decision is made in
+`AppController` before any dialog (`shouldAutoAccept`): only a sender that proved its fingerprint
+(`IncomingRequest.verified`, the new signed prepare-upload, DESIGN.md 2.5), never by name, never
+browsers, never without a save folder, never above `AppController.autoAcceptMaxBytes` (2 GB)
+unless "Also accept large transfers automatically" (`autoAcceptLargeSwitch`) is on. An
+auto-accepted transfer shows the snackbar `autoAcceptSnack` "Accepted from {name} automatically"
+with "Stop auto-accept", and the card note. Settings ▸ `trustedDevicesSettings` ("Trusted devices",
+count) opens `TrustedDevicesPage` (`trusted-<fp>`, name, "Device name: …" when renamed, security
+code LTR, `autoAccept-<fp>`, `rename-<fp>` (display name only), `remove-<fp>`, `trustedEmpty`).
+*Gaps:* every accepted proven device is listed as trusted (there is no separate "recent devices"
+list yet, U9); a plain LocalSend sender and LanDrop versions before this change are always
+"Identity not confirmed" and can never be auto-accepted; the dialog does not close itself when
+the core times the request out; no "trusted" mark on the device list on home; trust is not
+time-limited.
+
 Order: L1 → L2 → L3 → L5 → L4 → L6 → L7 → R1 → R2 → U1 → U3 → U2 → U5 → U4 → U6 → U7 → U8 → U9 →
 U10. L4 is after L5 because the wizards show `FindingTile`. Each step is a separate PR and can ship.
 Rough total: 6-8 developer-weeks including translation review.
@@ -1283,7 +1344,8 @@ Each under an hour, no new dependency, existing tests stay green or need a one-l
 ## 8. Open questions for the product owner
 
 1. **Trusted devices with auto-accept**: acceptable from a security point of view, and should it be
-   per device, time-limited, or not offered at all?
+   per device, time-limited, or not offered at all? *Decided:* optional, per device, off by
+   default, a notice on every auto-accepted transfer (implemented in U7, not time-limited).
 2. **Android storage**: keep "All files access" (with the new pre-prompt) or move received files to
    the Storage Access Framework / MediaStore, which avoids the restricted permission and allows a
    Google Play release (DESIGN.md 8 asks the same)?

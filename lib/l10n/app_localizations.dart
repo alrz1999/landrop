@@ -2965,6 +2965,228 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The camera could not start. Type the name and password below instead.'**
   String get wifiJoinCameraFailed;
+
+  /// Transfer card status: stopped by either side (Cancel button).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get transferCancelled;
+
+  /// Transfer card title when an outgoing transfer is done.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent to {name}'**
+  String transferSentTo(String name);
+
+  /// Transfer card title when an incoming transfer is done.
+  ///
+  /// In en, this message translates to:
+  /// **'Received from {name}'**
+  String transferReceivedFrom(String name);
+
+  /// Transfer card status while running, before the speed is known. {percent} is already formatted (Persian digits in fa).
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String transferPercent(String percent);
+
+  /// Transfer card status while running: percent and speed (e.g. 4.2 MB/s).
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% · {speed}'**
+  String transferPercentSpeed(String percent, String speed);
+
+  /// Transfer card: estimated time left (e.g. "1 min left").
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String transferTimeLeft(String time);
+
+  /// Transfer card button that stops a running transfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get transferCancelAction;
+
+  /// Transfer card status after Cancel, until the other side has stopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling…'**
+  String get transferCancelling;
+
+  /// Transfer card button: opens the received file (or the folder for several files).
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get transferOpen;
+
+  /// Transfer card button: shows the received file in the file manager.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in folder'**
+  String get transferShowInFolder;
+
+  /// Transfer card button (phones): copies where the received files are.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy path'**
+  String get transferCopyPath;
+
+  /// Snackbar after Copy path.
+  ///
+  /// In en, this message translates to:
+  /// **'Path copied'**
+  String get transferPathCopied;
+
+  /// Snackbar when Open / Show in folder failed; {path} stays left to right.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open it. The files are in {path}.'**
+  String transferOpenFailed(String path);
+
+  /// Transfer card note on a transfer accepted without asking (trusted device).
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted automatically'**
+  String get transferAutoAccepted;
+
+  /// Transfer card: a single file that failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get transferFileFailed;
+
+  /// Incoming dialog badge: never accepted files from this device before.
+  ///
+  /// In en, this message translates to:
+  /// **'First time from this device'**
+  String get incomingFirstTime;
+
+  /// Incoming dialog badge: files were accepted from this device before (same security code).
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted device'**
+  String get incomingTrusted;
+
+  /// Incoming dialog badge: the sender could not prove which device it is (e.g. another app).
+  ///
+  /// In en, this message translates to:
+  /// **'Identity not confirmed'**
+  String get incomingUnverified;
+
+  /// Incoming dialog checkbox: accept future transfers from this device without asking.
+  ///
+  /// In en, this message translates to:
+  /// **'Always accept from this device'**
+  String get incomingAlwaysAccept;
+
+  /// Incoming dialog warning: the sender has the name of a trusted device but another security code.
+  ///
+  /// In en, this message translates to:
+  /// **'This device uses the name of \"{name}\" but is not the same device.'**
+  String incomingAliasWarning(String name);
+
+  /// Incoming dialog: button next to the save folder, opens Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get incomingChangeFolder;
+
+  /// Incoming dialog: expands the address and security code of the sender.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get incomingDetails;
+
+  /// Snackbar when a trusted device's transfer was accepted without asking.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted from {name} automatically'**
+  String autoAcceptedSnack(String name);
+
+  /// Snackbar / transfer card action: ask again next time for this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop auto-accept'**
+  String get autoAcceptStop;
+
+  /// Settings row and page title: devices files were accepted from.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted devices'**
+  String get settingsTrustedDevices;
+
+  /// Settings row subtitle: number of trusted devices.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{None yet} =1{1 device} other{{count} devices}}'**
+  String settingsTrustedDevicesSub(int count);
+
+  /// Trusted devices page without devices.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices you accept files from appear here.'**
+  String get trustedEmpty;
+
+  /// Trusted devices page: how trust works.
+  ///
+  /// In en, this message translates to:
+  /// **'A device counts as the same only with the same security code, never by its name alone.'**
+  String get trustedIntro;
+
+  /// Trusted devices page: switch per device.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept automatically'**
+  String get trustedAutoAccept;
+
+  /// Trusted devices page: subtitle of the auto-accept switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved without asking. You\'ll see a notice each time.'**
+  String get trustedAutoAcceptSub;
+
+  /// Trusted devices page: rename button (display name only).
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get trustedRename;
+
+  /// Rename dialog field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Name shown on this device'**
+  String get trustedRenameLabel;
+
+  /// Trusted devices page: forget this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get trustedRemove;
+
+  /// Snackbar after removing a trusted device.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} removed'**
+  String trustedRemoved(String name);
+
+  /// Trusted devices page: the name the device announces, when renamed here.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name: {alias}'**
+  String trustedDeviceName(String alias);
+
+  /// Trusted devices page: switch that lifts the size limit for auto-accept.
+  ///
+  /// In en, this message translates to:
+  /// **'Also accept large transfers automatically'**
+  String get trustedLarge;
+
+  /// Trusted devices page: subtitle of the large-transfer switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Off: transfers over {size} always ask.'**
+  String trustedLargeSub(String size);
 }
 
 class _AppLocalizationsDelegate

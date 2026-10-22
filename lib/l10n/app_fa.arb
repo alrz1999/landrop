@@ -848,5 +848,136 @@
   "helperOtherWays": "راه‌های دیگر",
   "helperTryAnother": "راه دیگری را امتحان کنید",
   "helperCopyReport": "کپی گزارش اتصال",
-  "wifiJoinCameraFailed": "دوربین روشن نشد. به‌جای آن، نام و رمز را در پایین وارد کنید."
+  "wifiJoinCameraFailed": "دوربین روشن نشد. به‌جای آن، نام و رمز را در پایین وارد کنید.",
+  "transferCancelled": "لغو شد",
+  "transferSentTo": "به {name} فرستاده شد",
+  "@transferSentTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferReceivedFrom": "از {name} دریافت شد",
+  "@transferReceivedFrom": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "transferPercent": "٪{percent}",
+  "@transferPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "transferPercentSpeed": "٪{percent} · {speed}",
+  "@transferPercentSpeed": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "transferTimeLeft": "{time} مانده",
+  "@transferTimeLeft": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "transferCancelAction": "لغو",
+  "transferCancelling": "در حال لغو…",
+  "transferOpen": "باز کردن",
+  "transferShowInFolder": "نمایش در پوشه",
+  "transferCopyPath": "کپی مسیر",
+  "transferPathCopied": "مسیر کپی شد",
+  "transferOpenFailed": "باز نشد. فایل‌ها در {path} هستند.",
+  "@transferOpenFailed": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "transferAutoAccepted": "به‌طور خودکار پذیرفته شد",
+  "transferFileFailed": "ناموفق",
+  "incomingFirstTime": "اولین بار از این دستگاه",
+  "incomingTrusted": "دستگاه مورد اعتماد",
+  "incomingUnverified": "هویت تأیید نشده",
+  "@incomingUnverified": {
+    "description": "REVIEW: «هویت» for the device identity; alternative «دستگاه شناسایی نشد»."
+  },
+  "incomingAlwaysAccept": "همیشه از این دستگاه بپذیر",
+  "incomingAliasWarning": "این دستگاه از نام «{name}» استفاده می‌کند، اما همان دستگاه نیست.",
+  "@incomingAliasWarning": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingChangeFolder": "تغییر",
+  "incomingDetails": "جزئیات",
+  "autoAcceptedSnack": "دریافت از {name} به‌طور خودکار پذیرفته شد",
+  "@autoAcceptedSnack": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "autoAcceptStop": "توقف پذیرش خودکار",
+  "settingsTrustedDevices": "دستگاه‌های مورد اعتماد",
+  "settingsTrustedDevicesSub": "{count, plural, =0{هنوز هیچ دستگاهی} other{{count} دستگاه}}",
+  "@settingsTrustedDevicesSub": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "trustedEmpty": "دستگاه‌هایی که از آن‌ها فایل می‌پذیرید، اینجا نمایش داده می‌شوند.",
+  "trustedIntro": "دستگاه فقط با همان کد امنیتی، همان دستگاه به شمار می‌آید، نه فقط با نامش.",
+  "@trustedIntro": {
+    "description": "REVIEW: wording of the trust rule; «کد امنیتی» as in 4.12."
+  },
+  "trustedAutoAccept": "پذیرش خودکار",
+  "trustedAutoAcceptSub": "بدون پرسش ذخیره می‌شود. هر بار یک اعلان می‌بینید.",
+  "trustedRename": "تغییر نام",
+  "trustedRenameLabel": "نامی که در این دستگاه نشان داده می‌شود",
+  "trustedRemove": "حذف",
+  "trustedRemoved": "{name} حذف شد",
+  "@trustedRemoved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trustedDeviceName": "نام دستگاه: {alias}",
+  "@trustedDeviceName": {
+    "placeholders": {
+      "alias": {
+        "type": "String"
+      }
+    }
+  },
+  "trustedLarge": "انتقال‌های بزرگ هم خودکار پذیرفته شوند",
+  "trustedLargeSub": "خاموش: برای انتقال‌های بیش از {size} همیشه پرسیده می‌شود.",
+  "@trustedLargeSub": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  }
 }

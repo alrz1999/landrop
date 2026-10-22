@@ -25,9 +25,18 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 ## Endpoints (all HTTPS, self-signed cert)
 - GET  /api/localsend/v2/info -> device info
 - POST /api/localsend/v2/register -> device info (response = own info)
-- POST /api/localsend/v2/prepare-upload  body { info, files: { id: {id,fileName,size,fileType,sha256?} } }
+- POST /api/localsend/v2/prepare-upload  body { info, files: { id: {id,fileName,size,fileType,sha256?} },
+    landropProof? }
     -> 200 { sessionId, files: { id: token }, cancelSecret } | 403 declined | 409 busy
     `cancelSecret` (LanDrop extra field) is a per-session secret; only the sender gets it.
+    `landropProof` (LanDrop extra field, "Sender proof"): { cert: base64 DER of the sender's TLS
+    certificate, sig: base64 RSA PKCS#1 v1.5 SHA-256 signature }. Signed bytes = UTF-8 of
+    `landrop-prepare-v1\n<receiver fingerprint>\n<sender fingerprint>\n<digest>` where digest =
+    lowercase hex SHA-256 of the files sorted by id, each as `<id>\t<fileName>\t<size>\n` (the
+    values as sent, before any sanitising). The receiver treats the sender's fingerprint as proven
+    only when sha256(cert) equals `info.fingerprint` and the signature verifies; a missing or wrong
+    proof is not an error (the request is handled as from an unverified sender, e.g. LocalSend),
+    but only proven fingerprints count for trust and auto-accept.
     `fileName` may be a relative path with `/` (folder transfer, e.g. `Photos/2024/a.jpg`).
 - POST /api/localsend/v2/upload?sessionId=&fileId=&token=[&offset=N]   body = raw bytes
     -> 200 | 400 (short or oversized body) | 403 bad session/token | 409 { received } (offset mismatch,
@@ -38,6 +47,9 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
     -> 200 | 403 when the session is unknown or the secret is missing/wrong.
     (A sender that does not know `cancelSecret`, e.g. an official LocalSend client, cannot cancel;
     the receiver then drops the session after its idle timeout.)
+    The receiver can also end a session itself (its user pressed Cancel): the running upload is
+    answered 409 (or the connection drops) at the next chunk, and every later upload and
+    upload-status of that session gets 403, which a LanDrop sender reports as "cancelled".
 
 ## LanDrop extensions (ignored by LocalSend clients)
 - Capability record, in the info JSON as `landrop` and at GET /api/landrop/v1/capabilities:

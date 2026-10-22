@@ -11,6 +11,7 @@ import 'l10n.dart';
 import 'ltr_text.dart';
 import 'pickers.dart';
 import 'shares.dart';
+import 'trusted_devices.dart';
 import 'widgets.dart';
 
 export 'advanced_settings.dart';
@@ -177,6 +178,18 @@ class SettingsPage extends StatelessWidget {
                 subtitle: Text(languageName(l, c.locale)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _pickLanguage(context, c),
+              ),
+              ListTile(
+                key: const Key('trustedDevicesSettings'),
+                leading: const Icon(Icons.verified_user_outlined),
+                title: Text(l.settingsTrustedDevices),
+                subtitle:
+                    Text(l.settingsTrustedDevicesSub(c.trustedDevices.length)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const TrustedDevicesPage())),
               ),
               SectionHeader(l.settingsSectionConnect),
               ListTile(

@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
 import 'background_service.dart';
+import 'file_opener.dart';
 import 'hotspot_service.dart';
 import 'l10n.dart' show englishStrings;
 import 'multicast_lock.dart';
@@ -78,8 +79,52 @@ class FileTransfer {
   int sent = 0;
   bool done = false;
   String? error;
+  SendErrorCode? errorCode;
+
+  /// Receiving side: where the finished file was saved.
+  String? savedPath;
 
   double get fraction => total <= 0 ? (done ? 1 : 0) : (sent / total).clamp(0, 1);
+}
+
+/// Bytes per second over a short moving window (UX.md 3.8: 3 s), from
+/// (time, bytes so far) samples. UI only; the core reports bytes.
+class SpeedMeter {
+  SpeedMeter({this.window = const Duration(seconds: 3)});
+  final Duration window;
+  final List<(DateTime, int)> _samples = [];
+
+  void add(DateTime at, int bytes) {
+    if (_samples.isNotEmpty && bytes < _samples.last.$2) _samples.clear();
+    _samples.add((at, bytes));
+    // Keep one sample at or before the start of the window.
+    while (_samples.length > 2 && at.difference(_samples[1].$1) >= window) {
+      _samples.removeAt(0);
+    }
+  }
+
+  /// Null until the samples span at least half a second.
+  double? get bytesPerSecond {
+    if (_samples.length < 2) return null;
+    final (t0, b0) = _samples.first;
+    final (t1, b1) = _samples.last;
+    final ms = t1.difference(t0).inMilliseconds;
+    if (ms < 500) return null;
+    return (b1 - b0) * 1000 / ms;
+  }
+}
+
+/// What a transfer card shows (UX.md 3.8). Declined, cancelled, failed and
+/// done are told apart by icon and text, not only colour.
+enum TransferState {
+  waiting,
+  running,
+  done,
+  declined,
+  cancelled,
+  failed;
+
+  bool get isFinal => index >= done.index;
 }
 
 class TransferSession {
@@ -87,27 +132,184 @@ class TransferSession {
     required this.sessionId,
     required this.incoming,
     required this.peerAlias,
+    this.peerFingerprint = '',
     this.savedTo,
+    this.autoAccepted = false,
   });
 
   String sessionId;
   final bool incoming;
   final String peerAlias;
+  final String peerFingerprint;
   final String? savedTo;
+
+  /// Accepted without asking (trusted device with "Always accept"); the
+  /// card says so (UX.md 3.7).
+  final bool autoAccepted;
   final Map<String, FileTransfer> files = {};
   final DateTime started = DateTime.now();
+  final SpeedMeter meter = SpeedMeter();
 
   bool? result; // outgoing: send() result
   String? error; // outgoing: why send() failed (English, technical)
   SendErrorCode? errorCode; // outgoing: why send() failed, for the UI
 
+  /// Cancel was pressed before the receiver accepted (no session id yet).
+  bool cancelRequested = false;
+
+  int get sentBytes => files.values.fold(0, (a, f) => a + f.sent);
+  int get totalBytes => files.values.fold(0, (a, f) => a + f.total);
+
+  TransferState get state {
+    if (!incoming) {
+      return switch (result) {
+        true => TransferState.done,
+        false => switch (errorCode) {
+            SendErrorCode.declined => TransferState.declined,
+            SendErrorCode.cancelled => TransferState.cancelled,
+            _ => TransferState.failed,
+          },
+        null => files.isEmpty ? TransferState.waiting : TransferState.running,
+      };
+    }
+    if (files.isEmpty ||
+        !files.values.every((f) => f.done || f.error != null)) {
+      return TransferState.running;
+    }
+    final failed = files.values.where((f) => f.error != null);
+    if (failed.isEmpty) return TransferState.done;
+    return failed.any((f) => f.errorCode == SendErrorCode.cancelled)
+        ? TransferState.cancelled
+        : TransferState.failed;
+  }
+
+  /// Why it failed, for [localizeSendError].
+  SendErrorCode? get failureCode => incoming
+      ? files.values
+          .where((f) => f.error != null)
+          .map((f) => f.errorCode ?? SendErrorCode.unknown)
+          .firstOrNull
+      : errorCode;
+
   /// Incoming: every file finished. Outgoing: send() returned (files appear
   /// one at a time as the core starts them, so they cannot tell).
-  bool get done => incoming
-      ? files.isNotEmpty &&
-          files.values.every((f) => f.done || f.error != null)
-      : result != null;
+  bool get done => state.isFinal;
   bool get hasError => files.values.any((f) => f.error != null);
+
+  /// Smoothed speed while running, else null.
+  double? get speed =>
+      state == TransferState.running ? meter.bytesPerSecond : null;
+
+  /// Estimated time left while running and the speed is known.
+  Duration? get timeLeft {
+    final s = speed;
+    final left = totalBytes - sentBytes;
+    if (s == null || s <= 0 || left <= 0) return null;
+    return Duration(seconds: (left / s).ceil());
+  }
+
+  /// Receiving: where the finished files are.
+  List<String> get savedPaths => [
+        for (final f in files.values)
+          if (f.savedPath != null) f.savedPath!
+      ];
+
+  /// What "Open" opens: the file when there is one, else the folder that
+  /// holds them all (a received folder, or the save folder).
+  String? get openPath {
+    final p = savedPaths;
+    if (p.isEmpty) return savedTo;
+    return p.length == 1 ? p.single : commonDirectory(p) ?? savedTo;
+  }
+}
+
+/// The deepest directory containing every path in [paths] (separators as
+/// in the paths), or null when there is none.
+String? commonDirectory(List<String> paths) {
+  if (paths.isEmpty) return null;
+  final sep = paths.first.contains('\\') && !paths.first.contains('/')
+      ? '\\'
+      : '/';
+  List<String> dirOf(String p) {
+    final parts = p.split(RegExp(r'[\\/]'));
+    return parts.sublist(0, parts.length - 1);
+  }
+
+  var common = dirOf(paths.first);
+  for (final p in paths.skip(1)) {
+    final d = dirOf(p);
+    var i = 0;
+    while (i < common.length && i < d.length && common[i] == d[i]) {
+      i++;
+    }
+    common = common.sublist(0, i);
+  }
+  if (common.isEmpty || (common.length == 1 && common.first.isEmpty)) {
+    return null;
+  }
+  return common.join(sep);
+}
+
+/// A device the user accepted files from (UX.md 3.7, step U7). Stored in
+/// the settings JSON under `trustedDevices`. [fingerprint] is the identity;
+/// [alias] is the name the device announced, [displayName] the user's own
+/// name for it (display only, never used for decisions).
+class TrustedDevice {
+  TrustedDevice({
+    required this.fingerprint,
+    required this.alias,
+    required this.trustedAt,
+    this.autoAccept = false,
+    this.displayName,
+  });
+
+  final String fingerprint;
+  String alias;
+  final DateTime trustedAt;
+  bool autoAccept;
+  String? displayName;
+
+  String get name =>
+      displayName == null || displayName!.trim().isEmpty ? alias : displayName!;
+
+  Map<String, dynamic> toJson() => {
+        'fingerprint': fingerprint,
+        'alias': alias,
+        'trustedAt': trustedAt.toUtc().toIso8601String(),
+        'autoAccept': autoAccept,
+        'displayName': ?displayName,
+      };
+
+  static TrustedDevice? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final fp = j['fingerprint'], alias = j['alias'];
+    if (fp is! String || fp.isEmpty || alias is! String) return null;
+    final at = j['trustedAt'];
+    final name = j['displayName'];
+    return TrustedDevice(
+      fingerprint: fp,
+      alias: alias,
+      trustedAt: (at is String ? DateTime.tryParse(at) : null) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      autoAccept: j['autoAccept'] == true,
+      displayName: name is String ? name : null,
+    );
+  }
+}
+
+/// How the incoming dialog presents the sender (UX.md 3.7).
+enum SenderTrust {
+  /// A web browser: never trusted, never auto-accepted.
+  browser,
+
+  /// The sender did not prove its fingerprint (e.g. a plain LocalSend app).
+  unverified,
+
+  /// A proven fingerprint never accepted before.
+  firstTime,
+
+  /// A proven fingerprint the user accepted before.
+  trusted,
 }
 
 enum CoreStatus { stopped, starting, running, error }
@@ -125,14 +327,32 @@ class AppController extends ChangeNotifier {
     StatusNotifier? statusNotifier,
     HotspotService? hotspotService,
     this.hotspotSettleDelay = const Duration(seconds: 1),
+    FileOpener? fileOpener,
+    DateTime Function()? clock,
   })  : _store = store ?? const SettingsStore(),
         _saveDir = initialSaveDir ?? '',
         _alias = initialAlias ?? _defaultAlias(),
         _statusNotifier = statusNotifier ?? _defaultStatusNotifier,
-        hotspotService = hotspotService ?? HotspotService();
+        hotspotService = hotspotService ?? HotspotService(),
+        fileOpener = fileOpener ?? SystemFileOpener(),
+        _clock = clock ?? DateTime.now;
 
   final LanDropCore core;
   final SettingsStore _store;
+
+  /// "Open" / "Show in folder" for received files (test seam).
+  final FileOpener fileOpener;
+
+  /// Time source for the speed meter (test seam).
+  final DateTime Function() _clock;
+
+  /// Finished transfers kept on the home page (oldest dropped first);
+  /// running ones are never dropped.
+  static const maxHistory = 20;
+
+  /// Transfers larger than this are never accepted automatically, even from
+  /// a trusted device, unless [autoAcceptLarge] is on (UX.md 3.7).
+  static const autoAcceptMaxBytes = 2 * 1024 * 1024 * 1024; // 2 GB
 
   /// Android local-only hotspot (test seam).
   final HotspotService hotspotService;
@@ -178,6 +398,11 @@ class AppController extends ChangeNotifier {
 
   final _incomingCtrl = StreamController<IncomingRequest>.broadcast();
   final _pairingCtrl = StreamController<WebPairingRequest>.broadcast();
+  final _autoAcceptedCtrl = StreamController<TransferSession>.broadcast();
+
+  /// Devices the user accepted from, by fingerprint (persisted).
+  final Map<String, TrustedDevice> _trusted = {};
+  bool _autoAcceptLarge = false;
 
   /// Active shares (DESIGN.md 4.2 mode 2), newest last.
   List<Share> shares = const [];
@@ -198,6 +423,10 @@ class AppController extends ChangeNotifier {
 
   /// Browsers asking to be paired, to approve or decline in the UI.
   Stream<WebPairingRequest> get pairingRequests => _pairingCtrl.stream;
+
+  /// Transfers accepted without asking (trusted device with "Always
+  /// accept"), so the UI can say so with a "Stop auto-accept" action.
+  Stream<TransferSession> get autoAccepted => _autoAcceptedCtrl.stream;
 
   DeviceInfo? get self {
     if (status != CoreStatus.running) return null;
@@ -317,7 +546,7 @@ class AppController extends ChangeNotifier {
       peers = _oneEntryPerDevice(p);
       _notify();
     }));
-    _subs.add(core.incoming.listen(_incomingCtrl.add));
+    _subs.add(core.incoming.listen(_onIncoming));
     _subs.add(core.progress.listen(_onProgress));
     _subs.add(core.webPairing.listen(_pairingCtrl.add));
     // Events arrive asynchronously and may be older than what createShare /
@@ -339,6 +568,16 @@ class AppController extends ChangeNotifier {
     if (s['webHttp'] is bool) _webHttp = s['webHttp'] as bool;
     if (s['keepShares'] is bool) _keepShares = s['keepShares'] as bool;
     _locale = _parseLocale(s['locale']);
+    if (s['autoAcceptLarge'] is bool) {
+      _autoAcceptLarge = s['autoAcceptLarge'] as bool;
+    }
+    final trusted = s['trustedDevices'];
+    if (trusted is List) {
+      for (final j in trusted) {
+        final t = TrustedDevice.fromJson(j);
+        if (t != null) _trusted[t.fingerprint] = t;
+      }
+    }
     if (s['saveDir'] is String && (s['saveDir'] as String).isNotEmpty) {
       _saveDir = s['saveDir'] as String;
       _customDir = true;
@@ -512,24 +751,181 @@ class AppController extends ChangeNotifier {
         'keepShares': _keepShares,
         'locale': _locale?.languageCode ?? 'system',
         if (_customDir) 'saveDir': _saveDir,
+        'trustedDevices': [for (final t in _trusted.values) t.toJson()],
+        'autoAcceptLarge': _autoAcceptLarge,
       });
 
   /// Complete an incoming request's decision and start tracking it.
-  void respond(IncomingRequest req, bool accept) {
+  /// Accepting from a device that proved its fingerprint remembers it as
+  /// trusted; [alwaysAccept] also turns on auto-accept for it.
+  void respond(IncomingRequest req, bool accept, {bool alwaysAccept = false}) =>
+      _respond(req, accept, alwaysAccept: alwaysAccept);
+
+  TransferSession? _respond(IncomingRequest req, bool accept,
+      {bool alwaysAccept = false, bool auto = false}) {
     if (!req.decision.isCompleted) req.decision.complete(accept);
-    if (!accept) return;
+    if (!accept) return null;
     final s = TransferSession(
       sessionId: req.sessionId,
       incoming: true,
       peerAlias: req.sender.alias,
+      peerFingerprint: req.verified ? req.sender.fingerprint : '',
       savedTo: _saveDir,
+      autoAccepted: auto,
     );
     for (final f in req.files) {
       s.files[f.id] = FileTransfer(f.id, f.fileName, f.size);
     }
     sessions.insert(0, s);
+    _trimHistory();
     _bind(s, req.sessionId);
+    if (trustOf(req) case SenderTrust.firstTime || SenderTrust.trusted) {
+      final fp = req.sender.fingerprint;
+      final t = _trusted[fp];
+      if (t == null) {
+        _trusted[fp] = TrustedDevice(
+            fingerprint: fp,
+            alias: req.sender.alias,
+            trustedAt: _clock(),
+            autoAccept: alwaysAccept);
+      } else {
+        t.alias = req.sender.alias;
+        if (alwaysAccept) t.autoAccept = true;
+      }
+      unawaited(_persist());
+    }
     _notify();
+    return s;
+  }
+
+  // ------------------------------------------- trusted devices (UX.md 3.7)
+
+  /// Devices the user accepted from, oldest first.
+  List<TrustedDevice> get trustedDevices => _trusted.values.toList()
+    ..sort((a, b) => a.trustedAt.compareTo(b.trustedAt));
+
+  TrustedDevice? trustedDevice(String fingerprint) => _trusted[fingerprint];
+
+  /// "Accept large transfers automatically too" (persisted, default off):
+  /// lifts [autoAcceptMaxBytes].
+  bool get autoAcceptLarge => _autoAcceptLarge;
+
+  Future<void> setAutoAcceptLarge(bool on) async {
+    if (on == _autoAcceptLarge) return;
+    _autoAcceptLarge = on;
+    await _persist();
+    _notify();
+  }
+
+  /// How the incoming dialog presents [req]'s sender. Only a proven
+  /// fingerprint ([IncomingRequest.verified]) can be first-time or trusted.
+  SenderTrust trustOf(IncomingRequest req) {
+    final d = req.sender;
+    if (d.deviceType == 'web') return SenderTrust.browser;
+    if (!req.verified || d.fingerprint.isEmpty) return SenderTrust.unverified;
+    return _trusted.containsKey(d.fingerprint)
+        ? SenderTrust.trusted
+        : SenderTrust.firstTime;
+  }
+
+  /// A trusted device whose name [req]'s sender uses although it is not
+  /// that device (another or an unproven fingerprint): the dialog warns.
+  /// Names are compared without case and surrounding spaces.
+  TrustedDevice? aliasConflict(IncomingRequest req) {
+    String norm(String s) => s.trim().toLowerCase();
+    final alias = norm(req.sender.alias);
+    if (alias.isEmpty) return null;
+    final own = trustOf(req) == SenderTrust.trusted ||
+            trustOf(req) == SenderTrust.firstTime
+        ? req.sender.fingerprint
+        : null;
+    for (final t in _trusted.values) {
+      if (t.fingerprint == own) continue;
+      if (norm(t.alias) == alias ||
+          (t.displayName != null && norm(t.displayName!) == alias)) {
+        return t;
+      }
+    }
+    return null;
+  }
+
+  /// Whether [req] is accepted without asking. Decided here, before any
+  /// dialog, by the proven fingerprint only (never the name), and never for
+  /// browsers, without a save folder, or above [autoAcceptMaxBytes] unless
+  /// [autoAcceptLarge] is on.
+  bool shouldAutoAccept(IncomingRequest req) {
+    if (trustOf(req) != SenderTrust.trusted) return false;
+    if (_trusted[req.sender.fingerprint]?.autoAccept != true) return false;
+    if (_saveDir.trim().isEmpty) return false;
+    final total = req.files.fold<int>(0, (a, f) => a + f.size);
+    if (total > autoAcceptMaxBytes && !_autoAcceptLarge) return false;
+    return true;
+  }
+
+  void _onIncoming(IncomingRequest req) {
+    if (shouldAutoAccept(req)) {
+      final s = _respond(req, true, auto: true);
+      if (s != null) _autoAcceptedCtrl.add(s);
+      return;
+    }
+    _incomingCtrl.add(req);
+  }
+
+  Future<void> setAutoAccept(String fingerprint, bool on) async {
+    final t = _trusted[fingerprint];
+    if (t == null || t.autoAccept == on) return;
+    t.autoAccept = on;
+    await _persist();
+    _notify();
+  }
+
+  /// Changes the name shown for a trusted device (display only; empty
+  /// restores the device's own name).
+  Future<void> renameTrusted(String fingerprint, String name) async {
+    final t = _trusted[fingerprint];
+    if (t == null) return;
+    final n = name.trim();
+    t.displayName = n.isEmpty ? null : n;
+    await _persist();
+    _notify();
+  }
+
+  /// Forgets a device: its next request asks again ("First time").
+  Future<void> removeTrusted(String fingerprint) async {
+    if (_trusted.remove(fingerprint) == null) return;
+    await _persist();
+    _notify();
+  }
+
+  // ------------------------------------------------------------ transfers
+
+  /// Stops a transfer in either direction (UX.md 3.8). Before the receiver
+  /// accepted (no session id yet) the send is cancelled as soon as it is.
+  Future<void> cancel(TransferSession s) async {
+    if (s.state.isFinal) return;
+    if (s.sessionId.isEmpty) {
+      s.cancelRequested = true;
+      _notify();
+      return;
+    }
+    s.cancelRequested = true;
+    _notify();
+    try {
+      await core.cancelSession(s.sessionId);
+    } catch (_) {}
+  }
+
+  /// Drops the oldest finished transfers beyond [maxHistory].
+  void _trimHistory() {
+    var finished = sessions.where((s) => s.state.isFinal).length;
+    for (var i = sessions.length - 1;
+        i >= 0 && finished > maxHistory;
+        i--) {
+      if (sessions[i].state.isFinal) {
+        sessions.removeAt(i);
+        finished--;
+      }
+    }
   }
 
   Future<DeviceInfo?> addPeerByIp(String ip, {int port = 53317}) =>
@@ -623,8 +1019,10 @@ class AppController extends ChangeNotifier {
       sessionId: '',
       incoming: false,
       peerAlias: to.alias,
+      peerFingerprint: to.fingerprint,
     );
     sessions.insert(0, s);
+    _trimHistory();
     _notify();
     SendResult res;
     try {
@@ -633,6 +1031,8 @@ class AppController extends ChangeNotifier {
         [for (final p in paths) SendItem(p)],
         onSession: (sid) {
           _bind(s, sid);
+          // Cancel was pressed while waiting for the receiver.
+          if (s.cancelRequested) unawaited(core.cancelSession(sid));
           _notify();
         },
       );
@@ -648,6 +1048,7 @@ class AppController extends ChangeNotifier {
       lastError = '$e';
     }
     s.result = res.ok;
+    _trimHistory();
     _notify();
     return res;
   }
@@ -674,6 +1075,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     _apply(s, p);
+    if (p.done) _trimHistory();
     _notify();
   }
 
@@ -685,11 +1087,14 @@ class AppController extends ChangeNotifier {
       ..sent = p.sentBytes
       ..total = p.totalBytes
       ..done = p.done
-      ..error = p.error;
+      ..error = p.error
+      ..errorCode = p.errorCode;
+    if (p.savedPath != null) f.savedPath = p.savedPath;
+    s.meter.add(_clock(), s.sentBytes);
   }
 
   void clearFinished() {
-    sessions.removeWhere((s) => s.done || s.result != null);
+    sessions.removeWhere((s) => s.state.isFinal);
     _notify();
   }
 
@@ -720,6 +1125,7 @@ class AppController extends ChangeNotifier {
     }
     _incomingCtrl.close();
     _pairingCtrl.close();
+    _autoAcceptedCtrl.close();
     if (hotspot != null) hotspotService.stop();
     core.stop().catchError((_) {});
     MulticastLock.release();

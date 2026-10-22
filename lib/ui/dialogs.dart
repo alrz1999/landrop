@@ -6,7 +6,8 @@ import 'digits.dart';
 import 'format.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
-import 'widgets.dart' show deviceKindLabel;
+import 'app_controller.dart' show SenderTrust;
+import 'widgets.dart' show AppScope, deviceKindLabel;
 
 /// The last two parts of [path] ("Download/LanDrop"), for showing where
 /// files are saved without the whole path.
@@ -43,49 +44,124 @@ List<IncomingEntry> summarizeOffers(List<FileOffer> files) {
   return out.values.toList();
 }
 
+/// The answer of the incoming dialog.
+class IncomingDecision {
+  const IncomingDecision(this.accept, {this.alwaysAccept = false});
+  final bool accept;
+
+  /// "Always accept from this device" was ticked (first accept only).
+  final bool alwaysAccept;
+}
+
 /// Accept/Decline dialog for an incoming request. Returns true on accept.
-/// The line under the title is the sender's kind ("Phone"), not its address
-/// or security code; only browsers show their IP (UX.md 7, quick win 2).
-/// With [saveDir] the dialog says where the files will go.
+/// See [showIncomingDecision].
 Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req,
-    {String? saveDir}) async {
+        {String? saveDir}) async =>
+    (await showIncomingDecision(context, req, saveDir: saveDir)).accept;
+
+/// Accept/Decline dialog for an incoming request (UX.md 3.7, step U7): the
+/// sender's name and kind ("Phone"), a "First time" / "Trusted device" /
+/// "Identity not confirmed" badge ([trust]), a strong warning when the
+/// sender uses the name of another, trusted device ([conflictName]), the
+/// files, where they will be saved (with "Change", [onChangeFolder]) and,
+/// for a proven device never accepted before, "Always accept from this
+/// device". The address and security code are under "Details", never in
+/// the main dialog; only browsers show their IP.
+Future<IncomingDecision> showIncomingDecision(
+    BuildContext context, IncomingRequest req,
+    {String? saveDir,
+    SenderTrust trust = SenderTrust.unverified,
+    String? conflictName,
+    VoidCallback? onChangeFolder}) async {
   final total = req.files.fold<int>(0, (a, f) => a + f.size);
+  var always = false;
   final res = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) {
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
       final l = ctx.l;
       final t = Theme.of(ctx).textTheme;
+      final scheme = Theme.of(ctx).colorScheme;
       final sender = req.sender;
       final name = l.isoName(sender.alias);
+      // Follows Settings when "Change" picked another folder.
+      final dir = AppScope.maybeOf(ctx)?.saveDir ?? saveDir;
+      final badge = switch (trust) {
+        SenderTrust.firstTime => (Icons.fiber_new_outlined, l.incomingFirstTime),
+        SenderTrust.trusted => (Icons.verified_user_outlined, l.incomingTrusted),
+        SenderTrust.unverified => (Icons.help_outline, l.incomingUnverified),
+        SenderTrust.browser => null,
+      };
+      final browser = sender.deviceType == 'web';
       return AlertDialog(
         key: const Key('incomingDialog'),
         icon: const Icon(Icons.download),
         title: Text(l.incomingTitle(name, req.files.length)),
         content: SizedBox(
           width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                sender.deviceType == 'web'
-                    ? (sender.deviceModel == null
-                        ? l.incomingFromBrowser(l.ltrValue(sender.ip))
-                        : l.incomingFromBrowserModel(l.ltrValue(sender.ip),
-                            l.isoName(sender.deviceModel!)))
-                    : [
-                        deviceKindLabel(l, sender.deviceType),
-                        if (sender.deviceModel != null)
-                          l.isoName(sender.deviceModel!),
-                      ].join(' · '),
-                key: const Key('incomingSender'),
-                style: t.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 320),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  browser
+                      ? (sender.deviceModel == null
+                          ? l.incomingFromBrowser(l.ltrValue(sender.ip))
+                          : l.incomingFromBrowserModel(l.ltrValue(sender.ip),
+                              l.isoName(sender.deviceModel!)))
+                      : [
+                          deviceKindLabel(l, sender.deviceType),
+                          if (sender.deviceModel != null)
+                            l.isoName(sender.deviceModel!),
+                        ].join(' · '),
+                  key: const Key('incomingSender'),
+                  style: t.bodySmall,
+                ),
+                if (badge != null)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(top: 6),
+                    child: Row(
+                      key: Key('incomingBadge-${trust.name}'),
+                      children: [
+                        Icon(badge.$1,
+                            size: 16,
+                            color: trust == SenderTrust.trusted
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Flexible(child: Text(badge.$2, style: t.labelMedium)),
+                      ],
+                    ),
+                  ),
+                if (conflictName != null)
+                  Container(
+                    key: const Key('incomingAliasWarning'),
+                    margin: const EdgeInsetsDirectional.only(top: 8),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: scheme.onErrorContainer),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                              l.incomingAliasWarning(l.isoName(conflictName)),
+                              style: t.bodyMedium?.copyWith(
+                                  color: scheme.onErrorContainer,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 280),
                   child: ListView(
                     shrinkWrap: true,
                     children: [
@@ -109,30 +185,77 @@ Future<bool> showIncomingDialog(BuildContext context, IncomingRequest req,
                     ],
                   ),
                 ),
-              ),
-              const Divider(),
-              Text(l.incomingTotal(formatBytes(total, l)),
-                  style: t.labelLarge),
-              if (saveDir != null && saveDir.isNotEmpty)
-                Text(l.incomingSavesTo(l.ltrValue(shortFolder(saveDir))),
-                    key: const Key('incomingSavesTo'), style: t.bodySmall),
-            ],
+                const Divider(),
+                Text(l.incomingTotal(formatBytes(total, l)),
+                    style: t.labelLarge),
+                if (dir != null && dir.isNotEmpty)
+                  Row(children: [
+                    Expanded(
+                      child: Text(l.incomingSavesTo(l.ltrValue(shortFolder(dir))),
+                          key: const Key('incomingSavesTo'), style: t.bodySmall),
+                    ),
+                    if (onChangeFolder != null)
+                      TextButton(
+                        key: const Key('incomingChangeFolder'),
+                        onPressed: onChangeFolder,
+                        child: Text(l.incomingChangeFolder),
+                      ),
+                  ]),
+                // Never offered next to the name warning.
+                if (trust == SenderTrust.firstTime && conflictName == null)
+                  CheckboxListTile(
+                    key: const Key('alwaysAccept'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: always,
+                    onChanged: (v) => setState(() => always = v ?? false),
+                    title: Text(l.incomingAlwaysAccept),
+                  ),
+                if (!browser && sender.fingerprint.isNotEmpty)
+                  ExpansionTile(
+                    key: const Key('incomingDetails'),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding:
+                        const EdgeInsetsDirectional.only(bottom: 8),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    title: Text(l.incomingDetails, style: t.labelLarge),
+                    children: [
+                      Text(l.detailsAddress, style: t.labelMedium),
+                      LtrText(
+                          sender.port > 0
+                              ? '${sender.ip}:${sender.port}'
+                              : sender.ip,
+                          key: const Key('incomingAddress'),
+                          selectable: true),
+                      const SizedBox(height: 6),
+                      Text(l.securityCode, style: t.labelMedium),
+                      LtrText(shortFingerprint(sender.fingerprint),
+                          key: const Key('incomingSecurityCode'),
+                          selectable: true),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(
+            key: const Key('incomingDecline'),
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(l.commonDecline),
           ),
           FilledButton(
+            key: const Key('incomingAccept'),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(l.commonAccept),
           ),
         ],
       );
-    },
+    }),
   );
-  return res ?? false;
+  final accept = res ?? false;
+  return IncomingDecision(accept, alwaysAccept: accept && always);
 }
 
 /// Approve/Decline for a browser that wants to pair. Returns true on

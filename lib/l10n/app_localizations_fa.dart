@@ -1863,4 +1863,152 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get wifiJoinCameraFailed =>
       'دوربین روشن نشد. به‌جای آن، نام و رمز را در پایین وارد کنید.';
+
+  @override
+  String get transferCancelled => 'لغو شد';
+
+  @override
+  String transferSentTo(String name) {
+    return 'به $name فرستاده شد';
+  }
+
+  @override
+  String transferReceivedFrom(String name) {
+    return 'از $name دریافت شد';
+  }
+
+  @override
+  String transferPercent(String percent) {
+    return '٪$percent';
+  }
+
+  @override
+  String transferPercentSpeed(String percent, String speed) {
+    return '٪$percent · $speed';
+  }
+
+  @override
+  String transferTimeLeft(String time) {
+    return '$time مانده';
+  }
+
+  @override
+  String get transferCancelAction => 'لغو';
+
+  @override
+  String get transferCancelling => 'در حال لغو…';
+
+  @override
+  String get transferOpen => 'باز کردن';
+
+  @override
+  String get transferShowInFolder => 'نمایش در پوشه';
+
+  @override
+  String get transferCopyPath => 'کپی مسیر';
+
+  @override
+  String get transferPathCopied => 'مسیر کپی شد';
+
+  @override
+  String transferOpenFailed(String path) {
+    return 'باز نشد. فایل‌ها در $path هستند.';
+  }
+
+  @override
+  String get transferAutoAccepted => 'به‌طور خودکار پذیرفته شد';
+
+  @override
+  String get transferFileFailed => 'ناموفق';
+
+  @override
+  String get incomingFirstTime => 'اولین بار از این دستگاه';
+
+  @override
+  String get incomingTrusted => 'دستگاه مورد اعتماد';
+
+  @override
+  String get incomingUnverified => 'هویت تأیید نشده';
+
+  @override
+  String get incomingAlwaysAccept => 'همیشه از این دستگاه بپذیر';
+
+  @override
+  String incomingAliasWarning(String name) {
+    return 'این دستگاه از نام «$name» استفاده می‌کند، اما همان دستگاه نیست.';
+  }
+
+  @override
+  String get incomingChangeFolder => 'تغییر';
+
+  @override
+  String get incomingDetails => 'جزئیات';
+
+  @override
+  String autoAcceptedSnack(String name) {
+    return 'دریافت از $name به‌طور خودکار پذیرفته شد';
+  }
+
+  @override
+  String get autoAcceptStop => 'توقف پذیرش خودکار';
+
+  @override
+  String get settingsTrustedDevices => 'دستگاه‌های مورد اعتماد';
+
+  @override
+  String settingsTrustedDevicesSub(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString دستگاه',
+      zero: 'هنوز هیچ دستگاهی',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trustedEmpty =>
+      'دستگاه‌هایی که از آن‌ها فایل می‌پذیرید، اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get trustedIntro =>
+      'دستگاه فقط با همان کد امنیتی، همان دستگاه به شمار می‌آید، نه فقط با نامش.';
+
+  @override
+  String get trustedAutoAccept => 'پذیرش خودکار';
+
+  @override
+  String get trustedAutoAcceptSub =>
+      'بدون پرسش ذخیره می‌شود. هر بار یک اعلان می‌بینید.';
+
+  @override
+  String get trustedRename => 'تغییر نام';
+
+  @override
+  String get trustedRenameLabel => 'نامی که در این دستگاه نشان داده می‌شود';
+
+  @override
+  String get trustedRemove => 'حذف';
+
+  @override
+  String trustedRemoved(String name) {
+    return '$name حذف شد';
+  }
+
+  @override
+  String trustedDeviceName(String alias) {
+    return 'نام دستگاه: $alias';
+  }
+
+  @override
+  String get trustedLarge => 'انتقال‌های بزرگ هم خودکار پذیرفته شوند';
+
+  @override
+  String trustedLargeSub(String size) {
+    return 'خاموش: برای انتقال‌های بیش از $size همیشه پرسیده می‌شود.';
+  }
 }

@@ -1875,4 +1875,152 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get wifiJoinCameraFailed =>
       'The camera could not start. Type the name and password below instead.';
+
+  @override
+  String get transferCancelled => 'Cancelled';
+
+  @override
+  String transferSentTo(String name) {
+    return 'Sent to $name';
+  }
+
+  @override
+  String transferReceivedFrom(String name) {
+    return 'Received from $name';
+  }
+
+  @override
+  String transferPercent(String percent) {
+    return '$percent%';
+  }
+
+  @override
+  String transferPercentSpeed(String percent, String speed) {
+    return '$percent% · $speed';
+  }
+
+  @override
+  String transferTimeLeft(String time) {
+    return '$time left';
+  }
+
+  @override
+  String get transferCancelAction => 'Cancel';
+
+  @override
+  String get transferCancelling => 'Cancelling…';
+
+  @override
+  String get transferOpen => 'Open';
+
+  @override
+  String get transferShowInFolder => 'Show in folder';
+
+  @override
+  String get transferCopyPath => 'Copy path';
+
+  @override
+  String get transferPathCopied => 'Path copied';
+
+  @override
+  String transferOpenFailed(String path) {
+    return 'Couldn\'t open it. The files are in $path.';
+  }
+
+  @override
+  String get transferAutoAccepted => 'Accepted automatically';
+
+  @override
+  String get transferFileFailed => 'Failed';
+
+  @override
+  String get incomingFirstTime => 'First time from this device';
+
+  @override
+  String get incomingTrusted => 'Trusted device';
+
+  @override
+  String get incomingUnverified => 'Identity not confirmed';
+
+  @override
+  String get incomingAlwaysAccept => 'Always accept from this device';
+
+  @override
+  String incomingAliasWarning(String name) {
+    return 'This device uses the name of \"$name\" but is not the same device.';
+  }
+
+  @override
+  String get incomingChangeFolder => 'Change';
+
+  @override
+  String get incomingDetails => 'Details';
+
+  @override
+  String autoAcceptedSnack(String name) {
+    return 'Accepted from $name automatically';
+  }
+
+  @override
+  String get autoAcceptStop => 'Stop auto-accept';
+
+  @override
+  String get settingsTrustedDevices => 'Trusted devices';
+
+  @override
+  String settingsTrustedDevicesSub(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString devices',
+      one: '1 device',
+      zero: 'None yet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trustedEmpty => 'Devices you accept files from appear here.';
+
+  @override
+  String get trustedIntro =>
+      'A device counts as the same only with the same security code, never by its name alone.';
+
+  @override
+  String get trustedAutoAccept => 'Accept automatically';
+
+  @override
+  String get trustedAutoAcceptSub =>
+      'Saved without asking. You\'ll see a notice each time.';
+
+  @override
+  String get trustedRename => 'Rename';
+
+  @override
+  String get trustedRenameLabel => 'Name shown on this device';
+
+  @override
+  String get trustedRemove => 'Remove';
+
+  @override
+  String trustedRemoved(String name) {
+    return '$name removed';
+  }
+
+  @override
+  String trustedDeviceName(String alias) {
+    return 'Device name: $alias';
+  }
+
+  @override
+  String get trustedLarge => 'Also accept large transfers automatically';
+
+  @override
+  String trustedLargeSub(String size) {
+    return 'Off: transfers over $size always ask.';
+  }
 }

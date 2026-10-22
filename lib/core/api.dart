@@ -140,7 +140,15 @@ class IncomingRequest {
   final DeviceInfo sender;
   final List<FileOffer> files;
   final Completer<bool> decision = Completer<bool>(); // UI completes true/false
-  IncomingRequest(this.sessionId, this.sender, this.files);
+
+  /// True when the sender proved that it holds the key of
+  /// [DeviceInfo.fingerprint] (signed prepare-upload, PROTOCOL.md "Sender
+  /// proof"). Only then may the fingerprint be used for trust decisions
+  /// such as auto-accept; otherwise it is just a claim. Always false for
+  /// browsers and plain LocalSend senders.
+  final bool verified;
+  IncomingRequest(this.sessionId, this.sender, this.files,
+      {this.verified = false});
 }
 
 class TransferProgress {
@@ -149,14 +157,28 @@ class TransferProgress {
   final int sentBytes;
   final int totalBytes;
   final bool done;
+
+  /// English technical reason (logs); null unless the file failed.
   final String? error;
+
+  /// Why the file failed, for the UI ([SendErrorCode.cancelled] after
+  /// [LanDropCore.cancelSession] on either side); null when unknown or ok.
+  final SendErrorCode? errorCode;
 
   /// Name (relative path with '/' for folder transfers) of the file, when
   /// known. Lets the UI label a file without matching on sizes.
   final String? fileName;
+
+  /// Receiving side, final event of a completed file: where it was saved
+  /// (the unique name actually used, e.g. `a (1).txt`).
+  final String? savedPath;
   const TransferProgress(this.sessionId, this.fileId, this.sentBytes,
       this.totalBytes,
-      {this.done = false, this.error, this.fileName});
+      {this.done = false,
+      this.error,
+      this.errorCode,
+      this.fileName,
+      this.savedPath});
 }
 
 /// Something to send: a file, or a directory (sent recursively, keeping
@@ -345,6 +367,16 @@ abstract class LanDropCore {
   /// emitted, so callers can attribute [progress] events by session id.
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
       {void Function(String sessionId)? onSession});
+
+  /// Stops a running transfer, in either direction (UX.md 3.8). Sending:
+  /// aborts the upload and tells the receiver (`/cancel` with the
+  /// `cancelSecret`); [sendFiles] then returns [SendErrorCode.cancelled].
+  /// Receiving: ends the session, deletes its `.part` files and refuses
+  /// further uploads, so the sender stops with [SendErrorCode.cancelled].
+  /// Either way every unfinished file gets a final [progress] event with
+  /// `errorCode` [SendErrorCode.cancelled]. Unknown or finished ids are
+  /// ignored.
+  Future<void> cancelSession(String sessionId);
 
   /// Guided diagnosis (DESIGN.md 3.7): gathers what this device observes
   /// and, when [targetIp] is given, probes that address (TCP, then TLS +

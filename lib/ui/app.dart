@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../l10n/app_localizations.dart';
 import 'app_controller.dart';
+import 'file_opener.dart';
 import 'home_page.dart';
 import 'hotspot_service.dart';
 import 'widgets.dart';
@@ -17,7 +18,11 @@ class LanDropApp extends StatefulWidget {
     this.pickFiles = defaultPickFiles,
     this.pickFolder = defaultPickFolder,
     this.hotspotService,
+    this.fileOpener,
   });
+
+  /// "Open" / "Show in folder" for received files (test seam).
+  final FileOpener? fileOpener;
 
   final LanDropCore core;
 
@@ -45,6 +50,7 @@ class _LanDropAppState extends State<LanDropApp> {
       initialSaveDir: widget.initialSaveDir,
       initialAlias: widget.initialAlias,
       hotspotService: widget.hotspotService,
+      fileOpener: widget.fileOpener,
     );
     controller.addListener(_onControllerChanged);
     controller.init();

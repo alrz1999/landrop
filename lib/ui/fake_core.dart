@@ -130,21 +130,30 @@ class FakeCore implements LanDropCore {
 
   /// Test/demo hook: simulate an incoming request. If accepted, simulated
   /// progress is emitted for each file.
+  ///
+  /// [verified] (the sender proved its fingerprint) defaults to true for a
+  /// device with a fingerprint and false for browsers, like the real core
+  /// talking to another LanDrop.
   IncomingRequest simulateIncoming({
     DeviceInfo? from,
     List<FileOffer>? files,
     bool autoProgress = true,
+    bool? verified,
   }) {
+    final sender = from ?? defaultPeers.first;
     final req = IncomingRequest(
       'in-${++_session}',
-      from ?? defaultPeers.first,
+      sender,
       files ??
           const [
             FileOffer('f1', 'holiday.jpg', 2400000, 'image/jpeg'),
             FileOffer('f2', 'notes.pdf', 180000, 'application/pdf'),
           ],
+      verified: verified ??
+          (sender.fingerprint.isNotEmpty && sender.deviceType != 'web'),
     );
     _incomingCtrl.add(req);
+    if (!autoProgress) _manual[req.sessionId] = req;
     if (autoProgress) {
       req.decision.future.then((ok) {
         if (ok) {
@@ -274,9 +283,40 @@ class FakeCore implements LanDropCore {
     final sid = 'out-${++_session}';
     await Future<void>.delayed(acceptDelays[to.fingerprint] ?? Duration.zero);
     onSession?.call(sid);
-    await _simulate(sid, files);
+    for (final (id, size, name) in files) {
+      _progressCtrl.add(TransferProgress(sid, id, 0, size, fileName: name));
+    }
+    if (!await _simulate(sid, files)) {
+      return SendResult(
+          ok: false,
+          sessionId: sid,
+          error: 'cancelled',
+          errorCode: SendErrorCode.cancelled);
+    }
     return SendResult(ok: true, sessionId: sid);
   }
+
+  /// Every [cancelSession] call, for tests.
+  final List<String> cancelCalls = [];
+  final Set<String> _cancelled = {};
+
+  @override
+  Future<void> cancelSession(String sessionId) async {
+    cancelCalls.add(sessionId);
+    _cancelled.add(sessionId);
+    // Incoming requests the test drives itself end at once.
+    final req = _manual.remove(sessionId);
+    for (final f in req?.files ?? const <FileOffer>[]) {
+      _progressCtrl.add(TransferProgress(sessionId, f.id, 0, f.size,
+          done: true,
+          error: 'cancelled',
+          errorCode: SendErrorCode.cancelled,
+          fileName: f.fileName));
+    }
+  }
+
+  /// Incoming requests simulated with `autoProgress: false`.
+  final Map<String, IncomingRequest> _manual = {};
 
   /// Test hook: findings returned by [runDiagnosis] (canned when null).
   List<Finding>? diagnosisFindings;
@@ -462,11 +502,24 @@ class FakeCore implements LanDropCore {
   String? get webHttpUrl =>
       _webHttp && started ? 'http://${_self.ip}:53320/' : null;
 
-  Future<void> _simulate(
+  /// False when the session was cancelled; every unfinished file then gets
+  /// a final event with [SendErrorCode.cancelled], like the real core.
+  Future<bool> _simulate(
       String sid, Iterable<(String, int, String?)> files) async {
-    for (final (id, size, name) in files) {
+    final list = files.toList();
+    for (final (i, (id, size, name)) in list.indexed) {
       for (var step = 1; step <= 4; step++) {
         await Future<void>.delayed(simulateDelay);
+        if (_cancelled.contains(sid)) {
+          for (final (id2, size2, name2) in list.skip(i)) {
+            _progressCtrl.add(TransferProgress(sid, id2, 0, size2,
+                done: true,
+                error: 'cancelled',
+                errorCode: SendErrorCode.cancelled,
+                fileName: name2));
+          }
+          return false;
+        }
         _progressCtrl.add(TransferProgress(
           sid,
           id,
@@ -474,8 +527,12 @@ class FakeCore implements LanDropCore {
           size,
           done: step == 4,
           fileName: name,
+          savedPath: sid.startsWith('in-') && step == 4 && saveDir != null
+              ? '$saveDir/$name'
+              : null,
         ));
       }
     }
+    return true;
   }
 }

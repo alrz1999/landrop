@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/api.dart';
@@ -24,6 +25,10 @@ class AppScope extends InheritedNotifier<AppController> {
 
   static AppController read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<AppScope>()!.notifier!;
+
+  /// [of], or null outside an [AppScope] (dialogs shown in bare tests).
+  static AppController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppScope>()?.notifier;
 }
 
 class SectionHeader extends StatelessWidget {
@@ -372,6 +377,10 @@ class QrCard extends StatelessWidget {
   }
 }
 
+/// One transfer on the home page (UX.md 3.8): who, state (icon and text,
+/// never colour alone), percent, speed, time left, per-file and overall
+/// progress, Cancel while it runs; when received: Open / Show in folder on
+/// desktops, the saved path with Copy on phones.
 class TransferSessionCard extends StatelessWidget {
   const TransferSessionCard({super.key, required this.session});
   final TransferSession session;
@@ -379,12 +388,11 @@ class TransferSessionCard extends StatelessWidget {
   static const _maxFileRows = 5;
 
   List<Widget> _summary(BuildContext context, TransferSession s) {
-    var sent = 0, total = 0, done = 0;
+    var done = 0;
     for (final f in s.files.values) {
-      sent += f.sent;
-      total += f.total;
       if (f.done && f.error == null) done++;
     }
+    final sent = s.sentBytes, total = s.totalBytes;
     final l = context.l;
     return [
       Padding(
@@ -406,33 +414,122 @@ class TransferSessionCard extends StatelessWidget {
     ];
   }
 
+  static (IconData, String) _stateText(AppLocalizations l, TransferSession s) {
+    final name = l.isoName(s.peerAlias);
+    final total = s.totalBytes;
+    return switch (s.state) {
+      TransferState.waiting => (
+          Icons.hourglass_empty,
+          s.cancelRequested ? l.transferCancelling : l.transferWaiting(name)
+        ),
+      TransferState.running => (
+          Icons.swap_vert,
+          s.cancelRequested
+              ? l.transferCancelling
+              : total <= 0
+                  ? l.transferRunning
+                  : formatTransferProgress(
+                      s.sentBytes / total, s.speed, l)
+        ),
+      TransferState.done => (Icons.check_circle, l.transferDone),
+      TransferState.declined => (Icons.block, l.transferDeclined(name)),
+      TransferState.cancelled => (Icons.cancel_outlined, l.transferCancelled),
+      TransferState.failed => (
+          Icons.error_outline,
+          s.failureCode != null &&
+                  (!s.incoming || s.failureCode != SendErrorCode.unknown)
+              ? l.transferFailed(localizeSendError(l, s.failureCode))
+              : s.error != null
+                  ? l.transferFailed(s.error!)
+                  : l.transferFailedPlain
+        ),
+    };
+  }
+
+  Future<void> _openOrReveal(BuildContext context, bool reveal) async {
+    final c = AppScope.read(context);
+    final s = session;
+    final path = reveal
+        ? (s.savedPaths.length == 1 ? s.savedPaths.single : s.openPath)
+        : s.openPath;
+    if (path == null) return;
+    final l = context.l;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final ok = reveal
+        ? await c.fileOpener.reveal(path)
+        : await c.fileOpener.open(path);
+    if (!ok) {
+      messenger?.showSnackBar(
+          SnackBar(content: Text(l.transferOpenFailed(l.ltrValue(path)))));
+    }
+  }
+
+  Future<void> _copyPath(BuildContext context, String path) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final l = context.l;
+    await Clipboard.setData(ClipboardData(text: stripIsolates(path)));
+    messenger?.showSnackBar(SnackBar(content: Text(l.transferPathCopied)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = session;
+    final sid = s.sessionId;
+    final c = AppScope.of(context);
     final l = context.l;
+    final t = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final name = l.isoName(s.peerAlias);
-    String status;
-    var failed = false;
-    if (s.hasError || s.result == false) {
-      failed = true;
-      if (s.errorCode == SendErrorCode.declined) {
-        status = l.transferDeclined(name);
-      } else if (s.errorCode != null) {
-        status = l.transferFailed(localizeSendError(l, s.errorCode));
-      } else {
-        status = s.error != null
-            ? l.transferFailed(s.error!)
-            : l.transferFailedPlain;
-      }
-    } else if (s.done || s.result == true) {
-      status = l.transferDone;
-    } else if (s.files.isEmpty) {
-      status = l.transferWaiting(name);
-    } else {
-      status = l.transferRunning;
-    }
+    final state = s.state;
+    final (stateIcon, status) = _stateText(l, s);
+    final stateColor = switch (state) {
+      TransferState.done => scheme.primary,
+      TransferState.failed || TransferState.declined => scheme.error,
+      _ => scheme.onSurfaceVariant,
+    };
+    final timeLeft = state == TransferState.running && !s.cancelRequested
+        ? s.timeLeft
+        : null;
+    final canOpen = c.fileOpener.canOpen;
+    final savedLine = state == TransferState.done ? s.openPath : s.savedTo;
+    final trusted = s.autoAccepted && s.peerFingerprint.isNotEmpty
+        ? c.trustedDevice(s.peerFingerprint)
+        : null;
+    final actions = <Widget>[
+      if (!state.isFinal && !s.cancelRequested)
+        TextButton.icon(
+          key: Key('cancel-$sid'),
+          onPressed: () => c.cancel(s),
+          icon: const Icon(Icons.close),
+          label: Text(l.transferCancelAction),
+        ),
+      if (state == TransferState.done && s.incoming && canOpen) ...[
+        TextButton.icon(
+          key: Key('reveal-$sid'),
+          onPressed: () => _openOrReveal(context, true),
+          icon: const Icon(Icons.folder_open),
+          label: Text(l.transferShowInFolder),
+        ),
+        FilledButton.tonalIcon(
+          key: Key('open-$sid'),
+          onPressed: () => _openOrReveal(context, false),
+          icon: const Icon(Icons.open_in_new),
+          label: Text(l.transferOpen),
+        ),
+      ],
+      if (state == TransferState.done &&
+          s.incoming &&
+          !canOpen &&
+          savedLine != null)
+        TextButton.icon(
+          key: Key('copyPath-$sid'),
+          onPressed: () => _copyPath(context, savedLine),
+          icon: const Icon(Icons.copy),
+          label: Text(l.transferCopyPath),
+        ),
+    ];
     return Card(
+      key: Key('transfer-$sid'),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -445,28 +542,67 @@ class TransferSessionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  s.incoming ? l.transferFrom(name) : l.transferTo(name),
-                  style: Theme.of(context).textTheme.titleSmall,
+                  state == TransferState.done
+                      ? (s.incoming
+                          ? l.transferReceivedFrom(name)
+                          : l.transferSentTo(name))
+                      : (s.incoming ? l.transferFrom(name) : l.transferTo(name)),
+                  key: Key('title-$sid'),
+                  style: t.titleSmall,
                 ),
               ),
-              const SizedBox(width: 8),
-              Flexible(
+              if (timeLeft != null) ...[
+                const SizedBox(width: 8),
+                Text(formatTimeLeft(timeLeft, l),
+                    key: Key('timeLeft-$sid'), style: t.bodySmall),
+              ],
+            ]),
+            const SizedBox(height: 4),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(stateIcon,
+                  key: Key('stateIcon-$sid'), size: 16, color: stateColor),
+              const SizedBox(width: 6),
+              Expanded(
                 child: Text(status,
-                    key: Key('status-${s.sessionId}'),
-                    maxLines: 1,
+                    key: Key('status-$sid'),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(color: failed ? scheme.error : null)),
+                    style: t.bodyMedium?.copyWith(
+                        color: state == TransferState.failed ||
+                                state == TransferState.declined
+                            ? scheme.error
+                            : null)),
               ),
             ]),
-            if (s.files.isEmpty && s.result == null)
+            if (s.autoAccepted)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 4),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    Icon(Icons.verified_user_outlined,
+                        size: 16, color: scheme.onSurfaceVariant),
+                    Text(l.transferAutoAccepted,
+                        key: Key('autoAccepted-$sid'), style: t.bodySmall),
+                    if (trusted != null && trusted.autoAccept)
+                      TextButton(
+                        key: Key('stopAutoAccept-$sid'),
+                        onPressed: () =>
+                            c.setAutoAccept(s.peerFingerprint, false),
+                        child: Text(l.autoAcceptStop),
+                      ),
+                  ],
+                ),
+              ),
+            if (state == TransferState.waiting)
               const Padding(
                 padding: EdgeInsetsDirectional.only(top: 8),
                 child: LinearProgressIndicator(),
               ),
-            // Folders can hold hundreds of files: show one overall bar plus
-            // the files that are running or failed.
-            if (s.files.length > _maxFileRows) ..._summary(context, s),
+            // Folders can hold hundreds of files: one overall bar plus the
+            // files that are running or failed.
+            if (s.files.length > 1) ..._summary(context, s),
             for (final f in s.files.length > _maxFileRows
                 ? s.files.values
                     .where((f) => f.error != null || (!f.done && f.sent > 0))
@@ -487,22 +623,24 @@ class TransferSessionCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         f.error != null
-                            ? f.error!
+                            ? (f.errorCode == SendErrorCode.cancelled
+                                ? l.transferCancelled
+                                : l.transferFileFailed)
                             : '${formatBytes(f.sent, l)} / ${formatBytes(f.total, l)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        style: t.bodySmall?.copyWith(
                             color: f.error != null ? scheme.error : null),
                       ),
                     ]),
                     const SizedBox(height: 4),
                     LinearProgressIndicator(
-                      key: Key('progress-${s.sessionId}-${f.fileId}'),
+                      key: Key('progress-$sid-${f.fileId}'),
                       value: f.fraction,
                       color: f.error != null ? scheme.error : null,
                     ),
                   ],
                 ),
               ),
-            if (s.incoming && s.savedTo != null)
+            if (s.incoming && savedLine != null)
               Padding(
                 padding: const EdgeInsetsDirectional.only(top: 8),
                 child: Row(children: [
@@ -510,10 +648,24 @@ class TransferSessionCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: SelectableText(
-                        l.transferSavedTo(l.ltrValue(s.savedTo!)),
-                        style: Theme.of(context).textTheme.bodySmall),
+                        l.transferSavedTo(l.ltrValue(savedLine)),
+                        key: Key('savedTo-$sid'),
+                        style: t.bodySmall),
                   ),
                 ]),
+              ),
+            if (actions.isNotEmpty)
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(top: 4),
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: actions,
+                  ),
+                ),
               ),
           ],
         ),

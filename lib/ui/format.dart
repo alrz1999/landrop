@@ -54,6 +54,27 @@ String formatDuration(Duration d, [AppLocalizations? l]) {
   return l == null ? '$h h $m min' : l.durationHoursMinutes(n(h), n(m));
 }
 
+/// Running transfer status: "64%" or, with a [bytesPerSecond], "64% · 4.2
+/// MB/s" (fa: "٪۶۴ · ۴٫۲ مگابایت بر ثانیه"). Rounded down, so 100% means
+/// every byte arrived.
+String formatTransferProgress(double fraction, double? bytesPerSecond,
+    [AppLocalizations? l]) {
+  final raw = '${(fraction.clamp(0, 1) * 100).floor()}';
+  if (l == null) {
+    return bytesPerSecond == null
+        ? '$raw%'
+        : '$raw% · ${formatSpeed(bytesPerSecond)}';
+  }
+  final p = localizeDigits(raw, Locale(l.localeName));
+  return bytesPerSecond == null
+      ? l.transferPercent(p)
+      : l.transferPercentSpeed(p, formatSpeed(bytesPerSecond, l));
+}
+
+/// "1 min left" / "۱ دقیقه مانده".
+String formatTimeLeft(Duration d, [AppLocalizations? l]) =>
+    l == null ? '${formatDuration(d)} left' : l.transferTimeLeft(formatDuration(d, l));
+
 IconData deviceIcon(String type) => switch (type) {
       'mobile' => Icons.smartphone,
       'web' => Icons.public,

@@ -14,6 +14,7 @@ import 'package:landrop/ui/cable_wizard.dart';
 import 'package:landrop/ui/connect_helper.dart';
 import 'package:landrop/ui/digits.dart';
 import 'package:landrop/ui/fake_core.dart';
+import 'package:landrop/ui/file_opener.dart';
 import 'package:landrop/ui/finding_text.dart';
 import 'package:landrop/ui/format.dart';
 import 'package:landrop/ui/dialogs.dart' show shortFolder;
@@ -25,6 +26,7 @@ import 'package:landrop/ui/wifi_direct_page.dart';
 import 'package:landrop/ui/wifi_direct_service.dart';
 import 'package:landrop/ui/wifi_join_page.dart';
 import 'package:landrop/ui/wifi_join_service.dart';
+import 'package:landrop/ui/widgets.dart' show AppScope, TransferSessionCard;
 import 'package:landrop/ui/wifi_qr.dart';
 
 import 'helpers/pump_localized.dart';
@@ -139,6 +141,17 @@ Future<void> _openAdvanced(WidgetTester t) async {
 Future<void> _openDiagnosis(WidgetTester t) async {
   await _openAdvanced(t);
   await _tapKey(t, 'diagnoseSettings');
+}
+
+/// No "Open" on phones (narrow tests), "Open" on desktops.
+class _NoOpener implements FileOpener {
+  _NoOpener({required this.canOpen});
+  @override
+  final bool canOpen;
+  @override
+  Future<bool> open(String path) async => true;
+  @override
+  Future<bool> reveal(String path) async => true;
 }
 
 void main() {
@@ -522,6 +535,223 @@ void main() {
         expect(find.text(fa.emptyTitle), findsOneWidget);
         expect(find.text(fa.emptyWhy), findsOneWidget);
         expectNoEnglish(t, 'empty home');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('transfer cards in fa at $w px (U6)', (t) async {
+        final c = AppController(
+            core: FakeCore(simulateDelay: Duration.zero),
+            store: MemorySettingsStore(),
+            initialSaveDir: '/tmp/landrop-test',
+            fileOpener: _NoOpener(canOpen: w > 400));
+        addTearDown(c.dispose);
+        final t0 = DateTime(2026, 10, 22);
+        TransferSession make(String id,
+            {bool incoming = true, bool? result, SendErrorCode? code}) {
+          final s = TransferSession(
+              sessionId: id,
+              incoming: incoming,
+              peerAlias: 'لپ‌تاپ سارا',
+              peerFingerprint: 'fa77',
+              savedTo: incoming ? '/tmp/landrop-test' : null,
+              autoAccepted: id == 'auto');
+          for (final f in FakeCore.mixedFiles) {
+            s.files[f.id] = FileTransfer(f.id, f.fileName, f.size);
+          }
+          s.result = result;
+          s.errorCode = code;
+          return s;
+        }
+
+        final running = make('run')..files['m1']!.sent = 1000000;
+        running.meter
+          ..add(t0, 0)
+          ..add(t0.add(const Duration(seconds: 2)), 1000000);
+        final done = make('done');
+        for (final f in done.files.values) {
+          f
+            ..sent = f.total
+            ..done = true
+            ..savedPath = '/tmp/landrop-test/${f.name}';
+        }
+        final auto = make('auto');
+        final cancelled = make('cancel');
+        for (final f in cancelled.files.values) {
+          f
+            ..done = true
+            ..error = 'cancelled'
+            ..errorCode = SendErrorCode.cancelled;
+        }
+        final sessions = [
+          make('wait', incoming: false)..files.clear(),
+          running,
+          done,
+          auto,
+          cancelled,
+          make('declined',
+              incoming: false, result: false, code: SendErrorCode.declined),
+          make('failed',
+              incoming: false, result: false, code: SendErrorCode.unreachable),
+          make('sent', incoming: false, result: true),
+        ];
+        t.view.physicalSize = Size(width, 4000);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(AppScope(
+            controller: c,
+            child: MaterialApp(
+                locale: const Locale('fa'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(
+                    body: ListView(children: [
+                  for (final s in sessions) TransferSessionCard(session: s)
+                ])))));
+        // The waiting card's bar animates forever: no pumpAndSettle.
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 100));
+        expectRtl(t);
+        String text(String key) => t.widget<Text>(find.byKey(Key(key))).data!;
+        final name = iso('لپ‌تاپ سارا');
+        expect(text('status-wait'), fa.transferWaiting(name));
+        expect(text('status-run'),
+            fa.transferPercentSpeed('۱۷', formatSpeed(500000, fa)));
+        expect(text('timeLeft-run'),
+            fa.transferTimeLeft(formatDuration(const Duration(seconds: 10), fa)));
+        expect(text('title-done'), fa.transferReceivedFrom(name));
+        expect(text('status-done'), fa.transferDone);
+        expect(text('status-cancel'), fa.transferCancelled);
+        expect(text('status-declined'), fa.transferDeclined(name));
+        expect(text('status-failed'),
+            fa.transferFailed(fa.sendErrorUnreachable));
+        expect(text('title-sent'), fa.transferSentTo(name));
+        expect(text('autoAccepted-auto'), fa.transferAutoAccepted);
+        expect(find.text(fa.transferCancelAction), findsNWidgets(3));
+        if (w > 400) {
+          expect(find.byKey(const Key('open-done')), findsOneWidget);
+          expect(find.text(fa.transferShowInFolder), findsOneWidget);
+        } else {
+          // Phone: the full path, left to right, with Copy.
+          expect(find.byKey(const Key('copyPath-done')), findsOneWidget);
+          expect(
+              t.widget<SelectableText>(find.byKey(const Key('savedTo-done')))
+                  .data,
+              fa.transferSavedTo(ltr('/tmp/landrop-test')));
+        }
+        expectNoEnglish(t, 'transfer cards');
+        expect(t.takeException(), isNull);
+      });
+
+      testWidgets('incoming dialog trust states in fa at $w px (U7)',
+          (t) async {
+        final core = persianCore();
+        await pumpApp(
+            t,
+            localizedApp(
+                locale: const Locale('fa'),
+                core: core,
+                store: MemorySettingsStore({
+                  'locale': 'fa',
+                  'trustedDevices': [
+                    {
+                      'fingerprint': 'aa11',
+                      'alias': 'لپ‌تاپ سارا',
+                      'trustedAt': '2026-10-01T10:00:00.000Z',
+                      'autoAccept': false,
+                    }
+                  ],
+                })),
+            width: width,
+            height: 900);
+        // First time, and it uses the name of a trusted device.
+        core.simulateIncoming(
+            from: FakeCore.persianPeer,
+            files: FakeCore.mixedFiles,
+            autoProgress: false);
+        await t.pumpAndSettle();
+        expectRtl(t);
+        expect(find.text(fa.incomingFirstTime), findsOneWidget);
+        expect(find.text(fa.incomingAliasWarning(iso('لپ‌تاپ سارا'))),
+            findsOneWidget);
+        // No "Always accept" next to the name warning.
+        expect(find.text(fa.incomingAlwaysAccept), findsNothing);
+        expect(find.text(fa.incomingChangeFolder), findsOneWidget);
+        await t.ensureVisible(find.byKey(const Key('incomingDetails')));
+        await t.pumpAndSettle();
+        await t.tap(find.byKey(const Key('incomingDetails')));
+        await t.pumpAndSettle();
+        expectLtrValue(t, const Key('incomingAddress'));
+        expectLtrValue(t, const Key('incomingSecurityCode'));
+        expectNoEnglish(t, 'incoming dialog (first time, warning)');
+        expect(t.takeException(), isNull);
+        await t.tap(find.byKey(const Key('incomingDecline')));
+        await t.pumpAndSettle();
+        // Trusted device, then an unproven sender.
+        core.simulateIncoming(autoProgress: false); // Pixel 9 = aa11
+        await t.pumpAndSettle();
+        expect(find.text(fa.incomingTrusted), findsOneWidget);
+        expect(find.byKey(const Key('alwaysAccept')), findsNothing);
+        expectNoEnglish(t, 'incoming dialog (trusted)');
+        await t.tap(find.byKey(const Key('incomingDecline')));
+        await t.pumpAndSettle();
+        core.simulateIncoming(autoProgress: false, verified: false);
+        await t.pumpAndSettle();
+        expect(find.text(fa.incomingUnverified), findsOneWidget);
+        expectNoEnglish(t, 'incoming dialog (unverified)');
+        expect(t.takeException(), isNull);
+        await t.tap(find.byKey(const Key('incomingDecline')));
+        await t.pumpAndSettle();
+      });
+
+      testWidgets('trusted devices page and auto-accept notice in fa at $w px',
+          (t) async {
+        final core = persianCore();
+        await pumpApp(
+            t,
+            localizedApp(
+                locale: const Locale('fa'),
+                core: core,
+                store: MemorySettingsStore({
+                  'locale': 'fa',
+                  'trustedDevices': [
+                    {
+                      'fingerprint': 'fa77',
+                      'alias': 'لپ‌تاپ سارا',
+                      'displayName': 'Sara laptop',
+                      'trustedAt': '2026-10-01T10:00:00.000Z',
+                      'autoAccept': true,
+                    }
+                  ],
+                })),
+            width: width,
+            height: 900);
+        // Auto-accepted: no dialog, a Persian snackbar with Stop.
+        core.simulateIncoming(
+            from: FakeCore.persianPeer,
+            files: FakeCore.mixedFiles,
+            autoProgress: false);
+        await t.pumpAndSettle();
+        expect(find.byKey(const Key('incomingDialog')), findsNothing);
+        expect(find.text(fa.autoAcceptedSnack(iso('لپ‌تاپ سارا'))),
+            findsOneWidget);
+        expect(find.text(fa.autoAcceptStop), findsWidgets);
+        expectNoEnglish(t, 'auto-accept snackbar');
+        expect(t.takeException(), isNull);
+        ScaffoldMessenger.of(t.element(find.byType(Scaffold).first))
+            .removeCurrentSnackBar();
+        await t.pumpAndSettle();
+
+        await _openSettings(t);
+        expect(find.text(fa.settingsTrustedDevices), findsOneWidget);
+        expect(find.text(fa.settingsTrustedDevicesSub(1)), findsOneWidget);
+        await _tapKey(t, 'trustedDevicesSettings');
+        expectRtl(t);
+        expect(find.text('Sara laptop'), findsOneWidget);
+        expect(find.text(fa.trustedDeviceName(iso('لپ‌تاپ سارا'))),
+            findsOneWidget);
+        expect(find.text(fa.trustedAutoAccept), findsOneWidget);
+        expectLtrValue(t, const Key('trustedCode-fa77'));
+        expectNoEnglish(t, 'trusted devices');
         expect(t.takeException(), isNull);
       });
 
@@ -936,6 +1166,28 @@ void main() {
       expect(formatDuration(const Duration(hours: 1, minutes: 20), fa),
           '۱ ساعت و ۲۰ دقیقه');
       expect(formatDuration(const Duration(hours: 3), fa), '۳ ساعت');
+    });
+
+    test('transfer progress, speed and time left in en and fa (U6)', () {
+      expect(formatTransferProgress(0.64, null), '64%');
+      expect(formatTransferProgress(0.64, null, en), '64%');
+      expect(formatTransferProgress(0.999, 4404019, en), '99% · 4.2 MB/s');
+      expect(formatTransferProgress(1, 512 * 1024.0, en), '100% · 512 KB/s');
+      expect(formatTimeLeft(const Duration(seconds: 80)), '1 min left');
+      expect(formatTimeLeft(const Duration(seconds: 80), en), '1 min left');
+      expect(formatTimeLeft(const Duration(seconds: 9), en), '9 s left');
+      expect(formatTimeLeft(const Duration(hours: 1, minutes: 5), en),
+          '1 h 5 min left');
+      expect(formatTransferProgress(0.64, null, fa), '٪۶۴');
+      expect(formatTransferProgress(0.999, 4404019, fa),
+          '٪۹۹ · ۴٫۲ مگابایت بر ثانیه');
+      expect(formatTimeLeft(const Duration(seconds: 80), fa), '۱ دقیقه مانده');
+      expect(formatTimeLeft(const Duration(seconds: 9), fa), '۹ ثانیه مانده');
+      expect(formatTimeLeft(const Duration(hours: 1, minutes: 5), fa),
+          '۱ ساعت و ۵ دقیقه مانده');
+      // Clamped: never below 0 or above 100.
+      expect(formatTransferProgress(1.7, null, en), '100%');
+      expect(formatTransferProgress(-1, null, fa), '٪۰');
     });
 
     test('localizeDigits only changes Persian', () {
