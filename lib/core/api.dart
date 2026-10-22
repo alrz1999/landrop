@@ -127,12 +127,27 @@ class DeviceInfo {
       );
 }
 
+/// Largest text a text message may carry in the LocalSend `preview` field
+/// (UTF-8 bytes). Longer text is not sent; a received `preview` above it is
+/// ignored (the offer is then an ordinary file).
+const maxTextBytes = 64 * 1024;
+
+/// File name used on the wire for a text message (PROTOCOL.md "Text
+/// messages").
+const textMessageFileName = 'message.txt';
+
 class FileOffer {
   final String id;
   final String fileName;
   final int size;
   final String fileType; // mime
-  const FileOffer(this.id, this.fileName, this.size, this.fileType);
+
+  /// LocalSend v2 `preview`: for a text message, the text itself. Plain
+  /// text, never markup; already stripped of control characters by the
+  /// core. Null for ordinary files.
+  final String? preview;
+  const FileOffer(this.id, this.fileName, this.size, this.fileType,
+      {this.preview});
 }
 
 class IncomingRequest {
@@ -140,6 +155,18 @@ class IncomingRequest {
   final DeviceInfo sender;
   final List<FileOffer> files;
   final Completer<bool> decision = Completer<bool>(); // UI completes true/false
+
+  /// The text of a text message: exactly one `text/plain` offer with a
+  /// `preview` (PROTOCOL.md "Text messages"). Accepting it writes nothing
+  /// to disk; the core answers the sender 204 (nothing to upload).
+  String? get text {
+    if (files.length != 1) return null;
+    final f = files.single;
+    if (f.preview == null || !f.fileType.startsWith('text/plain')) return null;
+    return f.preview;
+  }
+
+  bool get isText => text != null;
 
   /// True when the sender proved that it holds the key of
   /// [DeviceInfo.fingerprint] (signed prepare-upload, PROTOCOL.md "Sender
@@ -367,6 +394,23 @@ abstract class LanDropCore {
   /// emitted, so callers can attribute [progress] events by session id.
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
       {void Function(String sessionId)? onSession});
+
+  /// Sends [text] (a note or a link) as a text message (PROTOCOL.md "Text
+  /// messages"): one `message.txt` offer of type `text/plain` whose
+  /// `preview` holds the text, so LocalSend clients show it too. A receiver
+  /// that shows it answers 204 and nothing is uploaded ([SendResult.ok]
+  /// with no session id); one that wants the file gets it uploaded through
+  /// the normal pipeline. Empty text or more than [maxTextBytes] is refused
+  /// without contacting the receiver.
+  Future<SendResult> sendText(DeviceInfo to, String text,
+      {void Function(String sessionId)? onSession});
+
+  /// Changes the folder for transfers accepted from now on, without a
+  /// restart (used when Android grants "All files access" while a request
+  /// waits for its answer). A transfer already accepted keeps the folder it
+  /// was accepted into. Without an explicit identity folder the TLS
+  /// identity is copied to the new folder, so the security code stays.
+  Future<void> setSaveDir(String saveDir);
 
   /// Stops a running transfer, in either direction (UX.md 3.8). Sending:
   /// aborts the upload and tells the receiver (`/cancel` with the

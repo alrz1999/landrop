@@ -2023,4 +2023,284 @@ class AppLocalizationsEn extends AppLocalizations {
   String trustedLargeSub(String size) {
     return 'Off: transfers over $size always ask.';
   }
+
+  @override
+  String get onboardingSemantics => 'Welcome to LanDrop';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingStart => 'Start';
+
+  @override
+  String onboardingStep(int step, int total) {
+    final intl.NumberFormat stepNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String stepString = stepNumberFormat.format(step);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'Step $stepString of $totalString';
+  }
+
+  @override
+  String get onboarding1Title => 'Send files to your nearby devices';
+
+  @override
+  String get onboarding1Body =>
+      'No internet, no account. Files go straight from one device to the other.';
+
+  @override
+  String get onboarding2Title => 'Open LanDrop on both devices';
+
+  @override
+  String get onboarding2Body =>
+      'Connect them to the same Wi-Fi. No Wi-Fi? LanDrop can help you connect directly.';
+
+  @override
+  String get onboarding3Title => 'Name this device';
+
+  @override
+  String get onboarding3Body => 'Others will see this name.';
+
+  @override
+  String get onboardingPermissions => 'What LanDrop may ask for';
+
+  @override
+  String get onboardingLocalNetworkComputer =>
+      'Your Mac will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won\'t appear.';
+
+  @override
+  String get onboardingLocalNetworkPhone =>
+      'Your iPhone or iPad will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won\'t appear.';
+
+  @override
+  String get onboardingFirewallWindows =>
+      'Windows may ask whether LanDrop may use the network. Allow it on private networks.';
+
+  @override
+  String get onboardingStorageAndroid =>
+      'Files: to save what you receive in Downloads, where other apps find it. LanDrop explains this first, the first time you receive files.';
+
+  @override
+  String get onboardingNothingToAllow =>
+      'Nothing to allow now. LanDrop asks only when something is needed.';
+
+  @override
+  String get storageTitle => 'Save received files in Downloads?';
+
+  @override
+  String get storageBody =>
+      'To put files in your Downloads folder, where your other apps can find them, Android needs you to allow \"All files access\" for LanDrop on the next screen. Without it, files are kept inside LanDrop\'s own folder.';
+
+  @override
+  String get storageLater => 'You can change this later in Settings.';
+
+  @override
+  String get storageAllow => 'Allow';
+
+  @override
+  String get storageNotNow => 'Not now';
+
+  @override
+  String storageGranted(String folder) {
+    return 'Received files now go to $folder.';
+  }
+
+  @override
+  String get storageKeptPrivate =>
+      'Files stay in LanDrop\'s own folder. You can try again in Settings.';
+
+  @override
+  String get sendSheetText => 'Text';
+
+  @override
+  String get sendTextTitle => 'Send text';
+
+  @override
+  String get sendTextLabel => 'Text or link';
+
+  @override
+  String get sendTextPaste => 'Paste';
+
+  @override
+  String get sendTextNext => 'Choose device';
+
+  @override
+  String sendTextTooLong(String max) {
+    return 'Too long: at most $max.';
+  }
+
+  @override
+  String get sendPickerTitleText => 'Send text to…';
+
+  @override
+  String textFromTitle(String name) {
+    return 'Text from $name';
+  }
+
+  @override
+  String get textCopy => 'Copy';
+
+  @override
+  String get textCopied => 'Text copied';
+
+  @override
+  String get textOpenLink => 'Open link';
+
+  @override
+  String get textLinkFailed => 'Couldn\'t open the link.';
+
+  @override
+  String get textSaveFile => 'Save as file';
+
+  @override
+  String get textSaveFailed => 'Couldn\'t save the file.';
+
+  @override
+  String get textAutoNotice => 'Received automatically from a trusted device.';
+
+  @override
+  String get textMessage => 'Text message';
+
+  @override
+  String get historyTitle => 'History';
+
+  @override
+  String get historySettingsSub => 'Past transfers on this device';
+
+  @override
+  String get historyPrivacy =>
+      'History stays on this device. You can turn it off in Settings.';
+
+  @override
+  String get historyEmpty => 'No transfers yet.';
+
+  @override
+  String get historyOff => 'History is off.';
+
+  @override
+  String get historyClear => 'Clear history';
+
+  @override
+  String get historyClearBody =>
+      'Remove every entry? Received files are not deleted.';
+
+  @override
+  String get historyClearConfirm => 'Clear';
+
+  @override
+  String get historyCleared => 'History cleared';
+
+  @override
+  String get historyToday => 'Today';
+
+  @override
+  String get historyYesterday => 'Yesterday';
+
+  @override
+  String historyFilesMore(String name, int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString more',
+      one: '1 more',
+    );
+    return '$name and $_temp0';
+  }
+
+  @override
+  String get historyWhen => 'When';
+
+  @override
+  String get historyResult => 'Result';
+
+  @override
+  String get historySize => 'Size';
+
+  @override
+  String get historyFiles => 'Files';
+
+  @override
+  String get historySavedIn => 'Saved in';
+
+  @override
+  String historyMoreFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString more files',
+      one: '1 more file',
+    );
+    return 'and $_temp0';
+  }
+
+  @override
+  String get historyGone => 'These files are no longer there.';
+
+  @override
+  String historyDateTime(String date, String time) {
+    return '$date, $time';
+  }
+
+  @override
+  String get historyDetailsSemantics => 'Transfer details';
+
+  @override
+  String get settingsSectionPrivacy => 'History and privacy';
+
+  @override
+  String get settingsKeepHistory => 'Keep history';
+
+  @override
+  String get settingsKeepHistorySub =>
+      'Stays on this device. Turning it off deletes it.';
+
+  @override
+  String get transferRetryMissing => 'Some files are no longer there.';
+
+  @override
+  String get peerTrusted => 'Trusted';
+
+  @override
+  String get homeRecent => 'Recent';
+
+  @override
+  String get recentNotNearby => 'Not nearby';
+
+  @override
+  String recentLastSeen(String when) {
+    return 'Last seen $when';
+  }
+
+  @override
+  String recentSemantics(String name) {
+    return '$name, not nearby';
+  }
+
+  @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
+  String get themeSystem => 'Same as system';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
 }

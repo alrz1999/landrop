@@ -827,6 +827,9 @@ history), use the `shamsi_date` package (pure Dart, MIT, ~40 KB) behind a `forma
 show Jalali for `fa`, Gregorian for `en`. Trade-off: Jalali is what Persian users expect on every
 calendar date (showing Gregorian looks foreign), but it is another dependency and needs month names
 (فروردین…اسفند); since no screen shows a date today, defer it.
+*Decision (2026-10-22, with the transfer history):* Gregorian dates via `intl` `DateFormat`
+(`formatDay` / `formatClock` / `formatWhen` in `format.dart`), which in fa gives Persian digits and
+Persian month names; "Today" / "Yesterday" instead of a date when they apply; no new dependency.
 
 ### 4.8 Fonts, text scaling and input fields
 
@@ -1036,7 +1039,10 @@ l10n work; 235 after L1/L5/R1-infra: +22 in `test/l10n_test.dart`, +1 send error
 the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens; 295 after U4 and L4: +22 in
 `test/connect_helper_test.dart`, +11 in `test/l10n_test.dart`; 344 after U6 and U7: +3 in
 `test/core_test.dart`, +24 in the new `test/transfer_test.dart`, +15 in the new
-`test/trust_test.dart`, +7 in `test/l10n_test.dart`).
+`test/trust_test.dart`, +7 in `test/l10n_test.dart`; 408 after U8 and the extras below: +19 in
+the new `test/onboarding_test.dart`, +5 in `test/core_test.dart`, +18 in the new
+`test/text_test.dart`, +11 in the new `test/history_test.dart`, +11 in the new
+`test/polish_test.dart`).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1295,6 +1301,78 @@ list yet, U9); a plain LocalSend sender and LanDrop versions before this change 
 "Identity not confirmed" and can never be auto-accepted; the dialog does not close itself when
 the core times the request out; no "trusted" mark on the device list on home; trust is not
 time-limited.
+
+**U8 implemented:** `OnboardingPage` (`lib/ui/onboarding.dart`, key `onboarding`) is shown by
+`LanDropApp` instead of home until `onboarded` is true in the settings JSON (a blank screen while
+the settings load; settings files written by older versions count as onboarded).
+Three screens in a `PageView` (`onboardingPage-0..2`): "Send files to your nearby devices", "Open
+LanDrop on both devices" (copy from 3.6), and "Name this device" with the alias field
+(`onboardingAlias`) plus "What LanDrop may ask for", one line per platform: Android "All files
+access" (explained, asked later), macOS / iOS the local network prompt ("Choose Allow"), Windows the
+firewall prompt, others "Nothing to allow now". `onboardingSkip` (end side, keeps the name),
+`onboardingNext`, `onboardingStart` (saves the name); dots with a "Step n of 3" screen-reader label.
+Nothing is requested during onboarding. `MemorySettingsStore` starts with `onboarded: true`
+(`MemorySettingsStore(initial, false)` shows it); test seam `LanDropApp.onboardingPlatform`.
+Storage pre-prompt: `AppController.init()` / `defaultSaveDir` no longer call
+`ensureStorageAccess()` (they only check, `StorageAccess.granted`); the first accepted transfer
+while files would go to the private folder (`needsStorageExplanation`) opens `storageSheet`
+("Save received files in Downloads?", body from 3.6, `storageAllow` / `storageNotNow`, "You can
+change this later in Settings.") before the system screen; Allow + granted moves this and later
+transfers to Downloads/LanDrop without a restart (`LanDropCore.setSaveDir`), denied or "Not now"
+keeps the private folder with a snackbar, and the answer is remembered (`storageAsked`). Settings
+`useDownloads` shows the sheet every time. Test seam `StorageAccess` (`LanDropApp.storageAccess`).
+*Gaps:* the Android 13 notification pre-prompt, the hotspot/Wi-Fi Direct "Nearby devices" line and
+the camera line of 3.6 are not separate pre-prompts (the wizards still ask directly); a transfer
+auto-accepted from a trusted device does not show the storage sheet; requests that arrive while
+onboarding is open are not shown (they time out); the share-target part of U8 in 3.3 is U10.
+
+**Extras implemented with U8 (not in the original plan):**
+- *Send text* (PROTOCOL.md "Text messages"): the Send sheet has `sendText` ("Text") next to Files
+  and Folder; `sendTextDialog` (`sendTextField`, auto direction while typing, `sendTextPaste`,
+  "Too long: at most 64 KB." above 64 KiB, `sendTextNext` "Choose device") → picker "Send text to…"
+  → `AppController.sendText` → the core's `sendText`. The card shows the text (`textPreview-<id>`);
+  sessions that end without a receiver session id get a local id (`local-<n>`) so keys stay unique.
+  A received text opens `textDialog` ("Text from {name}", trust badge `textBadge-<trust>`, the text
+  as `SelectableText` `textContent` in its own direction, `textSave` "Save as file", `textCopy`,
+  `textOpenLink` only for one http(s) link and only where `FileOpener.canOpen` (desktops),
+  `textClose`); texts queue with file requests and pairings. A trusted device with auto-accept is
+  answered at once and the dialog says "Received automatically from a trusted device."
+  (`textAutoNotice`); unverified senders never are; reading a text never trusts a device.
+- *History*: `HistoryPage` (`lib/ui/history_page.dart`, `historyPage`) from the home app bar
+  (`historyAction`, only while history is on) and Settings ▸ "History and privacy"
+  (`historySettings`, `keepHistorySwitch` "Keep history", on by default, off deletes it). Privacy
+  note `historyPrivacy`, groups "Today" / "Yesterday" / date (`DateFormat.yMMMd`, Gregorian with
+  Persian digits and month names in fa, see 4.7), items `history-<id>` (From/To {name}, "a.jpg and
+  3 more" or "Text message", size, time, result icon with a label), details sheet `historyDetails`
+  (when, result, size, files, "Saved in" `historySavedPath` with `historyOpen` / `historyReveal`
+  on desktops or `historyCopyPath` on phones when the files still exist, else `historyGone`),
+  `clearHistory` with `confirmClearHistory`. Storage: DESIGN.md 2.10.
+- *Try again*: failed or cancelled send cards have `retry-<id>` (same paths or text, same device
+  at its current address); disabled with "Some files are no longer there." (`retryMissing-<id>`)
+  when a file vanished; never on declined or received transfers.
+- *Trusted mark and Recent*: a trusted device's avatar carries a badge (`trustedMark-<fp>`, tooltip
+  and screen-reader label "Trusted"; a badge rather than text so rows keep their height at 375 px).
+  "Recent" (`recentDevices`) lists up to 5 devices seen before that are not nearby
+  (`recent-<fp>`: greyed, kind, "Trusted", "Not nearby", "Last seen {when}", `recentHelp-<fp>` opens
+  the connection helper); up to 20 are kept in the settings JSON (`recentDevices`).
+- *Appearance*: Settings `themeSettings` → `themeDialog` (`theme-system`, `theme-light`,
+  `theme-dark`), persisted as `theme`, applied with `MaterialApp.themeMode`.
+- Settings is now a non-lazy scroll view (all rows built), and has the "History and privacy"
+  section after "Connecting".
+- Accessibility: every new dialog has a `semanticLabel`, every new page or sheet a `Semantics`
+  label; result icons have labels (never colour alone).
+
+No existing test text assertions changed (only the two test `FileOpener` fakes gained `openLink`).
+New strings: 74 keys in both ARB files; uncertain Persian marked `REVIEW:` (4 new notes:
+`onboardingLocalNetworkComputer`, `onboardingLocalNetworkPhone`, `onboardingFirewallWindows`,
+`storageBody`).
+
+*Remaining gaps after these steps:* U9 drag and drop; recent devices are not shown first in the
+peer picker (3.3) and there is no "first time" badge from the recent list (3.7, the trust store
+still decides); no "Details" button on failed cards; the history keeps file names but not where
+sent files came from; no Jalali calendar (Gregorian dates in fa by decision); Android/iOS "Open"
+still needs a dependency; the onboarding, text, history and theme screens were tested only in
+widget tests (no real device); the Persian copy needs the native review (4.12).
 
 Order: L1 → L2 → L3 → L5 → L4 → L6 → L7 → R1 → R2 → U1 → U3 → U2 → U5 → U4 → U6 → U7 → U8 → U9 →
 U10. L4 is after L5 because the wizards show `FindingTile`. Each step is a separate PR and can ship.

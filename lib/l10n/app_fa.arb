@@ -979,5 +979,167 @@
         "type": "String"
       }
     }
-  }
+  },
+  "onboardingSemantics": "به LanDrop خوش آمدید",
+  "onboardingSkip": "رد شدن",
+  "onboardingNext": "بعدی",
+  "onboardingStart": "شروع",
+  "onboardingStep": "مرحلهٔ {step} از {total}",
+  "@onboardingStep": {
+    "placeholders": {
+      "step": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "total": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "onboarding1Title": "فایل‌ها را به دستگاه‌های نزدیک خود بفرستید",
+  "onboarding1Body": "بدون اینترنت و بدون حساب کاربری. فایل‌ها مستقیم از یک دستگاه به دستگاه دیگر می‌روند.",
+  "onboarding2Title": "LanDrop را روی هر دو دستگاه باز کنید",
+  "onboarding2Body": "آن‌ها را به یک وای‌فای وصل کنید. وای‌فای ندارید؟ LanDrop کمک می‌کند مستقیم وصل شوید.",
+  "onboarding3Title": "برای این دستگاه یک نام انتخاب کنید",
+  "onboarding3Body": "دیگران این نام را می‌بینند.",
+  "onboardingPermissions": "اجازه‌هایی که LanDrop ممکن است بخواهد",
+  "onboardingLocalNetworkComputer": "مک شما می‌پرسد آیا LanDrop اجازه دارد دستگاه‌های شبکهٔ محلی را پیدا کند. «Allow» را انتخاب کنید، وگرنه دستگاه‌های اطراف نمایش داده نمی‌شوند.",
+  "@onboardingLocalNetworkComputer": {
+    "description": "REVIEW: macOS has no Persian UI, so the system button is quoted in English («Allow»)."
+  },
+  "onboardingLocalNetworkPhone": "آیفون یا آیپد شما می‌پرسد آیا LanDrop اجازه دارد دستگاه‌های شبکهٔ محلی را پیدا کند. «Allow» را انتخاب کنید، وگرنه دستگاه‌های اطراف نمایش داده نمی‌شوند.",
+  "@onboardingLocalNetworkPhone": {
+    "description": "REVIEW: iOS has no Persian UI, so the system button is quoted in English («Allow»)."
+  },
+  "onboardingFirewallWindows": "ممکن است ویندوز بپرسد آیا LanDrop اجازهٔ استفاده از شبکه را دارد. آن را برای شبکه‌های خصوصی (Private networks) مجاز کنید.",
+  "@onboardingFirewallWindows": {
+    "description": "REVIEW: most PCs run English Windows, so the option name is kept in English in parentheses."
+  },
+  "onboardingStorageAndroid": "فایل‌ها: برای ذخیرهٔ فایل‌های دریافتی در پوشهٔ Downloads تا برنامه‌های دیگر هم آن‌ها را ببینند. اولین باری که فایلی دریافت کنید، LanDrop پیش از آن توضیح می‌دهد.",
+  "onboardingNothingToAllow": "فعلاً لازم نیست اجازه‌ای بدهید. LanDrop فقط وقتی چیزی لازم باشد می‌پرسد.",
+  "storageTitle": "فایل‌های دریافتی در پوشهٔ Downloads ذخیره شوند؟",
+  "storageBody": "برای اینکه فایل‌ها در پوشهٔ دانلودها و در دسترس برنامه‌های دیگر باشند، اندروید در صفحهٔ بعد از شما می‌خواهد «دسترسی به همهٔ فایل‌ها» را برای LanDrop روشن کنید. بدون آن، فایل‌ها در پوشهٔ خود LanDrop می‌مانند.",
+  "@storageBody": {
+    "description": "REVIEW: «دسترسی به همهٔ فایل‌ها» should match the Persian Android label of \"All files access\" on real devices."
+  },
+  "storageLater": "بعداً می‌توانید این را در تنظیمات تغییر دهید.",
+  "storageAllow": "اجازه می‌دهم",
+  "storageNotNow": "الان نه",
+  "storageGranted": "از این به بعد فایل‌های دریافتی در {folder} ذخیره می‌شوند.",
+  "@storageGranted": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "storageKeptPrivate": "فایل‌ها در پوشهٔ خود LanDrop می‌مانند. بعداً می‌توانید در تنظیمات دوباره امتحان کنید.",
+  "sendSheetText": "متن",
+  "sendTextTitle": "ارسال متن",
+  "sendTextLabel": "متن یا لینک",
+  "sendTextPaste": "جای‌گذاری",
+  "sendTextNext": "انتخاب دستگاه",
+  "sendTextTooLong": "خیلی طولانی است: حداکثر {max}.",
+  "@sendTextTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "sendPickerTitleText": "ارسال متن به…",
+  "textFromTitle": "متن از {name}",
+  "@textFromTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "textCopy": "کپی",
+  "textCopied": "متن کپی شد",
+  "textOpenLink": "باز کردن لینک",
+  "textLinkFailed": "لینک باز نشد.",
+  "textSaveFile": "ذخیره به‌صورت فایل",
+  "textSaveFailed": "فایل ذخیره نشد.",
+  "textAutoNotice": "به‌طور خودکار از یک دستگاه مورد اعتماد دریافت شد.",
+  "textMessage": "پیام متنی",
+  "historyTitle": "تاریخچه",
+  "historySettingsSub": "انتقال‌های قبلی روی این دستگاه",
+  "historyPrivacy": "تاریخچه فقط روی همین دستگاه می‌ماند. می‌توانید آن را در تنظیمات خاموش کنید.",
+  "historyEmpty": "هنوز انتقالی انجام نشده است.",
+  "historyOff": "تاریخچه خاموش است.",
+  "historyClear": "پاک کردن تاریخچه",
+  "historyClearBody": "همهٔ موارد حذف شوند؟ فایل‌های دریافتی پاک نمی‌شوند.",
+  "historyClearConfirm": "پاک کردن",
+  "historyCleared": "تاریخچه پاک شد",
+  "historyToday": "امروز",
+  "historyYesterday": "دیروز",
+  "historyFilesMore": "{name} و {count, plural, other{{count} مورد دیگر}}",
+  "@historyFilesMore": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "historyWhen": "زمان",
+  "historyResult": "نتیجه",
+  "historySize": "حجم",
+  "historyFiles": "فایل‌ها",
+  "historySavedIn": "محل ذخیره",
+  "historyMoreFiles": "و {count, plural, other{{count} فایل دیگر}}",
+  "@historyMoreFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "historyGone": "این فایل‌ها دیگر آنجا نیستند.",
+  "historyDateTime": "{date}، ساعت {time}",
+  "@historyDateTime": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "historyDetailsSemantics": "جزئیات انتقال",
+  "settingsSectionPrivacy": "تاریخچه و حریم خصوصی",
+  "settingsKeepHistory": "نگه داشتن تاریخچه",
+  "settingsKeepHistorySub": "فقط روی همین دستگاه می‌ماند. با خاموش کردن، پاک می‌شود.",
+  "transferRetryMissing": "برخی از فایل‌ها دیگر وجود ندارند.",
+  "peerTrusted": "مورد اعتماد",
+  "homeRecent": "دستگاه‌های اخیر",
+  "recentNotNearby": "در اطراف نیست",
+  "recentLastSeen": "آخرین بار: {when}",
+  "@recentLastSeen": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "recentSemantics": "{name}، در اطراف نیست",
+  "@recentSemantics": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAppearance": "ظاهر",
+  "themeSystem": "مطابق سیستم",
+  "themeLight": "روشن",
+  "themeDark": "تیره"
 }

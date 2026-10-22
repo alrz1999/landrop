@@ -2588,5 +2588,359 @@
         "type": "String"
       }
     }
+  },
+  "onboardingSemantics": "Welcome to LanDrop",
+  "@onboardingSemantics": {
+    "description": "Screen-reader label of the first-run onboarding."
+  },
+  "onboardingSkip": "Skip",
+  "@onboardingSkip": {
+    "description": "Onboarding: skip the remaining screens."
+  },
+  "onboardingNext": "Next",
+  "@onboardingNext": {
+    "description": "Onboarding: next screen."
+  },
+  "onboardingStart": "Start",
+  "@onboardingStart": {
+    "description": "Onboarding: last screen button, opens the app."
+  },
+  "onboardingStep": "Step {step} of {total}",
+  "@onboardingStep": {
+    "description": "Onboarding: screen-reader label of the page dots.",
+    "placeholders": {
+      "step": {
+        "type": "int",
+        "format": "decimalPattern"
+      },
+      "total": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "onboarding1Title": "Send files to your nearby devices",
+  "@onboarding1Title": {
+    "description": "Onboarding screen 1 title (what LanDrop does)."
+  },
+  "onboarding1Body": "No internet, no account. Files go straight from one device to the other.",
+  "@onboarding1Body": {
+    "description": "Onboarding screen 1 body."
+  },
+  "onboarding2Title": "Open LanDrop on both devices",
+  "@onboarding2Title": {
+    "description": "Onboarding screen 2 title (how devices find each other)."
+  },
+  "onboarding2Body": "Connect them to the same Wi-Fi. No Wi-Fi? LanDrop can help you connect directly.",
+  "@onboarding2Body": {
+    "description": "Onboarding screen 2 body."
+  },
+  "onboarding3Title": "Name this device",
+  "@onboarding3Title": {
+    "description": "Onboarding screen 3 title."
+  },
+  "onboarding3Body": "Others will see this name.",
+  "@onboarding3Body": {
+    "description": "Onboarding screen 3: under the device name field."
+  },
+  "onboardingPermissions": "What LanDrop may ask for",
+  "@onboardingPermissions": {
+    "description": "Onboarding screen 3: heading of the permission explanations."
+  },
+  "onboardingLocalNetworkComputer": "Your Mac will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won't appear.",
+  "@onboardingLocalNetworkComputer": {
+    "description": "Onboarding, macOS: the system local network prompt (UX.md 3.6)."
+  },
+  "onboardingLocalNetworkPhone": "Your iPhone or iPad will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won't appear.",
+  "@onboardingLocalNetworkPhone": {
+    "description": "Onboarding, iOS: the system local network prompt (UX.md 3.6)."
+  },
+  "onboardingFirewallWindows": "Windows may ask whether LanDrop may use the network. Allow it on private networks.",
+  "@onboardingFirewallWindows": {
+    "description": "Onboarding, Windows: the firewall prompt at the first start."
+  },
+  "onboardingStorageAndroid": "Files: to save what you receive in Downloads, where other apps find it. LanDrop explains this first, the first time you receive files.",
+  "@onboardingStorageAndroid": {
+    "description": "Onboarding, Android: the \"All files access\" permission, asked later."
+  },
+  "onboardingNothingToAllow": "Nothing to allow now. LanDrop asks only when something is needed.",
+  "@onboardingNothingToAllow": {
+    "description": "Onboarding: platforms without a permission prompt."
+  },
+  "storageTitle": "Save received files in Downloads?",
+  "@storageTitle": {
+    "description": "Android: explanation shown before the system \"All files access\" screen."
+  },
+  "storageBody": "To put files in your Downloads folder, where your other apps can find them, Android needs you to allow \"All files access\" for LanDrop on the next screen. Without it, files are kept inside LanDrop's own folder.",
+  "@storageBody": {
+    "description": "Android: body of the storage explanation (UX.md 3.6)."
+  },
+  "storageLater": "You can change this later in Settings.",
+  "@storageLater": {
+    "description": "Android: note under the storage explanation."
+  },
+  "storageAllow": "Allow",
+  "@storageAllow": {
+    "description": "Android storage explanation: continue to the system screen."
+  },
+  "storageNotNow": "Not now",
+  "@storageNotNow": {
+    "description": "Android storage explanation: keep the private folder."
+  },
+  "storageGranted": "Received files now go to {folder}.",
+  "@storageGranted": {
+    "description": "Snackbar after \"All files access\" was granted.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "storageKeptPrivate": "Files stay in LanDrop's own folder. You can try again in Settings.",
+  "@storageKeptPrivate": {
+    "description": "Snackbar after \"Not now\" or a denied permission."
+  },
+  "sendSheetText": "Text",
+  "@sendSheetText": {
+    "description": "Send sheet: send a text or a link."
+  },
+  "sendTextTitle": "Send text",
+  "@sendTextTitle": {
+    "description": "Title of the dialog to type or paste a text."
+  },
+  "sendTextLabel": "Text or link",
+  "@sendTextLabel": {
+    "description": "Label of the text field."
+  },
+  "sendTextPaste": "Paste",
+  "@sendTextPaste": {
+    "description": "Button that pastes the clipboard into the text field."
+  },
+  "sendTextNext": "Choose device",
+  "@sendTextNext": {
+    "description": "Text dialog: continue to the device picker."
+  },
+  "sendTextTooLong": "Too long: at most {max}.",
+  "@sendTextTooLong": {
+    "description": "Error under the text field; max is a size such as \"64 KB\".",
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "sendPickerTitleText": "Send text to…",
+  "@sendPickerTitleText": {
+    "description": "Device picker title when sending a text."
+  },
+  "textFromTitle": "Text from {name}",
+  "@textFromTitle": {
+    "description": "Title of the dialog showing a received text.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "textCopy": "Copy",
+  "@textCopy": {
+    "description": "Received text: copy it."
+  },
+  "textCopied": "Text copied",
+  "@textCopied": {
+    "description": "Snackbar after copying a received text."
+  },
+  "textOpenLink": "Open link",
+  "@textOpenLink": {
+    "description": "Received text that is a web link: open it in the browser."
+  },
+  "textLinkFailed": "Couldn't open the link.",
+  "@textLinkFailed": {
+    "description": "Snackbar when the browser could not be started."
+  },
+  "textSaveFile": "Save as file",
+  "@textSaveFile": {
+    "description": "Received text: write it to the save folder."
+  },
+  "textSaveFailed": "Couldn't save the file.",
+  "@textSaveFailed": {
+    "description": "Snackbar when saving a text failed."
+  },
+  "textAutoNotice": "Received automatically from a trusted device.",
+  "@textAutoNotice": {
+    "description": "Text dialog: the sender is trusted with \"Always accept\"."
+  },
+  "textMessage": "Text message",
+  "@textMessage": {
+    "description": "Transfer card and history: a text instead of files."
+  },
+  "historyTitle": "History",
+  "@historyTitle": {
+    "description": "History page title, home tooltip and Settings row."
+  },
+  "historySettingsSub": "Past transfers on this device",
+  "@historySettingsSub": {
+    "description": "Settings: subtitle of the History row."
+  },
+  "historyPrivacy": "History stays on this device. You can turn it off in Settings.",
+  "@historyPrivacy": {
+    "description": "History page: privacy note."
+  },
+  "historyEmpty": "No transfers yet.",
+  "@historyEmpty": {
+    "description": "History page without entries."
+  },
+  "historyOff": "History is off.",
+  "@historyOff": {
+    "description": "History page when \"Keep history\" is off."
+  },
+  "historyClear": "Clear history",
+  "@historyClear": {
+    "description": "History page action and confirm dialog title."
+  },
+  "historyClearBody": "Remove every entry? Received files are not deleted.",
+  "@historyClearBody": {
+    "description": "Confirm dialog body."
+  },
+  "historyClearConfirm": "Clear",
+  "@historyClearConfirm": {
+    "description": "Confirm dialog button."
+  },
+  "historyCleared": "History cleared",
+  "@historyCleared": {
+    "description": "Snackbar after clearing the history."
+  },
+  "historyToday": "Today",
+  "@historyToday": {
+    "description": "History group header."
+  },
+  "historyYesterday": "Yesterday",
+  "@historyYesterday": {
+    "description": "History group header."
+  },
+  "historyFilesMore": "{name} and {count, plural, =1{1 more} other{{count} more}}",
+  "@historyFilesMore": {
+    "description": "History item: first file name and how many others.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "historyWhen": "When",
+  "@historyWhen": {
+    "description": "History details label."
+  },
+  "historyResult": "Result",
+  "@historyResult": {
+    "description": "History details label."
+  },
+  "historySize": "Size",
+  "@historySize": {
+    "description": "History details label."
+  },
+  "historyFiles": "Files",
+  "@historyFiles": {
+    "description": "History details label."
+  },
+  "historySavedIn": "Saved in",
+  "@historySavedIn": {
+    "description": "History details label."
+  },
+  "historyMoreFiles": "and {count, plural, =1{1 more file} other{{count} more files}}",
+  "@historyMoreFiles": {
+    "description": "History details: files not listed.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "historyGone": "These files are no longer there.",
+  "@historyGone": {
+    "description": "History details: the received files were moved or deleted."
+  },
+  "historyDateTime": "{date}, {time}",
+  "@historyDateTime": {
+    "description": "A date and a clock time.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "historyDetailsSemantics": "Transfer details",
+  "@historyDetailsSemantics": {
+    "description": "Screen-reader label of the history details sheet."
+  },
+  "settingsSectionPrivacy": "History and privacy",
+  "@settingsSectionPrivacy": {
+    "description": "Settings section."
+  },
+  "settingsKeepHistory": "Keep history",
+  "@settingsKeepHistory": {
+    "description": "Settings switch."
+  },
+  "settingsKeepHistorySub": "Stays on this device. Turning it off deletes it.",
+  "@settingsKeepHistorySub": {
+    "description": "Settings switch subtitle."
+  },
+  "transferRetryMissing": "Some files are no longer there.",
+  "@transferRetryMissing": {
+    "description": "Failed send card: why \"Try again\" is disabled."
+  },
+  "peerTrusted": "Trusted",
+  "@peerTrusted": {
+    "description": "Device list: mark of a trusted device."
+  },
+  "homeRecent": "Recent",
+  "@homeRecent": {
+    "description": "Home: devices seen before that are not nearby now."
+  },
+  "recentNotNearby": "Not nearby",
+  "@recentNotNearby": {
+    "description": "Recent device: it is not on the network now."
+  },
+  "recentLastSeen": "Last seen {when}",
+  "@recentLastSeen": {
+    "description": "Recent device: when it was last nearby.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "recentSemantics": "{name}, not nearby",
+  "@recentSemantics": {
+    "description": "Screen-reader label of a recent device.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAppearance": "Appearance",
+  "@settingsAppearance": {
+    "description": "Settings row and dialog title: light or dark theme."
+  },
+  "themeSystem": "Same as system",
+  "@themeSystem": {
+    "description": "Appearance option."
+  },
+  "themeLight": "Light",
+  "@themeLight": {
+    "description": "Appearance option."
+  },
+  "themeDark": "Dark",
+  "@themeDark": {
+    "description": "Appearance option."
   }
 }

@@ -6,6 +6,8 @@ import 'app_controller.dart';
 import 'file_opener.dart';
 import 'home_page.dart';
 import 'hotspot_service.dart';
+import 'onboarding.dart';
+import 'storage_access.dart';
 import 'widgets.dart';
 
 class LanDropApp extends StatefulWidget {
@@ -19,7 +21,19 @@ class LanDropApp extends StatefulWidget {
     this.pickFolder = defaultPickFolder,
     this.hotspotService,
     this.fileOpener,
+    this.storageAccess,
+    this.historyStore,
+    this.onboardingPlatform,
   });
+
+  /// Android "All files access" (test seam).
+  final StorageAccess? storageAccess;
+
+  /// Transfer history (test seam); default: the [store]'s.
+  final HistoryStore? historyStore;
+
+  /// Platform for the onboarding's permission lines (test seam).
+  final String? onboardingPlatform;
 
   /// "Open" / "Show in folder" for received files (test seam).
   final FileOpener? fileOpener;
@@ -51,17 +65,24 @@ class _LanDropAppState extends State<LanDropApp> {
       initialAlias: widget.initialAlias,
       hotspotService: widget.hotspotService,
       fileOpener: widget.fileOpener,
+      storageAccess: widget.storageAccess,
+      historyStore: widget.historyStore,
     );
     controller.addListener(_onControllerChanged);
     controller.init();
   }
 
-  /// MaterialApp itself only depends on the language; everything else
-  /// listens through [AppScope].
+  /// MaterialApp itself only depends on the language and the theme;
+  /// everything else listens through [AppScope].
   Locale? _locale;
+  ThemeMode _themeMode = ThemeMode.system;
   void _onControllerChanged() {
-    if (controller.locale != _locale) {
-      setState(() => _locale = controller.locale);
+    if (controller.locale != _locale ||
+        controller.themeMode != _themeMode) {
+      setState(() {
+        _locale = controller.locale;
+        _themeMode = controller.themeMode;
+      });
     }
   }
 
@@ -84,7 +105,7 @@ class _LanDropAppState extends State<LanDropApp> {
         locale: _locale, // null = follow the system
         localeResolutionCallback: resolveAppLocale,
         debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.system,
+        themeMode: _themeMode,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: seed),
           useMaterial3: true,
@@ -94,10 +115,29 @@ class _LanDropAppState extends State<LanDropApp> {
               seedColor: seed, brightness: Brightness.dark),
           useMaterial3: true,
         ),
-        home: HomePage(
-            pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
+        home: _Root(
+          home: HomePage(
+              pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
+          onboardingPlatform: widget.onboardingPlatform,
+        ),
       ),
     );
+  }
+}
+
+/// Waits for the settings, then shows the first-run onboarding once
+/// (UX.md 3.6) or [home].
+class _Root extends StatelessWidget {
+  const _Root({required this.home, this.onboardingPlatform});
+  final Widget home;
+  final String? onboardingPlatform;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppScope.of(context);
+    if (!c.settingsLoaded) return const Scaffold();
+    if (!c.onboarded) return OnboardingPage(platform: onboardingPlatform);
+    return home;
   }
 }
 

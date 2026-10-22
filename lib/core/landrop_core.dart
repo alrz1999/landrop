@@ -257,7 +257,12 @@ class _InSession {
 
   /// Browser session that created it (browser uploads only).
   final String? owner;
-  _InSession(this.id, this.sender, this.files, this.cancelSecret, {this.owner});
+
+  /// The save folder when the session was accepted; its files go below it
+  /// even if [LanDropCoreImpl.setSaveDir] changes the folder meanwhile.
+  final String saveDir;
+  _InSession(this.id, this.sender, this.files, this.cancelSecret,
+      {this.owner, required this.saveDir});
 
   bool get anyActive => files.values.any((f) => f.active);
   bool get allFinished => files.values.every((f) => f.finished);
@@ -422,7 +427,11 @@ class LanDropCoreImpl implements LanDropCore {
         ? (options.identityDir ??
             '$_saveDir${Platform.pathSeparator}.landrop')
         : null;
+    final known = _identity;
     final identity = _identity ??= await TlsIdentity.loadOrCreate(idDir);
+    // The save folder changed during this run: keep the same identity (and
+    // so the same security code) there, instead of a new one next start.
+    if (known != null && idDir != null) await _storeIdentity(known, idDir);
 
     final server = await _bind(identity.securityContext());
     _server = server;
@@ -449,6 +458,29 @@ class LanDropCoreImpl implements LanDropCore {
             milliseconds:
                 (options.peerTimeout.inMilliseconds ~/ 4).clamp(250, 5000)),
         (_) => _prune());
+  }
+
+  /// Writes [id] to [dir] unless an identity is already stored there.
+  static Future<void> _storeIdentity(TlsIdentity id, String dir) async {
+    try {
+      final sep = Platform.pathSeparator;
+      final cert = File('$dir${sep}cert.pem');
+      if (await cert.exists()) return;
+      await Directory(dir).create(recursive: true);
+      await File('$dir${sep}key.pem').writeAsString(id.keyPem);
+      await cert.writeAsString(id.certPem);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> setSaveDir(String saveDir) async {
+    final dir = Directory(saveDir).absolute.path;
+    await Directory(dir).create(recursive: true);
+    _saveDir = dir;
+    final id = _identity;
+    if (id != null && options.persistIdentity && options.identityDir == null) {
+      await _storeIdentity(id, '$dir${Platform.pathSeparator}.landrop');
+    }
   }
 
   /// Starts UDP discovery (a new socket bound and joined on the current
@@ -734,7 +766,40 @@ class LanDropCoreImpl implements LanDropCore {
 
   @override
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
+          {void Function(String sessionId)? onSession}) =>
+      _sendFiles(to, items, onSession: onSession);
+
+  @override
+  Future<SendResult> sendText(DeviceInfo to, String text,
       {void Function(String sessionId)? onSession}) async {
+    if (!_running || _self == null) throw StateError('core not started');
+    final bytes = utf8.encode(text);
+    if (text.trim().isEmpty || bytes.length > maxTextBytes) {
+      return SendResult(
+          ok: false,
+          error: text.trim().isEmpty ? 'empty text' : 'text too large',
+          errorCode: SendErrorCode.unknown);
+    }
+    // The same pipeline as files: if the receiver wants the bytes (it does
+    // not show previews), message.txt is uploaded like any file.
+    final tmp = await Directory.systemTemp.createTemp('landrop_text');
+    try {
+      final f = File('${tmp.path}${Platform.pathSeparator}$textMessageFileName');
+      await f.writeAsBytes(bytes);
+      return await _sendFiles(
+          to, [SendItem(f.path, name: textMessageFileName)],
+          onSession: onSession, preview: text);
+    } finally {
+      try {
+        await tmp.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+
+  /// [sendFiles]; with [preview] (text messages) the single offer carries it
+  /// as `text/plain`, and a 204 answer means delivered.
+  Future<SendResult> _sendFiles(DeviceInfo to, List<SendItem> items,
+      {void Function(String sessionId)? onSession, String? preview}) async {
     if (!_running || _self == null) throw StateError('core not started');
     if (to.fingerprint.isEmpty) {
       return const SendResult(
@@ -762,7 +827,12 @@ class LanDropCoreImpl implements LanDropCore {
     final files = <String, (File, FileOffer)>{};
     for (final (f, name, size) in expanded) {
       final id = randomHex(8);
-      files[id] = (f, FileOffer(id, name, size, guessMime(name)));
+      files[id] = (
+        f,
+        FileOffer(id, name, size,
+            preview != null ? 'text/plain' : guessMime(name),
+            preview: preview)
+      );
     }
 
     final peer = _withKnownAddresses(to);
@@ -784,6 +854,7 @@ class LanDropCoreImpl implements LanDropCore {
               'fileName': e.value.$2.fileName,
               'size': e.value.$2.size,
               'fileType': e.value.$2.fileType,
+              'preview': ?e.value.$2.preview,
             }
         },
         // Proves to the receiver that this request comes from the holder of
@@ -810,6 +881,10 @@ class LanDropCoreImpl implements LanDropCore {
         } on _ConnectFailed {
           if (!await _switchLink(peer, route)) rethrow;
         }
+      }
+      // A text message was shown: nothing to upload (LocalSend behaviour).
+      if (prep.$1 == 204 && preview != null) {
+        return const SendResult(ok: true);
       }
       if (prep.$1 != 200 || prep.$2 == null) {
         return SendResult(
@@ -1855,9 +1930,16 @@ class LanDropCoreImpl implements LanDropCore {
       final segs = sanitizeRelativePath(name);
       segments[id] = segs;
       offers[id] = FileOffer(id, segs.join('/'), size,
-          type is String ? type : 'application/octet-stream');
+          type is String ? type : 'application/octet-stream',
+          preview: owner == null && filesJson.length == 1
+              ? textPreview(f['preview'])
+              : null);
     }
     if (offers.isEmpty) throw _HttpError(400, 'no files');
+    final isText = owner == null &&
+        offers.length == 1 &&
+        offers.values.single.preview != null &&
+        offers.values.single.fileType.startsWith('text/plain');
 
     final sessionId = randomHex(16);
     final request = IncomingRequest(sessionId, sender, offers.values.toList(),
@@ -1878,12 +1960,21 @@ class LanDropCoreImpl implements LanDropCore {
       _pendingDecision = false;
     }
     if (!accepted || !_running) throw _HttpError(403, 'declined');
+    if (isText) {
+      // The text was shown: nothing to upload, nothing written to disk.
+      try {
+        req.response.statusCode = HttpStatus.noContent;
+        await req.response.close();
+      } catch (_) {}
+      return;
+    }
     // The browser signed out or was disconnected while the owner decided.
     if (owner != null && !_web.sessionActive(owner)) {
       throw _HttpError(401, 'not paired');
     }
     if (_session != null) throw _HttpError(409, 'busy');
 
+    final saveDir = _saveDir;
     // Top-level folders get a unique name ("Photos (1)") so a second
     // transfer of the same folder never merges into / overwrites the first.
     final tops = <String, String>{};
@@ -1894,14 +1985,14 @@ class LanDropCoreImpl implements LanDropCore {
       if (segs.length > 1) {
         final top = tops.putIfAbsent(
             segs.first,
-            () => uniqueDirName(_saveDir, segs.first,
+            () => uniqueDirName(saveDir, segs.first,
                 taken: tops.values.toSet()));
         dir = [top, ...segs.sublist(1, segs.length - 1)];
       }
       files[o.id] = _InFile(o, randomHex(16), dir, segs.last);
     }
-    final session =
-        _InSession(sessionId, sender, files, randomHex(16), owner: owner);
+    final session = _InSession(sessionId, sender, files, randomHex(16),
+        owner: owner, saveDir: saveDir);
     _session = session;
     _touch(session);
     _json(req.response, 200, {
@@ -2023,7 +2114,7 @@ class LanDropCoreImpl implements LanDropCore {
   /// checks, with symlinks resolved, that it is still inside saveDir.
   Future<Directory> _dirFor(_InSession s, _InFile f) async {
     final sep = Platform.pathSeparator;
-    var path = _saveDir;
+    var path = s.saveDir;
     for (final seg in f.dirSegs) {
       path = '$path$sep$seg';
       final d = Directory(path);
@@ -2031,7 +2122,7 @@ class LanDropCoreImpl implements LanDropCore {
         await d.create();
         s.createdDirs.add(path);
       }
-      if (!await isWithinDir(_saveDir, path)) {
+      if (!await isWithinDir(s.saveDir, path)) {
         throw _HttpError(403, 'unsafe path');
       }
     }

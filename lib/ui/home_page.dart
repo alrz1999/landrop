@@ -7,20 +7,23 @@ import '../core/api.dart';
 import 'connect_helper.dart';
 import 'diagnosis_dialog.dart';
 import 'dialogs.dart';
-import 'app_controller.dart' show TransferSession;
+import 'app_controller.dart' show IncomingText, TransferSession;
 import 'cable_wizard.dart';
 import 'finding_text.dart';
+import 'history_page.dart';
 import 'hotspot_wizard.dart';
 import 'l10n.dart';
+import 'onboarding.dart';
 import 'pickers.dart';
 import 'settings_page.dart';
 import 'shares.dart';
+import 'text_message.dart';
 import 'widgets.dart';
 
 export 'pickers.dart';
 
 /// What the Send sheet offers (UX.md 3.3).
-enum SendKind { files, folder }
+enum SendKind { files, folder, text }
 
 /// Home (UX.md 3.2, step U1): who I am, nearby devices, activity, and one
 /// "Send" button that asks "Files or folder?". Sharing links and browser
@@ -43,6 +46,7 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<IncomingRequest>? _sub;
   StreamSubscription<WebPairingRequest>? _pairSub;
   StreamSubscription<TransferSession>? _autoSub;
+  StreamSubscription<IncomingText>? _textSub;
 
   /// Incoming transfer requests and browser pairings, one dialog at a time.
   final Queue<Object> _pending = Queue();
@@ -58,6 +62,10 @@ class _HomePageState extends State<HomePage> {
     });
     _pairSub ??= c.pairingRequests.listen((r) {
       _pending.add(r);
+      _drainIncoming();
+    });
+    _textSub ??= c.incomingTexts.listen((m) {
+      _pending.add(m);
       _drainIncoming();
     });
     // Every transfer accepted without asking is announced, with a way to
@@ -92,6 +100,16 @@ class _HomePageState extends State<HomePage> {
         AppScope.read(context).respondPairing(next, ok);
         continue;
       }
+      if (next is IncomingText) {
+        final c = AppScope.read(context);
+        if (!next.auto) {
+          if (next.request.decision.isCompleted) continue; // timed out
+          c.receiveText(next.request); // shown now: delivered
+        }
+        await showIncomingTextDialog(context, next,
+            trust: c.trustOf(next.request));
+        continue;
+      }
       final req = next as IncomingRequest;
       if (req.decision.isCompleted) continue; // e.g. timed out by core
       final c = AppScope.read(context);
@@ -102,6 +120,12 @@ class _HomePageState extends State<HomePage> {
           onChangeFolder: _openSettings);
       if (!mounted) break;
       final ok = d.accept;
+      // Android, first receive: explain "All files access" before the
+      // system screen; "Allow" moves this transfer to Downloads too.
+      if (ok && c.needsStorageExplanation && !req.decision.isCompleted) {
+        await askStorageAccess(context, c, firstTime: true);
+        if (!mounted) break;
+      }
       c.respond(req, ok, alwaysAccept: d.alwaysAccept);
       if (ok) {
         final l = context.l;
@@ -116,6 +140,7 @@ class _HomePageState extends State<HomePage> {
     _sub?.cancel();
     _pairSub?.cancel();
     _autoSub?.cancel();
+    _textSub?.cancel();
     super.dispose();
   }
 
@@ -135,7 +160,23 @@ class _HomePageState extends State<HomePage> {
   Future<void> _sendSheet() async {
     final kind = await showSendSheet(context);
     if (kind == null || !mounted) return;
-    await (kind == SendKind.folder ? _sendFolderFlow() : _sendFlow());
+    await switch (kind) {
+      SendKind.folder => _sendFolderFlow(),
+      SendKind.text => _sendTextFlow(),
+      SendKind.files => _sendFlow(),
+    };
+  }
+
+  /// "Text": type or paste, choose the device, send (PROTOCOL.md "Text
+  /// messages").
+  Future<void> _sendTextFlow({DeviceInfo? to}) async {
+    final c = AppScope.read(context);
+    final text = await showSendTextDialog(context);
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    final peer = to ?? await _pickPeer(context.l.sendPickerTitleText);
+    if (peer == null || !mounted) return;
+    final r = await c.sendText(peer, text);
+    if (mounted) _sendResult(peer, r);
   }
 
   /// Tells the user how a send ended: sent, declined, or why it failed
@@ -338,6 +379,17 @@ class _HomePageState extends State<HomePage> {
               PeerTile(peer: p, onSend: () => _sendFlow(to: p)),
           ]),
         ),
+      // Devices seen before, not nearby now (UX.md 3.2).
+      if (c.recentOffline.isNotEmpty) ...[
+        SectionHeader(l.homeRecent),
+        Card(
+          key: const Key('recentDevices'),
+          child: Column(children: [
+            for (final r in c.recentOffline.take(5))
+              RecentTile(device: r, onHelp: _openHelper),
+          ]),
+        ),
+      ],
     ];
     final transfersSection = <Widget>[
       if (c.sessions.isNotEmpty) ...[
@@ -383,6 +435,13 @@ class _HomePageState extends State<HomePage> {
               tooltip: l.homeShareLink,
               icon: const Icon(Icons.ios_share),
               onPressed: _openShares,
+            ),
+          if (c.keepHistory)
+            IconButton(
+              key: const Key('historyAction'),
+              tooltip: l.historyTitle,
+              icon: const Icon(Icons.history),
+              onPressed: () => openHistory(context),
             ),
           IconButton(
             tooltip: l.settingsTitle,
@@ -478,6 +537,12 @@ Future<SendKind?> showSendSheet(BuildContext context) {
               leading: const Icon(Icons.drive_folder_upload),
               title: Text(l.sendSheetFolder),
               onTap: () => Navigator.pop(ctx, SendKind.folder),
+            ),
+            ListTile(
+              key: const Key('sendText'),
+              leading: const Icon(Icons.short_text),
+              title: Text(l.sendSheetText),
+              onTap: () => Navigator.pop(ctx, SendKind.text),
             ),
             const SizedBox(height: 8),
           ],

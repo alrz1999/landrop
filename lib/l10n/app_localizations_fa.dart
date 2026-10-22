@@ -2011,4 +2011,283 @@ class AppLocalizationsFa extends AppLocalizations {
   String trustedLargeSub(String size) {
     return 'خاموش: برای انتقال‌های بیش از $size همیشه پرسیده می‌شود.';
   }
+
+  @override
+  String get onboardingSemantics => 'به LanDrop خوش آمدید';
+
+  @override
+  String get onboardingSkip => 'رد شدن';
+
+  @override
+  String get onboardingNext => 'بعدی';
+
+  @override
+  String get onboardingStart => 'شروع';
+
+  @override
+  String onboardingStep(int step, int total) {
+    final intl.NumberFormat stepNumberFormat = intl.NumberFormat.decimalPattern(
+      localeName,
+    );
+    final String stepString = stepNumberFormat.format(step);
+    final intl.NumberFormat totalNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String totalString = totalNumberFormat.format(total);
+
+    return 'مرحلهٔ $stepString از $totalString';
+  }
+
+  @override
+  String get onboarding1Title => 'فایل‌ها را به دستگاه‌های نزدیک خود بفرستید';
+
+  @override
+  String get onboarding1Body =>
+      'بدون اینترنت و بدون حساب کاربری. فایل‌ها مستقیم از یک دستگاه به دستگاه دیگر می‌روند.';
+
+  @override
+  String get onboarding2Title => 'LanDrop را روی هر دو دستگاه باز کنید';
+
+  @override
+  String get onboarding2Body =>
+      'آن‌ها را به یک وای‌فای وصل کنید. وای‌فای ندارید؟ LanDrop کمک می‌کند مستقیم وصل شوید.';
+
+  @override
+  String get onboarding3Title => 'برای این دستگاه یک نام انتخاب کنید';
+
+  @override
+  String get onboarding3Body => 'دیگران این نام را می‌بینند.';
+
+  @override
+  String get onboardingPermissions => 'اجازه‌هایی که LanDrop ممکن است بخواهد';
+
+  @override
+  String get onboardingLocalNetworkComputer =>
+      'مک شما می‌پرسد آیا LanDrop اجازه دارد دستگاه‌های شبکهٔ محلی را پیدا کند. «Allow» را انتخاب کنید، وگرنه دستگاه‌های اطراف نمایش داده نمی‌شوند.';
+
+  @override
+  String get onboardingLocalNetworkPhone =>
+      'آیفون یا آیپد شما می‌پرسد آیا LanDrop اجازه دارد دستگاه‌های شبکهٔ محلی را پیدا کند. «Allow» را انتخاب کنید، وگرنه دستگاه‌های اطراف نمایش داده نمی‌شوند.';
+
+  @override
+  String get onboardingFirewallWindows =>
+      'ممکن است ویندوز بپرسد آیا LanDrop اجازهٔ استفاده از شبکه را دارد. آن را برای شبکه‌های خصوصی (Private networks) مجاز کنید.';
+
+  @override
+  String get onboardingStorageAndroid =>
+      'فایل‌ها: برای ذخیرهٔ فایل‌های دریافتی در پوشهٔ Downloads تا برنامه‌های دیگر هم آن‌ها را ببینند. اولین باری که فایلی دریافت کنید، LanDrop پیش از آن توضیح می‌دهد.';
+
+  @override
+  String get onboardingNothingToAllow =>
+      'فعلاً لازم نیست اجازه‌ای بدهید. LanDrop فقط وقتی چیزی لازم باشد می‌پرسد.';
+
+  @override
+  String get storageTitle => 'فایل‌های دریافتی در پوشهٔ Downloads ذخیره شوند؟';
+
+  @override
+  String get storageBody =>
+      'برای اینکه فایل‌ها در پوشهٔ دانلودها و در دسترس برنامه‌های دیگر باشند، اندروید در صفحهٔ بعد از شما می‌خواهد «دسترسی به همهٔ فایل‌ها» را برای LanDrop روشن کنید. بدون آن، فایل‌ها در پوشهٔ خود LanDrop می‌مانند.';
+
+  @override
+  String get storageLater => 'بعداً می‌توانید این را در تنظیمات تغییر دهید.';
+
+  @override
+  String get storageAllow => 'اجازه می‌دهم';
+
+  @override
+  String get storageNotNow => 'الان نه';
+
+  @override
+  String storageGranted(String folder) {
+    return 'از این به بعد فایل‌های دریافتی در $folder ذخیره می‌شوند.';
+  }
+
+  @override
+  String get storageKeptPrivate =>
+      'فایل‌ها در پوشهٔ خود LanDrop می‌مانند. بعداً می‌توانید در تنظیمات دوباره امتحان کنید.';
+
+  @override
+  String get sendSheetText => 'متن';
+
+  @override
+  String get sendTextTitle => 'ارسال متن';
+
+  @override
+  String get sendTextLabel => 'متن یا لینک';
+
+  @override
+  String get sendTextPaste => 'جای‌گذاری';
+
+  @override
+  String get sendTextNext => 'انتخاب دستگاه';
+
+  @override
+  String sendTextTooLong(String max) {
+    return 'خیلی طولانی است: حداکثر $max.';
+  }
+
+  @override
+  String get sendPickerTitleText => 'ارسال متن به…';
+
+  @override
+  String textFromTitle(String name) {
+    return 'متن از $name';
+  }
+
+  @override
+  String get textCopy => 'کپی';
+
+  @override
+  String get textCopied => 'متن کپی شد';
+
+  @override
+  String get textOpenLink => 'باز کردن لینک';
+
+  @override
+  String get textLinkFailed => 'لینک باز نشد.';
+
+  @override
+  String get textSaveFile => 'ذخیره به‌صورت فایل';
+
+  @override
+  String get textSaveFailed => 'فایل ذخیره نشد.';
+
+  @override
+  String get textAutoNotice =>
+      'به‌طور خودکار از یک دستگاه مورد اعتماد دریافت شد.';
+
+  @override
+  String get textMessage => 'پیام متنی';
+
+  @override
+  String get historyTitle => 'تاریخچه';
+
+  @override
+  String get historySettingsSub => 'انتقال‌های قبلی روی این دستگاه';
+
+  @override
+  String get historyPrivacy =>
+      'تاریخچه فقط روی همین دستگاه می‌ماند. می‌توانید آن را در تنظیمات خاموش کنید.';
+
+  @override
+  String get historyEmpty => 'هنوز انتقالی انجام نشده است.';
+
+  @override
+  String get historyOff => 'تاریخچه خاموش است.';
+
+  @override
+  String get historyClear => 'پاک کردن تاریخچه';
+
+  @override
+  String get historyClearBody =>
+      'همهٔ موارد حذف شوند؟ فایل‌های دریافتی پاک نمی‌شوند.';
+
+  @override
+  String get historyClearConfirm => 'پاک کردن';
+
+  @override
+  String get historyCleared => 'تاریخچه پاک شد';
+
+  @override
+  String get historyToday => 'امروز';
+
+  @override
+  String get historyYesterday => 'دیروز';
+
+  @override
+  String historyFilesMore(String name, int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString مورد دیگر',
+    );
+    return '$name و $_temp0';
+  }
+
+  @override
+  String get historyWhen => 'زمان';
+
+  @override
+  String get historyResult => 'نتیجه';
+
+  @override
+  String get historySize => 'حجم';
+
+  @override
+  String get historyFiles => 'فایل‌ها';
+
+  @override
+  String get historySavedIn => 'محل ذخیره';
+
+  @override
+  String historyMoreFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString فایل دیگر',
+    );
+    return 'و $_temp0';
+  }
+
+  @override
+  String get historyGone => 'این فایل‌ها دیگر آنجا نیستند.';
+
+  @override
+  String historyDateTime(String date, String time) {
+    return '$date، ساعت $time';
+  }
+
+  @override
+  String get historyDetailsSemantics => 'جزئیات انتقال';
+
+  @override
+  String get settingsSectionPrivacy => 'تاریخچه و حریم خصوصی';
+
+  @override
+  String get settingsKeepHistory => 'نگه داشتن تاریخچه';
+
+  @override
+  String get settingsKeepHistorySub =>
+      'فقط روی همین دستگاه می‌ماند. با خاموش کردن، پاک می‌شود.';
+
+  @override
+  String get transferRetryMissing => 'برخی از فایل‌ها دیگر وجود ندارند.';
+
+  @override
+  String get peerTrusted => 'مورد اعتماد';
+
+  @override
+  String get homeRecent => 'دستگاه‌های اخیر';
+
+  @override
+  String get recentNotNearby => 'در اطراف نیست';
+
+  @override
+  String recentLastSeen(String when) {
+    return 'آخرین بار: $when';
+  }
+
+  @override
+  String recentSemantics(String name) {
+    return '$name، در اطراف نیست';
+  }
+
+  @override
+  String get settingsAppearance => 'ظاهر';
+
+  @override
+  String get themeSystem => 'مطابق سیستم';
+
+  @override
+  String get themeLight => 'روشن';
+
+  @override
+  String get themeDark => 'تیره';
 }

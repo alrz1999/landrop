@@ -1070,4 +1070,121 @@ void main() {
     final f = await b.runDiagnosis();
     expect(f.first.code, 'server-down');
   });
+
+  group('text messages (PROTOCOL.md "Text messages")', () {
+    test('text arrives as a preview; nothing is uploaded or written',
+        () async {
+      final got = <IncomingRequest>[];
+      final recv = <TransferProgress>[];
+      final sub = b.progress.listen(recv.add);
+      autoAnswer = b.incoming.listen((r) {
+        got.add(r);
+        r.decision.complete(true);
+      });
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      const text = 'سلام Sara, see https://example.com/a?b=1\nline 2';
+      final sessions = <String>[];
+      final r = await a.sendText(peer, text, onSession: sessions.add);
+      expect(r.ok, isTrue);
+      expect(r.sessionId, isNull, reason: '204: no session');
+      expect(sessions, isEmpty);
+      final req = got.single;
+      expect(req.isText, isTrue);
+      expect(req.text, text);
+      expect(req.verified, isTrue);
+      expect(req.files.single.fileName, 'message.txt');
+      expect(req.files.single.fileType, 'text/plain');
+      expect(req.files.single.size, utf8.encode(text).length);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+      expect(recv, isEmpty);
+      expect(_tree(dirB), isEmpty, reason: 'nothing on disk');
+      // The receiver is free again.
+      expect((await a.sendText(peer, 'again')).ok, isTrue);
+    });
+
+    test('declined text reports declined', () async {
+      answerB(false);
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final r = await a.sendText(peer, 'no thanks');
+      expect(r.ok, isFalse);
+      expect(r.errorCode, SendErrorCode.declined);
+      expect(_tree(dirB), isEmpty);
+    });
+
+    test('too large or empty text is refused before contacting the peer',
+        () async {
+      var asked = false;
+      autoAnswer = b.incoming.listen((r) {
+        asked = true;
+        r.decision.complete(true);
+      });
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final big = 'x' * (maxTextBytes + 1);
+      final r = await a.sendText(peer, big);
+      expect(r.ok, isFalse);
+      expect(r.error, 'text too large');
+      expect((await a.sendText(peer, '   ')).ok, isFalse);
+      // Exactly the limit is fine (multi-byte characters count as bytes).
+      expect((await a.sendText(peer, 'x' * maxTextBytes)).ok, isTrue);
+      final persian = 'س' * (maxTextBytes ~/ 2 + 1); // 2 bytes each
+      expect((await a.sendText(peer, persian)).ok, isFalse);
+      expect(asked, isTrue);
+    });
+
+    test('receiver: an oversized or markup preview is not trusted', () async {
+      final got = <IncomingRequest>[];
+      autoAnswer = b.incoming.listen((r) {
+        got.add(r);
+        r.decision.complete(true);
+      });
+      Map<String, dynamic> offer(Object preview, {String type = 'text/plain'}) {
+        final m = _mallory({'t1': 'message.txt'});
+        final f = (m['files'] as Map)['t1'] as Map<String, dynamic>;
+        f['fileType'] = type;
+        f['preview'] = preview;
+        return m;
+      }
+
+      // Control characters are dropped; markup stays plain text.
+      final (s1, _) = await _raw('POST', b.self, '/prepare-upload',
+          json: offer('<b>hi</b>\u0000\u0007 there'));
+      expect(s1, 204);
+      expect(got.last.text, '<b>hi</b> there');
+      expect(got.last.verified, isFalse);
+
+      // Over 64 KiB: an ordinary file offer (accepting asks for the bytes).
+      final (s2, body) = await _raw('POST', b.self, '/prepare-upload',
+          json: offer('y' * (maxTextBytes + 1)));
+      expect(s2, 200);
+      expect(got.last.isText, isFalse);
+      await _raw('POST', b.self, '/cancel', query: {
+        'sessionId': body!['sessionId'] as String,
+        'cancelSecret': body['cancelSecret'] as String,
+      });
+
+      // A preview on another type is a file, not a text.
+      final (s3, body3) = await _raw('POST', b.self, '/prepare-upload',
+          json: offer('hi', type: 'image/png'));
+      expect(s3, 200);
+      expect(got.last.isText, isFalse);
+      await _raw('POST', b.self, '/cancel', query: {
+        'sessionId': body3!['sessionId'] as String,
+        'cancelSecret': body3['cancelSecret'] as String,
+      });
+      expect(_tree(dirB), isEmpty);
+    });
+
+    test('setSaveDir: the next accepted transfer goes to the new folder',
+        () async {
+      answerB(true);
+      final other = Directory('${tmp.path}/b2');
+      await b.setSaveDir(other.path);
+      final src = File('${tmp.path}/n.txt')..writeAsStringSync('new home');
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      expect(await a.send(peer, [src.path]), isTrue);
+      expect(File('${other.path}/n.txt').readAsStringSync(), 'new home');
+      expect(File('${dirB.path}/n.txt').existsSync(), isFalse);
+    });
+  });
 }

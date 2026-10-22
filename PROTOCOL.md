@@ -25,9 +25,10 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
 ## Endpoints (all HTTPS, self-signed cert)
 - GET  /api/localsend/v2/info -> device info
 - POST /api/localsend/v2/register -> device info (response = own info)
-- POST /api/localsend/v2/prepare-upload  body { info, files: { id: {id,fileName,size,fileType,sha256?} },
-    landropProof? }
-    -> 200 { sessionId, files: { id: token }, cancelSecret } | 403 declined | 409 busy
+- POST /api/localsend/v2/prepare-upload  body { info, files: { id: {id,fileName,size,fileType,sha256?,
+    preview?} }, landropProof? }
+    -> 200 { sessionId, files: { id: token }, cancelSecret } | 204 text message shown (nothing to
+       upload, see "Text messages") | 403 declined | 409 busy
     `cancelSecret` (LanDrop extra field) is a per-session secret; only the sender gets it.
     `landropProof` (LanDrop extra field, "Sender proof"): { cert: base64 DER of the sender's TLS
     certificate, sig: base64 RSA PKCS#1 v1.5 SHA-256 signature }. Signed bytes = UTF-8 of
@@ -50,6 +51,26 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
     The receiver can also end a session itself (its user pressed Cancel): the running upload is
     answered 409 (or the connection drops) at the next chunk, and every later upload and
     upload-status of that session gets 403, which a LanDrop sender reports as "cancelled".
+
+## Text messages (LocalSend v2 `preview`)
+A short text or link is sent as a normal prepare-upload with exactly one file entry:
+`{ id, fileName: "message.txt", size: <UTF-8 bytes of the text>, fileType: "text/plain", preview: <the text> }`,
+so official LocalSend clients show it as a message too. The sender refuses an empty text or more
+than 64 KiB (65536 UTF-8 bytes) without contacting the receiver. `landropProof` is the same as for
+files (it signs id, fileName and size; `preview` travels inside the same pinned TLS connection).
+- Receiver (LanDrop): a request is a text message only when it has one entry, its `fileType` starts
+  with `text/plain` and `preview` is a non-empty string of at most 64 KiB; it never applies to
+  browser uploads. Control characters other than tab and line breaks are removed; the text is shown
+  as plain selectable text (never markup, never a clickable link; "Open link" appears only when the
+  whole text is one `http`/`https` URL, and only on desktops). The request goes through the same
+  decision as files: when the user sees it (or at once for a proven, trusted device with "Always
+  accept"; never for an unverified sender) the receiver answers **204** and creates no session;
+  nothing is written to disk unless the user picks "Save as file" (a unique `message.txt` in the
+  save folder). Declined or unanswered: 403 as for files. Any other `preview` (too long, another
+  type, several entries) is ignored and the entry is an ordinary file offer.
+- Sender (LanDrop): 204 means delivered (`SendResult.ok`, no session id). A receiver that does not
+  show previews answers 200 with a token, and `message.txt` is uploaded like any file (same
+  pipeline, resume, cancel).
 
 ## LanDrop extensions (ignored by LocalSend clients)
 - Capability record, in the info JSON as `landrop` and at GET /api/landrop/v1/capabilities:

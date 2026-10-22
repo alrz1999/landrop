@@ -16,6 +16,24 @@ abstract class FileOpener {
 
   /// Shows [path] selected in the file manager (its folder on Linux).
   Future<bool> reveal(String path);
+
+  /// Opens [url] in the default browser. Only an http(s) link passing
+  /// [isWebLink] is ever opened; false otherwise or when it failed. Same
+  /// platforms as [canOpen].
+  Future<bool> openLink(String url);
+}
+
+/// Whether [text] is exactly one http(s) link (surrounding spaces
+/// allowed): no other words, no spaces or control characters inside, a
+/// host present. Only such text gets an "Open link" button.
+bool isWebLink(String text) {
+  final s = text.trim();
+  if (s.isEmpty || s.length > 2048) return false;
+  if (RegExp(r'[\s\u0000-\u001F\u007F]').hasMatch(s)) return false;
+  final uri = Uri.tryParse(s);
+  if (uri == null || !uri.hasAuthority || uri.host.isEmpty) return false;
+  final scheme = uri.scheme.toLowerCase();
+  return scheme == 'http' || scheme == 'https';
 }
 
 /// Desktop implementation with no extra package: `open` / `open -R` on
@@ -78,4 +96,29 @@ class SystemFileOpener implements FileOpener {
 
   @override
   Future<bool> reveal(String path) => _exec(revealCommand(path), path);
+
+  /// The command [openLink] runs for [url], or null when unsupported or
+  /// not a web link. Passed as one argument, never through a shell.
+  (String, List<String>)? linkCommand(String url) {
+    if (!isWebLink(url)) return null;
+    final u = url.trim();
+    return switch (os) {
+      'macos' => ('open', [u]),
+      'windows' => ('explorer', [u]),
+      'linux' => ('xdg-open', [u]),
+      _ => null,
+    };
+  }
+
+  @override
+  Future<bool> openLink(String url) async {
+    final cmd = linkCommand(url);
+    if (cmd == null) return false;
+    try {
+      final r = await _run(cmd.$1, cmd.$2);
+      return os == 'windows' || r.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
 }

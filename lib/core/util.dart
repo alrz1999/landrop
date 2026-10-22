@@ -32,6 +32,18 @@ class HttpStatusError implements Exception {
   String toString() => 'HTTP $status: $message';
 }
 
+/// The text of an untrusted LocalSend `preview` field, or null when it is
+/// not a non-empty string of at most `maxTextBytes` (64 KiB) UTF-8 bytes.
+/// Control characters other than tab and line breaks are removed; the
+/// result is shown as plain text, never interpreted as markup.
+String? textPreview(Object? raw, {int maxBytes = 64 * 1024}) {
+  if (raw is! String || raw.isEmpty) return null;
+  if (utf8.encode(raw).length > maxBytes) return null;
+  final clean = raw.replaceAll(
+      RegExp('[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]'), '');
+  return clean.trim().isEmpty ? null : clean;
+}
+
 /// Reduce an untrusted, sender-supplied file name to a safe single path
 /// component: no directories, no traversal, no control/reserved characters.
 String sanitizeFileName(String raw) {

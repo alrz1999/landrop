@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import '../core/api.dart';
@@ -34,6 +35,12 @@ class FakeCore implements LanDropCore {
 
   /// Every call to [send] / [sendFiles], recorded for tests.
   final List<(DeviceInfo, List<String>)> sent = [];
+
+  /// Every [sendText] call, recorded for tests.
+  final List<(DeviceInfo, String)> sentTexts = [];
+
+  /// Every [setSaveDir] call, for tests.
+  final List<String> saveDirChanges = [];
 
   /// Test hook: extra wait before a peer (by fingerprint) "accepts" a send,
   /// so concurrent sends can get their session ids out of order.
@@ -162,6 +169,27 @@ class FakeCore implements LanDropCore {
         }
       });
     }
+    return req;
+  }
+
+  /// Test/demo hook: a text message arrives (PROTOCOL.md "Text messages").
+  /// Like the real core, the request is a single `message.txt` offer whose
+  /// `preview` is [text]; accepting it writes nothing.
+  IncomingRequest simulateIncomingText(String text,
+      {DeviceInfo? from, bool? verified}) {
+    final sender = from ?? defaultPeers.first;
+    final req = IncomingRequest(
+      'in-${++_session}',
+      sender,
+      [
+        FileOffer('t1', textMessageFileName, utf8.encode(text).length,
+            'text/plain',
+            preview: text)
+      ],
+      verified: verified ??
+          (sender.fingerprint.isNotEmpty && sender.deviceType != 'web'),
+    );
+    _incomingCtrl.add(req);
     return req;
   }
 
@@ -294,6 +322,29 @@ class FakeCore implements LanDropCore {
           errorCode: SendErrorCode.cancelled);
     }
     return SendResult(ok: true, sessionId: sid);
+  }
+
+  @override
+  Future<SendResult> sendText(DeviceInfo to, String text,
+      {void Function(String sessionId)? onSession}) async {
+    sentTexts.add((to, text));
+    if (text.trim().isEmpty || utf8.encode(text).length > maxTextBytes) {
+      return const SendResult(
+          ok: false, error: 'text too large', errorCode: SendErrorCode.unknown);
+    }
+    await Future<void>.delayed(simulateDelay);
+    final failure = failSends[to.fingerprint];
+    if (failure != null) {
+      return SendResult(ok: false, error: failure.name, errorCode: failure);
+    }
+    // The receiver showed it: 204, no session, nothing uploaded.
+    return const SendResult(ok: true);
+  }
+
+  @override
+  Future<void> setSaveDir(String saveDir) async {
+    saveDirChanges.add(saveDir);
+    this.saveDir = saveDir;
   }
 
   /// Every [cancelSession] call, for tests.

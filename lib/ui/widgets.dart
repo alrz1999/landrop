@@ -157,8 +157,38 @@ class PeerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l;
+    // A device the user accepted files from (proven fingerprint; the peer
+    // list only holds fingerprints verified against the certificate).
+    final trusted = peer.fingerprint.isNotEmpty &&
+        AppScope.maybeOf(context)?.trustedDevice(peer.fingerprint) != null;
+    final scheme = Theme.of(context).colorScheme;
+    final avatar = CircleAvatar(child: Icon(deviceIcon(peer.deviceType)));
     return ListTile(
-      leading: CircleAvatar(child: Icon(deviceIcon(peer.deviceType))),
+      // A badge on the avatar (with a tooltip and a screen-reader label),
+      // so the row keeps its size on narrow phones.
+      leading: trusted
+          ? Tooltip(
+              message: l.peerTrusted,
+              child: Semantics(
+                key: Key('trustedMark-${peer.fingerprint}'),
+                label: l.peerTrusted,
+                child: Stack(clipBehavior: Clip.none, children: [
+                  avatar,
+                  PositionedDirectional(
+                    end: -4,
+                    bottom: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                          color: scheme.surface, shape: BoxShape.circle),
+                      child: Icon(Icons.verified_user,
+                          size: 14, color: scheme.primary),
+                    ),
+                  ),
+                ]),
+              ),
+            )
+          : avatar,
       title: AutoDirText(peer.alias,
           maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text([
@@ -180,6 +210,50 @@ class PeerTile extends StatelessWidget {
           label: Text(l.homeSend),
         ),
       ]),
+    );
+  }
+}
+
+/// A device seen before that is not nearby now (UX.md 3.2 "Recent"):
+/// greyed, "Not nearby · Last seen …", and Help (the connection helper).
+class RecentTile extends StatelessWidget {
+  const RecentTile({super.key, required this.device, required this.onHelp});
+  final RecentDevice device;
+  final VoidCallback onHelp;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final trusted =
+        AppScope.maybeOf(context)?.trustedDevice(device.fingerprint) != null;
+    return Semantics(
+      label: l.recentSemantics(device.alias),
+      child: ListTile(
+        key: Key('recent-${device.fingerprint}'),
+        enabled: false,
+        leading: CircleAvatar(
+            backgroundColor: Colors.transparent,
+            child: Icon(deviceIcon(device.deviceType), color: muted)),
+        title: AutoDirText(device.alias,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: muted)),
+        subtitle: Text(
+          [
+            deviceKindLabel(l, device.deviceType),
+            if (trusted) l.peerTrusted,
+            l.recentNotNearby,
+            l.recentLastSeen(formatWhen(device.lastSeen, l)),
+          ].join(' · '),
+          style: TextStyle(color: muted),
+        ),
+        trailing: TextButton(
+          key: Key('recentHelp-${device.fingerprint}'),
+          onPressed: onHelp,
+          child: Text(l.homeHelp),
+        ),
+      ),
     );
   }
 }
@@ -495,7 +569,21 @@ class TransferSessionCard extends StatelessWidget {
     final trusted = s.autoAccepted && s.peerFingerprint.isNotEmpty
         ? c.trustedDevice(s.peerFingerprint)
         : null;
+    final canRetry = c.canRetry(s);
+    final showRetry = !s.incoming &&
+        s.peer != null &&
+        (state == TransferState.failed || state == TransferState.cancelled);
     final actions = <Widget>[
+      if (showRetry)
+        Tooltip(
+          message: canRetry ? l.commonTryAgain : l.transferRetryMissing,
+          child: TextButton.icon(
+            key: Key('retry-$sid'),
+            onPressed: canRetry ? () => c.retry(s) : null,
+            icon: const Icon(Icons.refresh),
+            label: Text(l.commonTryAgain),
+          ),
+        ),
       if (!state.isFinal && !s.cancelRequested)
         TextButton.icon(
           key: Key('cancel-$sid'),
@@ -574,6 +662,28 @@ class TransferSessionCard extends StatelessWidget {
                             : null)),
               ),
             ]),
+            if (s.text != null)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 6),
+                child: Row(children: [
+                  Icon(Icons.chat_outlined,
+                      size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: AutoDirText(s.text!.replaceAll('\n', ' '),
+                        key: Key('textPreview-$sid'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.bodySmall),
+                  ),
+                ]),
+              ),
+            if (showRetry && !canRetry)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 4),
+                child: Text(l.transferRetryMissing,
+                    key: Key('retryMissing-$sid'), style: t.bodySmall),
+              ),
             if (s.autoAccepted)
               Padding(
                 padding: const EdgeInsetsDirectional.only(top: 4),

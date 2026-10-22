@@ -152,6 +152,9 @@ class _NoOpener implements FileOpener {
   Future<bool> open(String path) async => true;
   @override
   Future<bool> reveal(String path) async => true;
+
+  @override
+  Future<bool> openLink(String url) async => true;
 }
 
 void main() {

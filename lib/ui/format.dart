@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
 import '../l10n/app_localizations.dart';
 import 'digits.dart';
@@ -74,6 +75,40 @@ String formatTransferProgress(double fraction, double? bytesPerSecond,
 /// "1 min left" / "۱ دقیقه مانده".
 String formatTimeLeft(Duration d, [AppLocalizations? l]) =>
     l == null ? '${formatDuration(d)} left' : l.transferTimeLeft(formatDuration(d, l));
+
+/// "Today", "Yesterday", else the date in the app language (Gregorian;
+/// Persian digits and month names in fa), e.g. "Oct 20, 2026".
+String formatDay(DateTime at, AppLocalizations l, {DateTime? now}) {
+  final today = _dayOf(now ?? DateTime.now());
+  final day = _dayOf(at);
+  if (day == today) return l.historyToday;
+  if (day == today.subtract(const Duration(days: 1))) return l.historyYesterday;
+  try {
+    return DateFormat.yMMMd(l.localeName).format(at);
+  } catch (_) {
+    // Date symbols not loaded (no localization delegates).
+    final m = at.month.toString().padLeft(2, '0');
+    final d = at.day.toString().padLeft(2, '0');
+    return localizeDigits('${at.year}-$m-$d', Locale(l.localeName));
+  }
+}
+
+/// Clock time "14:05" ("۱۴:۰۵" in fa).
+String formatClock(DateTime at, AppLocalizations l) {
+  try {
+    return DateFormat.Hm(l.localeName).format(at);
+  } catch (_) {
+    final h = at.hour.toString().padLeft(2, '0');
+    final m = at.minute.toString().padLeft(2, '0');
+    return localizeDigits('$h:$m', Locale(l.localeName));
+  }
+}
+
+/// "Today, 14:05" / "Oct 20, 2026, 09:30".
+String formatWhen(DateTime at, AppLocalizations l, {DateTime? now}) =>
+    l.historyDateTime(formatDay(at, l, now: now), formatClock(at, l));
+
+DateTime _dayOf(DateTime t) => DateTime(t.year, t.month, t.day);
 
 IconData deviceIcon(String type) => switch (type) {
       'mobile' => Icons.smartphone,

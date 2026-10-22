@@ -4,17 +4,22 @@ import 'dart:io';
 import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/api.dart';
+import '../core/util.dart' show reserveUniqueFile;
 import 'background_service.dart';
 import 'file_opener.dart';
+import 'history_store.dart';
 import 'hotspot_service.dart';
 import 'l10n.dart' show englishStrings;
 import 'multicast_lock.dart';
 import 'storage_access.dart';
+
+export 'history_store.dart' show HistoryEntry, HistoryStore, MemoryHistoryStore;
 
 /// Persists alias + save directory. The default implementation writes a small
 /// JSON file in the application support directory.
@@ -56,13 +61,22 @@ class SettingsStore {
       await f.writeAsString(jsonEncode(data));
     } catch (_) {}
   }
+
+  /// The transfer history, in its own file next to the settings file.
+  HistoryStore get history => const HistoryStore();
 }
 
-/// Non-persistent store (tests).
+/// Non-persistent store (tests). Starts with `onboarded: true` so tests
+/// land on the home page; pass `onboarded: false` (or the key in
+/// [initial]) to see the first-run onboarding.
 class MemorySettingsStore extends SettingsStore {
-  MemorySettingsStore([Map<String, dynamic>? initial])
-      : stored = {...?initial};
+  MemorySettingsStore([Map<String, dynamic>? initial, bool onboarded = true])
+      : stored = {'onboarded': onboarded, ...?initial};
   final Map<String, dynamic> stored;
+
+  /// In-memory history (see [SettingsStore.history]).
+  @override
+  final MemoryHistoryStore history = MemoryHistoryStore();
   @override
   Future<Map<String, dynamic>> load() async => {...stored};
   @override
@@ -135,9 +149,23 @@ class TransferSession {
     this.peerFingerprint = '',
     this.savedTo,
     this.autoAccepted = false,
+    this.peer,
+    this.paths = const [],
+    this.text,
   });
 
   String sessionId;
+
+  /// Outgoing: the device and the paths sent, so "Try again" can send the
+  /// same items to the same device.
+  final DeviceInfo? peer;
+  final List<String> paths;
+
+  /// A text message (sent or received); its text, shown on the card.
+  final String? text;
+
+  /// Written to the persistent history already.
+  bool recorded = false;
   final bool incoming;
   final String peerAlias;
   final String peerFingerprint;
@@ -312,6 +340,55 @@ enum SenderTrust {
   trusted,
 }
 
+/// A device seen nearby before (UX.md 3.2 "Recent"), kept in the settings
+/// JSON under `recentDevices` (at most [AppController.maxRecent]).
+class RecentDevice {
+  RecentDevice({
+    required this.fingerprint,
+    required this.alias,
+    required this.deviceType,
+    required this.lastSeen,
+  });
+
+  final String fingerprint;
+  String alias;
+  String deviceType;
+  DateTime lastSeen;
+
+  Map<String, dynamic> toJson() => {
+        'fingerprint': fingerprint,
+        'alias': alias,
+        'deviceType': deviceType,
+        'lastSeen': lastSeen.toUtc().toIso8601String(),
+      };
+
+  static RecentDevice? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final fp = j['fingerprint'], alias = j['alias'], seen = j['lastSeen'];
+    if (fp is! String || fp.isEmpty || alias is! String || seen is! String) {
+      return null;
+    }
+    final at = DateTime.tryParse(seen);
+    if (at == null) return null;
+    final type = j['deviceType'];
+    return RecentDevice(
+        fingerprint: fp,
+        alias: alias,
+        deviceType: type is String ? type : 'desktop',
+        lastSeen: at.toLocal());
+  }
+}
+
+/// A text message to show (PROTOCOL.md "Text messages"). [auto]: accepted
+/// without asking (a trusted device with "Always accept"); the dialog says
+/// so.
+class IncomingText {
+  const IncomingText(this.request, {this.auto = false});
+  final IncomingRequest request;
+  final bool auto;
+  String get text => request.text ?? '';
+}
+
 enum CoreStatus { stopped, starting, running, error }
 
 /// Receives the number of active shares and connected browsers.
@@ -329,7 +406,11 @@ class AppController extends ChangeNotifier {
     this.hotspotSettleDelay = const Duration(seconds: 1),
     FileOpener? fileOpener,
     DateTime Function()? clock,
+    StorageAccess? storageAccess,
+    HistoryStore? historyStore,
   })  : _store = store ?? const SettingsStore(),
+        storage = storageAccess ?? const StorageAccess(),
+        _historyStore = historyStore ?? (store ?? const SettingsStore()).history,
         _saveDir = initialSaveDir ?? '',
         _alias = initialAlias ?? _defaultAlias(),
         _statusNotifier = statusNotifier ?? _defaultStatusNotifier,
@@ -339,6 +420,18 @@ class AppController extends ChangeNotifier {
 
   final LanDropCore core;
   final SettingsStore _store;
+
+  /// Android "All files access" (test seam).
+  final StorageAccess storage;
+
+  /// Where the transfer history is kept (test seam).
+  final HistoryStore _historyStore;
+
+  /// History entries kept (newest first).
+  static int get maxHistoryEntries => HistoryStore.maxEntries;
+
+  /// Recent devices kept in the settings JSON.
+  static const maxRecent = 20;
 
   /// "Open" / "Show in folder" for received files (test seam).
   final FileOpener fileOpener;
@@ -383,6 +476,15 @@ class AppController extends ChangeNotifier {
   bool _webHttp = false; // plain HTTP listener for browsers (opt-in)
   bool _keepShares = true; // shares survive a restart (opt-out)
   Locale? _locale; // app language; null = follow the system
+  ThemeMode _themeMode = ThemeMode.system;
+  bool _settingsLoaded = false;
+  bool _onboarded = false; // first-run onboarding done (UX.md 3.6)
+  bool _storageAsked = false; // Android "All files access" explained once
+  bool _keepHistory = true;
+  List<HistoryEntry> _history = [];
+  int _localSeq = 0;
+  final Map<String, RecentDevice> _recent = {};
+  Set<String> _online = {};
   CoreStatus status = CoreStatus.stopped;
   /// The last technical error (English, shown in Settings ▸ Advanced).
   String? lastError;
@@ -399,6 +501,7 @@ class AppController extends ChangeNotifier {
   final _incomingCtrl = StreamController<IncomingRequest>.broadcast();
   final _pairingCtrl = StreamController<WebPairingRequest>.broadcast();
   final _autoAcceptedCtrl = StreamController<TransferSession>.broadcast();
+  final _textCtrl = StreamController<IncomingText>.broadcast();
 
   /// Devices the user accepted from, by fingerprint (persisted).
   final Map<String, TrustedDevice> _trusted = {};
@@ -427,6 +530,47 @@ class AppController extends ChangeNotifier {
   /// Transfers accepted without asking (trusted device with "Always
   /// accept"), so the UI can say so with a "Stop auto-accept" action.
   Stream<TransferSession> get autoAccepted => _autoAcceptedCtrl.stream;
+
+  /// Text messages to show (PROTOCOL.md "Text messages"). Unless
+  /// [IncomingText.auto], the UI calls [receiveText] when it shows one.
+  Stream<IncomingText> get incomingTexts => _textCtrl.stream;
+
+  /// The settings file was read (the UI waits for it before choosing
+  /// between onboarding and home).
+  bool get settingsLoaded => _settingsLoaded;
+
+  /// First-run onboarding was finished or skipped (persisted as
+  /// `onboarded`).
+  bool get onboarded => _onboarded;
+
+  /// Ends the onboarding for good; [alias] (when given and not blank)
+  /// renames this device.
+  Future<void> completeOnboarding({String? alias}) async {
+    _onboarded = true;
+    final a = alias?.trim();
+    if (a != null && a.isNotEmpty && a != _alias) {
+      await updateSettings(alias: a);
+      return;
+    }
+    await _persist();
+    _notify();
+  }
+
+  /// Light, dark or follow the system (persisted as `theme`).
+  ThemeMode get themeMode => _themeMode;
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (mode == _themeMode) return;
+    _themeMode = mode;
+    await _persist();
+    _notify();
+  }
+
+  static ThemeMode _parseTheme(Object? v) => switch (v) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
 
   DeviceInfo? get self {
     if (status != CoreStatus.running) return null;
@@ -518,13 +662,18 @@ class AppController extends ChangeNotifier {
     return 'LanDrop device';
   }
 
-  static Future<String> defaultSaveDir() async {
-    if (Platform.isAndroid) {
+  /// The platform default folder. Never asks for a permission (UX.md
+  /// 3.6): on Android it is Downloads/LanDrop only when "All files access"
+  /// was already granted, else the app's own folder until the user allows
+  /// it after [needsStorageExplanation].
+  static Future<String> defaultSaveDir(
+      [StorageAccess storage = const StorageAccess()]) async {
+    if (storage.isAndroid) {
       // Visible in the Files app: Downloads/LanDrop.
-      if (await ensureStorageAccess()) {
+      if (await storage.granted()) {
         try {
-          await Directory(androidPublicDir).create(recursive: true);
-          return androidPublicDir;
+          await Directory(storage.publicDir).create(recursive: true);
+          return storage.publicDir;
         } catch (_) {}
       }
       try {
@@ -544,6 +693,7 @@ class AppController extends ChangeNotifier {
   Future<void> init() async {
     _subs.add(core.peers.listen((p) {
       peers = _oneEntryPerDevice(p);
+      _rememberPeers();
       _notify();
     }));
     _subs.add(core.incoming.listen(_onIncoming));
@@ -568,6 +718,19 @@ class AppController extends ChangeNotifier {
     if (s['webHttp'] is bool) _webHttp = s['webHttp'] as bool;
     if (s['keepShares'] is bool) _keepShares = s['keepShares'] as bool;
     _locale = _parseLocale(s['locale']);
+    _themeMode = _parseTheme(s['theme']);
+    // Settings saved by a version without onboarding: not a first run.
+    _onboarded = s['onboarded'] == true ||
+        (!s.containsKey('onboarded') && s.isNotEmpty);
+    _storageAsked = s['storageAsked'] == true;
+    if (s['keepHistory'] is bool) _keepHistory = s['keepHistory'] as bool;
+    final recent = s['recentDevices'];
+    if (recent is List) {
+      for (final j in recent) {
+        final r = RecentDevice.fromJson(j);
+        if (r != null) _recent[r.fingerprint] = r;
+      }
+    }
     if (s['autoAcceptLarge'] is bool) {
       _autoAcceptLarge = s['autoAcceptLarge'] as bool;
     }
@@ -584,11 +747,20 @@ class AppController extends ChangeNotifier {
     }
     if (_saveDir.isEmpty) {
       try {
-        _saveDir = await defaultSaveDir();
+        _saveDir = await defaultSaveDir(storage);
       } catch (e) {
         _saveDir = Directory.systemTemp.path;
       }
     }
+    if (_keepHistory) {
+      try {
+        final h = await _historyStore.load();
+        // Entries recorded while loading stay first.
+        _history = [..._history, ...h.where((e) => !_history.any((x) => x.id == e.id))];
+      } catch (_) {}
+    }
+    _settingsLoaded = true;
+    _notify();
     await _start();
   }
 
@@ -643,7 +815,8 @@ class AppController extends ChangeNotifier {
     if (!changed) return;
     if (a != null && a.isNotEmpty) _alias = a;
     if (saveDir != null && saveDir.isNotEmpty && saveDir != _saveDir) {
-      await ensureStorageAccess();
+      // A folder the user picked outside the app's own folder.
+      if (storage.isAndroid) await storage.request();
       _saveDir = saveDir;
       _customDir = true;
     }
@@ -655,7 +828,7 @@ class AppController extends ChangeNotifier {
   /// Forget the custom folder and go back to the platform default.
   Future<void> resetSaveDir() async {
     _customDir = false;
-    _saveDir = await defaultSaveDir();
+    _saveDir = await defaultSaveDir(storage);
     await _persist();
     _notify();
     if (status != CoreStatus.stopped) await restart();
@@ -664,13 +837,50 @@ class AppController extends ChangeNotifier {
   /// Android: received files go to the app's own folder (only visible inside
   /// LanDrop) because "All files access" was not granted.
   bool get savesToPrivateFolder =>
-      Platform.isAndroid && !_customDir && _saveDir != androidPublicDir;
+      storage.isAndroid && !_customDir && _saveDir != storage.publicDir;
 
-  /// Android: asks for "All files access" and, when granted, moves received
-  /// files to Downloads/LanDrop. Returns whether it is granted.
+  /// Android, the first time a receive folder is needed (an incoming
+  /// transfer was accepted): LanDrop should explain "All files access"
+  /// before the system screen (UX.md 3.6). Once answered, only Settings
+  /// ("Use Downloads") asks again.
+  bool get needsStorageExplanation => savesToPrivateFolder && !_storageAsked;
+
+  /// The user answered the explanation. [allow]: open the system screen
+  /// and, when granted, save to Downloads/LanDrop from now on (also the
+  /// transfer being accepted). "Not now" keeps the private folder. Returns
+  /// whether files now go to Downloads.
+  Future<bool> answerStorageExplanation(bool allow) async {
+    _storageAsked = true;
+    await _persist();
+    if (!allow) {
+      _notify();
+      return false;
+    }
+    return useDownloadsFolder();
+  }
+
+  /// Android: asks for "All files access" (after the explanation) and,
+  /// when granted, moves received files to Downloads/LanDrop without a
+  /// restart. Returns whether it is granted.
   Future<bool> useDownloadsFolder() async {
-    if (!await ensureStorageAccess()) return false;
-    await resetSaveDir();
+    if (!await storage.request()) {
+      _notify();
+      return false;
+    }
+    final dir = storage.publicDir;
+    try {
+      Directory(dir).createSync(recursive: true);
+    } catch (_) {}
+    _customDir = false;
+    _saveDir = dir;
+    _storageAsked = true;
+    if (status == CoreStatus.running) {
+      try {
+        await core.setSaveDir(dir);
+      } catch (_) {}
+    }
+    await _persist();
+    _notify();
     return true;
   }
 
@@ -750,6 +960,15 @@ class AppController extends ChangeNotifier {
         'webHttp': _webHttp,
         'keepShares': _keepShares,
         'locale': _locale?.languageCode ?? 'system',
+        'theme': switch (_themeMode) {
+          ThemeMode.light => 'light',
+          ThemeMode.dark => 'dark',
+          ThemeMode.system => 'system',
+        },
+        'onboarded': _onboarded,
+        if (_storageAsked) 'storageAsked': true,
+        'keepHistory': _keepHistory,
+        'recentDevices': [for (final r in _recent.values) r.toJson()],
         if (_customDir) 'saveDir': _saveDir,
         'trustedDevices': [for (final t in _trusted.values) t.toJson()],
         'autoAcceptLarge': _autoAcceptLarge,
@@ -863,6 +1082,14 @@ class AppController extends ChangeNotifier {
   }
 
   void _onIncoming(IncomingRequest req) {
+    if (req.isText) {
+      // Shown in a dialog either way; a trusted device with "Always accept"
+      // is answered at once, every other sender when the dialog shows it.
+      final auto = shouldAutoAccept(req);
+      if (auto) receiveText(req);
+      _textCtrl.add(IncomingText(req, auto: auto));
+      return;
+    }
     if (shouldAutoAccept(req)) {
       final s = _respond(req, true, auto: true);
       if (s != null) _autoAcceptedCtrl.add(s);
@@ -1014,28 +1241,65 @@ class AppController extends ChangeNotifier {
 
   /// [send] with the core's [SendResult], so the UI can tell "declined"
   /// from "failed" ([SendResult.errorCode]).
-  Future<SendResult> sendWithResult(DeviceInfo to, List<String> paths) async {
+  Future<SendResult> sendWithResult(DeviceInfo to, List<String> paths) =>
+      _send(to, paths: paths);
+
+  /// Sends a text message (PROTOCOL.md "Text messages"). Its card shows
+  /// the text; nothing is uploaded when the receiver shows it.
+  Future<SendResult> sendText(DeviceInfo to, String text) =>
+      _send(to, text: text);
+
+  /// "Try again" on a failed or cancelled send: the same items to the
+  /// same device (its current address when it is still nearby). Null when
+  /// [canRetry] is false.
+  Future<SendResult?> retry(TransferSession s) async {
+    if (!canRetry(s)) return null;
+    final fresh =
+        peers.where((p) => p.fingerprint == s.peerFingerprint).firstOrNull;
+    final to = fresh ?? s.peer!;
+    return s.text != null ? sendText(to, s.text!) : sendWithResult(to, s.paths);
+  }
+
+  /// Whether [retry] can send [s] again: an outgoing send that failed or
+  /// was cancelled, whose files all still exist.
+  bool canRetry(TransferSession s) {
+    if (s.incoming || s.peer == null) return false;
+    if (s.state != TransferState.failed && s.state != TransferState.cancelled) {
+      return false;
+    }
+    if (s.text != null) return true;
+    return s.paths.isNotEmpty &&
+        s.paths.every((p) =>
+            FileSystemEntity.typeSync(p) != FileSystemEntityType.notFound);
+  }
+
+  Future<SendResult> _send(DeviceInfo to,
+      {List<String> paths = const [], String? text}) async {
     final s = TransferSession(
       sessionId: '',
       incoming: false,
       peerAlias: to.alias,
       peerFingerprint: to.fingerprint,
+      peer: to,
+      paths: List.unmodifiable(paths),
+      text: text,
     );
     sessions.insert(0, s);
     _trimHistory();
     _notify();
     SendResult res;
+    void onSession(String sid) {
+      _bind(s, sid);
+      // Cancel was pressed while waiting for the receiver.
+      if (s.cancelRequested) unawaited(core.cancelSession(sid));
+      _notify();
+    }
+
     try {
-      final r = await core.sendFiles(
-        to,
-        [for (final p in paths) SendItem(p)],
-        onSession: (sid) {
-          _bind(s, sid);
-          // Cancel was pressed while waiting for the receiver.
-          if (s.cancelRequested) unawaited(core.cancelSession(sid));
-          _notify();
-        },
-      );
+      final r = text != null
+          ? await core.sendText(to, text, onSession: onSession)
+          : await core.sendFiles(to, [for (final p in paths) SendItem(p)],
+              onSession: onSession);
       res = r;
       s.error = r.error;
       s.errorCode = r.ok ? null : r.errorCode;
@@ -1048,6 +1312,10 @@ class AppController extends ChangeNotifier {
       lastError = '$e';
     }
     s.result = res.ok;
+    // Ended without a session id (unreachable, declined, a text shown by
+    // the receiver): a local id keeps the card's keys unique.
+    if (s.sessionId.isEmpty) s.sessionId = 'local-${++_localSeq}';
+    _record(s);
     _trimHistory();
     _notify();
     return res;
@@ -1075,7 +1343,10 @@ class AppController extends ChangeNotifier {
       return;
     }
     _apply(s, p);
-    if (p.done) _trimHistory();
+    if (p.done) {
+      if (s.incoming) _record(s);
+      _trimHistory();
+    }
     _notify();
   }
 
@@ -1117,6 +1388,156 @@ class AppController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  // ------------------------------------------------------- text messages
+
+  /// Accepts a text message (the dialog shows it): the sender is told it
+  /// was delivered (204); nothing is written to disk. Not a trust decision:
+  /// the device is not remembered as trusted.
+  void receiveText(IncomingRequest req) {
+    if (req.decision.isCompleted) return;
+    req.decision.complete(true);
+    final t = req.text ?? '';
+    _addHistory(HistoryEntry(
+      id: 'in-${req.sessionId}',
+      incoming: true,
+      peerAlias: req.sender.alias,
+      fileNames: const [textMessageFileName],
+      fileCount: 1,
+      totalBytes: utf8.encode(t).length,
+      state: TransferState.done.name,
+      at: _clock(),
+      text: true,
+    ));
+  }
+
+  /// "Save as file": writes [text] as `message.txt` (a unique name) in
+  /// the save folder. Returns the path, or null when it failed.
+  Future<String?> saveTextAsFile(String text) async {
+    try {
+      await Directory(_saveDir).create(recursive: true);
+      final f = await reserveUniqueFile(_saveDir, textMessageFileName);
+      await f.writeAsString(text, flush: true);
+      return f.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------- history
+
+  /// Finished transfers, newest first (empty when [keepHistory] is off).
+  List<HistoryEntry> get history => List.unmodifiable(_history);
+
+  /// "Keep history" (persisted, default on). Off deletes it at once.
+  bool get keepHistory => _keepHistory;
+
+  Future<void> setKeepHistory(bool on) async {
+    if (on == _keepHistory) return;
+    _keepHistory = on;
+    if (!on) {
+      _history = [];
+      await _historyStore.clear();
+    }
+    await _persist();
+    _notify();
+  }
+
+  /// Deletes the whole history (received files stay).
+  Future<void> clearHistory() async {
+    _history = [];
+    await _historyStore.clear();
+    _notify();
+  }
+
+  void _record(TransferSession s) {
+    if (s.recorded || !s.state.isFinal) return;
+    s.recorded = true;
+    final names = [for (final f in s.files.values) f.name];
+    final text = s.text != null;
+    _addHistory(HistoryEntry(
+      id: '${s.incoming ? 'in' : 'out'}-${s.sessionId}-'
+          '${s.started.microsecondsSinceEpoch}',
+      incoming: s.incoming,
+      peerAlias: s.peerAlias,
+      fileNames: text
+          ? const [textMessageFileName]
+          : names.isNotEmpty
+              ? names.take(HistoryStore.maxNames).toList()
+              : [
+                  for (final p in s.paths.take(HistoryStore.maxNames))
+                    p.split(RegExp(r'[\\/]')).lastWhere((x) => x.isNotEmpty,
+                        orElse: () => p)
+                ],
+      fileCount: text ? 1 : (names.isNotEmpty ? names.length : s.paths.length),
+      totalBytes: text ? utf8.encode(s.text!).length : s.totalBytes,
+      state: s.state.name,
+      at: _clock(),
+      savedPath: s.incoming && s.savedPaths.isNotEmpty ? s.openPath : null,
+      text: text,
+    ));
+  }
+
+  void _addHistory(HistoryEntry e) {
+    if (!_keepHistory) return;
+    _history = [e, ..._history.where((x) => x.id != e.id)];
+    if (_history.length > HistoryStore.maxEntries) {
+      _history = _history.sublist(0, HistoryStore.maxEntries);
+    }
+    unawaited(_historyStore.save(_history));
+    _notify();
+  }
+
+  // ------------------------------------------------------ recent devices
+
+  /// Devices seen before that are not nearby now, most recent first.
+  List<RecentDevice> get recentOffline {
+    final online = {for (final p in peers) p.fingerprint};
+    return _recent.values.where((r) => !online.contains(r.fingerprint)).toList()
+      ..sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
+  }
+
+  /// Updates the recent devices from [peers]: new devices and new names are
+  /// saved; a device that left gets its "last seen" time.
+  void _rememberPeers() {
+    final now = _clock();
+    final online = <String>{};
+    var changed = false;
+    for (final p in peers) {
+      if (p.fingerprint.isEmpty || p.deviceType == 'web') continue;
+      online.add(p.fingerprint);
+      final r = _recent[p.fingerprint];
+      if (r == null) {
+        _recent[p.fingerprint] = RecentDevice(
+            fingerprint: p.fingerprint,
+            alias: p.alias,
+            deviceType: p.deviceType,
+            lastSeen: now);
+        changed = true;
+      } else {
+        if (r.alias != p.alias || r.deviceType != p.deviceType) changed = true;
+        r
+          ..alias = p.alias
+          ..deviceType = p.deviceType
+          ..lastSeen = now;
+      }
+    }
+    for (final fp in _online.difference(online)) {
+      _recent[fp]?.lastSeen = now;
+      changed = true;
+    }
+    _online = online;
+    if (_recent.length > maxRecent) {
+      final keep = (_recent.values.toList()
+            ..sort((a, b) => b.lastSeen.compareTo(a.lastSeen)))
+          .take(maxRecent)
+          .map((r) => r.fingerprint)
+          .toSet();
+      _recent.removeWhere((fp, _) => !keep.contains(fp));
+      changed = true;
+    }
+    if (changed && _settingsLoaded) unawaited(_persist());
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -1126,6 +1547,7 @@ class AppController extends ChangeNotifier {
     _incomingCtrl.close();
     _pairingCtrl.close();
     _autoAcceptedCtrl.close();
+    _textCtrl.close();
     if (hotspot != null) hotspotService.stop();
     core.stop().catchError((_) {});
     MulticastLock.release();

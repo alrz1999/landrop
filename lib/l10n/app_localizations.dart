@@ -3187,6 +3187,450 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Off: transfers over {size} always ask.'**
   String trustedLargeSub(String size);
+
+  /// Screen-reader label of the first-run onboarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to LanDrop'**
+  String get onboardingSemantics;
+
+  /// Onboarding: skip the remaining screens.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// Onboarding: next screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// Onboarding: last screen button, opens the app.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get onboardingStart;
+
+  /// Onboarding: screen-reader label of the page dots.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of {total}'**
+  String onboardingStep(int step, int total);
+
+  /// Onboarding screen 1 title (what LanDrop does).
+  ///
+  /// In en, this message translates to:
+  /// **'Send files to your nearby devices'**
+  String get onboarding1Title;
+
+  /// Onboarding screen 1 body.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet, no account. Files go straight from one device to the other.'**
+  String get onboarding1Body;
+
+  /// Onboarding screen 2 title (how devices find each other).
+  ///
+  /// In en, this message translates to:
+  /// **'Open LanDrop on both devices'**
+  String get onboarding2Title;
+
+  /// Onboarding screen 2 body.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect them to the same Wi-Fi. No Wi-Fi? LanDrop can help you connect directly.'**
+  String get onboarding2Body;
+
+  /// Onboarding screen 3 title.
+  ///
+  /// In en, this message translates to:
+  /// **'Name this device'**
+  String get onboarding3Title;
+
+  /// Onboarding screen 3: under the device name field.
+  ///
+  /// In en, this message translates to:
+  /// **'Others will see this name.'**
+  String get onboarding3Body;
+
+  /// Onboarding screen 3: heading of the permission explanations.
+  ///
+  /// In en, this message translates to:
+  /// **'What LanDrop may ask for'**
+  String get onboardingPermissions;
+
+  /// Onboarding, macOS: the system local network prompt (UX.md 3.6).
+  ///
+  /// In en, this message translates to:
+  /// **'Your Mac will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won\'t appear.'**
+  String get onboardingLocalNetworkComputer;
+
+  /// Onboarding, iOS: the system local network prompt (UX.md 3.6).
+  ///
+  /// In en, this message translates to:
+  /// **'Your iPhone or iPad will ask whether LanDrop may find devices on your local network. Choose Allow, or nearby devices won\'t appear.'**
+  String get onboardingLocalNetworkPhone;
+
+  /// Onboarding, Windows: the firewall prompt at the first start.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows may ask whether LanDrop may use the network. Allow it on private networks.'**
+  String get onboardingFirewallWindows;
+
+  /// Onboarding, Android: the "All files access" permission, asked later.
+  ///
+  /// In en, this message translates to:
+  /// **'Files: to save what you receive in Downloads, where other apps find it. LanDrop explains this first, the first time you receive files.'**
+  String get onboardingStorageAndroid;
+
+  /// Onboarding: platforms without a permission prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to allow now. LanDrop asks only when something is needed.'**
+  String get onboardingNothingToAllow;
+
+  /// Android: explanation shown before the system "All files access" screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Save received files in Downloads?'**
+  String get storageTitle;
+
+  /// Android: body of the storage explanation (UX.md 3.6).
+  ///
+  /// In en, this message translates to:
+  /// **'To put files in your Downloads folder, where your other apps can find them, Android needs you to allow \"All files access\" for LanDrop on the next screen. Without it, files are kept inside LanDrop\'s own folder.'**
+  String get storageBody;
+
+  /// Android: note under the storage explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'You can change this later in Settings.'**
+  String get storageLater;
+
+  /// Android storage explanation: continue to the system screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get storageAllow;
+
+  /// Android storage explanation: keep the private folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get storageNotNow;
+
+  /// Snackbar after "All files access" was granted.
+  ///
+  /// In en, this message translates to:
+  /// **'Received files now go to {folder}.'**
+  String storageGranted(String folder);
+
+  /// Snackbar after "Not now" or a denied permission.
+  ///
+  /// In en, this message translates to:
+  /// **'Files stay in LanDrop\'s own folder. You can try again in Settings.'**
+  String get storageKeptPrivate;
+
+  /// Send sheet: send a text or a link.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get sendSheetText;
+
+  /// Title of the dialog to type or paste a text.
+  ///
+  /// In en, this message translates to:
+  /// **'Send text'**
+  String get sendTextTitle;
+
+  /// Label of the text field.
+  ///
+  /// In en, this message translates to:
+  /// **'Text or link'**
+  String get sendTextLabel;
+
+  /// Button that pastes the clipboard into the text field.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste'**
+  String get sendTextPaste;
+
+  /// Text dialog: continue to the device picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose device'**
+  String get sendTextNext;
+
+  /// Error under the text field; max is a size such as "64 KB".
+  ///
+  /// In en, this message translates to:
+  /// **'Too long: at most {max}.'**
+  String sendTextTooLong(String max);
+
+  /// Device picker title when sending a text.
+  ///
+  /// In en, this message translates to:
+  /// **'Send text to…'**
+  String get sendPickerTitleText;
+
+  /// Title of the dialog showing a received text.
+  ///
+  /// In en, this message translates to:
+  /// **'Text from {name}'**
+  String textFromTitle(String name);
+
+  /// Received text: copy it.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get textCopy;
+
+  /// Snackbar after copying a received text.
+  ///
+  /// In en, this message translates to:
+  /// **'Text copied'**
+  String get textCopied;
+
+  /// Received text that is a web link: open it in the browser.
+  ///
+  /// In en, this message translates to:
+  /// **'Open link'**
+  String get textOpenLink;
+
+  /// Snackbar when the browser could not be started.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the link.'**
+  String get textLinkFailed;
+
+  /// Received text: write it to the save folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as file'**
+  String get textSaveFile;
+
+  /// Snackbar when saving a text failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the file.'**
+  String get textSaveFailed;
+
+  /// Text dialog: the sender is trusted with "Always accept".
+  ///
+  /// In en, this message translates to:
+  /// **'Received automatically from a trusted device.'**
+  String get textAutoNotice;
+
+  /// Transfer card and history: a text instead of files.
+  ///
+  /// In en, this message translates to:
+  /// **'Text message'**
+  String get textMessage;
+
+  /// History page title, home tooltip and Settings row.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get historyTitle;
+
+  /// Settings: subtitle of the History row.
+  ///
+  /// In en, this message translates to:
+  /// **'Past transfers on this device'**
+  String get historySettingsSub;
+
+  /// History page: privacy note.
+  ///
+  /// In en, this message translates to:
+  /// **'History stays on this device. You can turn it off in Settings.'**
+  String get historyPrivacy;
+
+  /// History page without entries.
+  ///
+  /// In en, this message translates to:
+  /// **'No transfers yet.'**
+  String get historyEmpty;
+
+  /// History page when "Keep history" is off.
+  ///
+  /// In en, this message translates to:
+  /// **'History is off.'**
+  String get historyOff;
+
+  /// History page action and confirm dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear history'**
+  String get historyClear;
+
+  /// Confirm dialog body.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove every entry? Received files are not deleted.'**
+  String get historyClearBody;
+
+  /// Confirm dialog button.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get historyClearConfirm;
+
+  /// Snackbar after clearing the history.
+  ///
+  /// In en, this message translates to:
+  /// **'History cleared'**
+  String get historyCleared;
+
+  /// History group header.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get historyToday;
+
+  /// History group header.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get historyYesterday;
+
+  /// History item: first file name and how many others.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} and {count, plural, =1{1 more} other{{count} more}}'**
+  String historyFilesMore(String name, int count);
+
+  /// History details label.
+  ///
+  /// In en, this message translates to:
+  /// **'When'**
+  String get historyWhen;
+
+  /// History details label.
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get historyResult;
+
+  /// History details label.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get historySize;
+
+  /// History details label.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get historyFiles;
+
+  /// History details label.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved in'**
+  String get historySavedIn;
+
+  /// History details: files not listed.
+  ///
+  /// In en, this message translates to:
+  /// **'and {count, plural, =1{1 more file} other{{count} more files}}'**
+  String historyMoreFiles(int count);
+
+  /// History details: the received files were moved or deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'These files are no longer there.'**
+  String get historyGone;
+
+  /// A date and a clock time.
+  ///
+  /// In en, this message translates to:
+  /// **'{date}, {time}'**
+  String historyDateTime(String date, String time);
+
+  /// Screen-reader label of the history details sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer details'**
+  String get historyDetailsSemantics;
+
+  /// Settings section.
+  ///
+  /// In en, this message translates to:
+  /// **'History and privacy'**
+  String get settingsSectionPrivacy;
+
+  /// Settings switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep history'**
+  String get settingsKeepHistory;
+
+  /// Settings switch subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stays on this device. Turning it off deletes it.'**
+  String get settingsKeepHistorySub;
+
+  /// Failed send card: why "Try again" is disabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Some files are no longer there.'**
+  String get transferRetryMissing;
+
+  /// Device list: mark of a trusted device.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted'**
+  String get peerTrusted;
+
+  /// Home: devices seen before that are not nearby now.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get homeRecent;
+
+  /// Recent device: it is not on the network now.
+  ///
+  /// In en, this message translates to:
+  /// **'Not nearby'**
+  String get recentNotNearby;
+
+  /// Recent device: when it was last nearby.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen {when}'**
+  String recentLastSeen(String when);
+
+  /// Screen-reader label of a recent device.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, not nearby'**
+  String recentSemantics(String name);
+
+  /// Settings row and dialog title: light or dark theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearance;
+
+  /// Appearance option.
+  ///
+  /// In en, this message translates to:
+  /// **'Same as system'**
+  String get themeSystem;
+
+  /// Appearance option.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themeLight;
+
+  /// Appearance option.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themeDark;
 }
 
 class _AppLocalizationsDelegate

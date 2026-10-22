@@ -7,8 +7,10 @@ import 'advanced_settings.dart';
 import 'app_controller.dart';
 import 'connect_helper.dart';
 import 'dialogs.dart';
+import 'history_page.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
+import 'onboarding.dart';
 import 'pickers.dart';
 import 'shares.dart';
 import 'trusted_devices.dart';
@@ -58,6 +60,50 @@ class LanguageDialog extends StatelessWidget {
                 key: Key('language-$code'),
                 value: code,
                 title: Text(name),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.commonCancel)),
+      ],
+    );
+  }
+}
+
+/// "Same as system", "Light" or "Dark".
+String themeName(AppLocalizations l, ThemeMode m) => switch (m) {
+      ThemeMode.system => l.themeSystem,
+      ThemeMode.light => l.themeLight,
+      ThemeMode.dark => l.themeDark,
+    };
+
+/// Picks the appearance; pops with the [ThemeMode] (null when cancelled).
+class ThemeDialog extends StatelessWidget {
+  const ThemeDialog({super.key, required this.current});
+  final ThemeMode current;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l;
+    return AlertDialog(
+      key: const Key('themeDialog'),
+      semanticLabel: l.settingsAppearance,
+      title: Text(l.settingsAppearance),
+      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+      content: RadioGroup<ThemeMode>(
+        groupValue: current,
+        onChanged: (v) => Navigator.pop(context, v),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final m in ThemeMode.values)
+              RadioListTile<ThemeMode>(
+                key: Key('theme-${m.name}'),
+                value: m,
+                title: Text(themeName(l, m)),
               ),
           ],
         ),
@@ -126,9 +172,13 @@ class SettingsPage extends StatelessWidget {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
-          child: ListView(
+          // Built at once (a short page), so every row exists wherever the
+          // page is scrolled (screen readers, tests).
+          child: SingleChildScrollView(
             padding: const EdgeInsetsDirectional.only(bottom: 24),
-            children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               SectionHeader(l.settingsSectionDevice),
               ListTile(
                 key: const Key('aliasSettings'),
@@ -165,9 +215,10 @@ class SettingsPage extends StatelessWidget {
                   key: const Key('privateFolderHint'),
                   leading: const Icon(Icons.info_outline),
                   title: Text(l.settingsPrivateFolder),
+                  // Explained first, then the system screen (UX.md 3.6).
                   trailing: TextButton(
                     key: const Key('useDownloads'),
-                    onPressed: c.useDownloadsFolder,
+                    onPressed: () => askStorageAccess(context, c),
                     child: Text(l.settingsUseDownloads),
                   ),
                 ),
@@ -178,6 +229,19 @@ class SettingsPage extends StatelessWidget {
                 subtitle: Text(languageName(l, c.locale)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _pickLanguage(context, c),
+              ),
+              ListTile(
+                key: const Key('themeSettings'),
+                leading: const Icon(Icons.brightness_6_outlined),
+                title: Text(l.settingsAppearance),
+                subtitle: Text(themeName(l, c.themeMode)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final m = await showDialog<ThemeMode>(
+                      context: context,
+                      builder: (_) => ThemeDialog(current: c.themeMode));
+                  if (m != null) await c.setThemeMode(m);
+                },
               ),
               ListTile(
                 key: const Key('trustedDevicesSettings'),
@@ -213,6 +277,23 @@ class SettingsPage extends StatelessWidget {
                         builder: (_) => SharesPage(
                             pickFiles: pickFiles, pickFolder: pickFolder))),
               ),
+              SectionHeader(l.settingsSectionPrivacy),
+              ListTile(
+                key: const Key('historySettings'),
+                leading: const Icon(Icons.history),
+                title: Text(l.historyTitle),
+                subtitle: Text(l.historySettingsSub),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => openHistory(context),
+              ),
+              SwitchListTile(
+                key: const Key('keepHistorySwitch'),
+                secondary: const Icon(Icons.lock_outline),
+                title: Text(l.settingsKeepHistory),
+                subtitle: Text(l.settingsKeepHistorySub),
+                value: c.keepHistory,
+                onChanged: c.setKeepHistory,
+              ),
               if (Platform.isAndroid) ...[
                 SectionHeader(l.settingsSectionApp),
                 SwitchListTile(
@@ -243,6 +324,7 @@ class SettingsPage extends StatelessWidget {
                             AdvancedSettingsPage(isAndroid: android))),
               ),
             ],
+            ),
           ),
         ),
       ),

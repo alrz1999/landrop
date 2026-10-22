@@ -31,6 +31,9 @@ class _FakeOpener implements FileOpener {
     revealed.add(path);
     return result;
   }
+
+  @override
+  Future<bool> openLink(String url) async => result;
 }
 
 final _t0 = DateTime(2026, 10, 22, 12);
