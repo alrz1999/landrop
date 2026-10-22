@@ -51,6 +51,14 @@ Port: 53317 (TCP HTTPS + UDP multicast). Multicast group: 224.0.0.167.
     The receiver can also end a session itself (its user pressed Cancel): the running upload is
     answered 409 (or the connection drops) at the next chunk, and every later upload and
     upload-status of that session gets 403, which a LanDrop sender reports as "cancelled".
+- Withdraw (LanDrop extra, 2026-10-22): a LanDrop sender adds `landropWithdraw` (a random secret,
+  at least 16 characters) to its prepare-upload body. While that request still waits for the
+  receiver's answer, `POST /api/localsend/v2/cancel?withdrawSecret=<it>` ends it: the receiver
+  closes its dialog, answers the waiting prepare-upload 403 and the cancel 200 (403 when nothing
+  with that secret is waiting). The sender reports "cancelled". If the receiver had accepted just
+  before, the sender cancels the new session with its `cancelSecret`. A receiver also ends a
+  waiting request itself after `decisionTimeout` (default 2 min, 403 to the sender) and closes its
+  dialog.
 
 ## Text messages (LocalSend v2 `preview`)
 A short text or link is sent as a normal prepare-upload with exactly one file entry:

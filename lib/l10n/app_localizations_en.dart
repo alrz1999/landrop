@@ -1954,6 +1954,87 @@ class AppLocalizationsEn extends AppLocalizations {
   String get incomingChangeFolder => 'Change';
 
   @override
+  String incomingExpired(String name) {
+    return 'The request from $name expired.';
+  }
+
+  @override
+  String incomingWithdrawn(String name) {
+    return '$name cancelled the request.';
+  }
+
+  @override
+  String get permContinue => 'Continue';
+
+  @override
+  String get permNotNow => 'Not now';
+
+  @override
+  String get permLater =>
+      'Android asks next. You can change this later in the system settings.';
+
+  @override
+  String get permNotificationsTitle => 'Show that LanDrop is running?';
+
+  @override
+  String get permNotificationsBody =>
+      'LanDrop keeps receiving files in the background. Android shows this as a notification and asks you to allow notifications for LanDrop on the next screen.';
+
+  @override
+  String get permNearbyTitle => 'Allow \"Nearby devices\"?';
+
+  @override
+  String get permNearbyBody =>
+      'To start a hotspot or a Wi-Fi Direct connection, Android needs the \"Nearby devices\" permission (\"Location\" on older phones). LanDrop does not use your location.';
+
+  @override
+  String get permCameraTitle => 'Use the camera to scan the code?';
+
+  @override
+  String get permCameraBody =>
+      'LanDrop uses the camera only to read the Wi-Fi QR code of the other phone. No photos are taken or saved.';
+
+  @override
+  String get permNotificationsOff =>
+      'Notifications are off. LanDrop still receives in the background, but you won\'t see that it is running.';
+
+  @override
+  String get permNearbyOff =>
+      'This stays off until you allow \"Nearby devices\".';
+
+  @override
+  String get permCameraOff =>
+      'The camera stays off. You can type the network name and password instead.';
+
+  @override
+  String get permTryAgain => 'Try again';
+
+  @override
+  String get settingsAllowNotifications => 'Allow notifications';
+
+  @override
+  String get transferDetails => 'Details';
+
+  @override
+  String get transferDetailsTitle => 'What happened';
+
+  @override
+  String get transferDetailsReason => 'Reason';
+
+  @override
+  String get transferDetailsCode => 'Error code';
+
+  @override
+  String get transferDetailsUnknown => 'Unknown';
+
+  @override
+  String get transferDetailsReportNote =>
+      'The copied report is in English, so anyone can help.';
+
+  @override
+  String get incomingKnown => 'Seen before, not trusted yet';
+
+  @override
   String get incomingDetails => 'Details';
 
   @override
@@ -2303,4 +2384,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themeDark => 'Dark';
+
+  @override
+  String shareSendingFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString files',
+      one: '1 file',
+    );
+    return 'Sending $_temp0';
+  }
+
+  @override
+  String get shareSendingText => 'Sending text';
+
+  @override
+  String get shareErrTooMany => 'Too many items to share at once. Try fewer.';
+
+  @override
+  String get shareErrTooBig =>
+      'These items are too big to share this way. Use Send inside LanDrop instead.';
+
+  @override
+  String get shareErrUnreadable =>
+      'Some items couldn\'t be read, so they were skipped.';
+
+  @override
+  String get shareErrFailed => 'Couldn\'t receive the shared items.';
 }

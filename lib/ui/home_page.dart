@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:flutter/material.dart';
 
@@ -14,6 +13,7 @@ import 'history_page.dart';
 import 'hotspot_wizard.dart';
 import 'l10n.dart';
 import 'onboarding.dart';
+import 'permission_explainer.dart';
 import 'pickers.dart';
 import 'settings_page.dart';
 import 'shares.dart';
@@ -43,31 +43,23 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  StreamSubscription<IncomingRequest>? _sub;
-  StreamSubscription<WebPairingRequest>? _pairSub;
+  StreamSubscription<void>? _promptSub;
   StreamSubscription<TransferSession>? _autoSub;
-  StreamSubscription<IncomingText>? _textSub;
 
-  /// Incoming transfer requests and browser pairings, one dialog at a time.
-  final Queue<Object> _pending = Queue();
+  /// Incoming transfer requests, texts and browser pairings, one dialog at
+  /// a time, from [AppController.pendingPrompts] (requests that arrived
+  /// during onboarding are waiting there).
   bool _dialogOpen = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final c = AppScope.read(context);
-    _sub ??= c.incomingRequests.listen((r) {
-      _pending.add(r);
-      _drainIncoming();
-    });
-    _pairSub ??= c.pairingRequests.listen((r) {
-      _pending.add(r);
-      _drainIncoming();
-    });
-    _textSub ??= c.incomingTexts.listen((m) {
-      _pending.add(m);
-      _drainIncoming();
-    });
+    if (_promptSub == null) {
+      _promptSub = c.promptsAdded.listen((_) => _drainIncoming());
+      // After the first frame, so dialogs open over a built home page.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _drainIncoming());
+    }
     // Every transfer accepted without asking is announced, with a way to
     // stop it (UX.md 3.7).
     _autoSub ??= c.autoAccepted.listen((s) {
@@ -89,10 +81,17 @@ class _HomePageState extends State<HomePage> {
               pickFiles: widget.pickFiles, pickFolder: widget.pickFolder)));
 
   Future<void> _drainIncoming() async {
-    if (_dialogOpen) return;
+    if (_dialogOpen || !mounted) return;
     _dialogOpen = true;
-    while (_pending.isNotEmpty && mounted) {
-      final next = _pending.removeFirst();
+    while (mounted) {
+      // Android 13+, first background use: explain the notification
+      // permission before Android asks (UX.md 3.6).
+      if (AppScope.read(context).needsNotificationExplanation) {
+        await _explainNotifications();
+        continue;
+      }
+      final next = AppScope.read(context).takePrompt();
+      if (next == null) break;
       if (next is WebPairingRequest) {
         if (next.decision.isCompleted) continue; // timed out by core
         final ok = await showWebPairingDialog(context, next);
@@ -119,6 +118,21 @@ class _HomePageState extends State<HomePage> {
           conflictName: c.aliasConflict(req)?.name,
           onChangeFolder: _openSettings);
       if (!mounted) break;
+      if (d.ended) {
+        // Closed by itself: the core timed it out or the sender withdrew.
+        final l = context.l;
+        final name = l.isoName(req.sender.alias);
+        switch (req.endedBy) {
+          case IncomingRequestEnd.timeout:
+            _snack(l.incomingExpired(name), key: const Key('incomingEnded'));
+          case IncomingRequestEnd.withdrawn:
+            _snack(l.incomingWithdrawn(name),
+                key: const Key('incomingEnded'));
+          case IncomingRequestEnd.stopped || null:
+            break;
+        }
+        continue;
+      }
       final ok = d.accept;
       // Android, first receive: explain "All files access" before the
       // system screen; "Allow" moves this transfer to Downloads too.
@@ -135,12 +149,21 @@ class _HomePageState extends State<HomePage> {
     _dialogOpen = false;
   }
 
+  Future<void> _explainNotifications() async {
+    final c = AppScope.read(context);
+    final allow =
+        await showPermissionExplainer(context, AppPermission.notifications);
+    final on = await c.answerNotificationExplanation(allow);
+    if (!on && mounted) {
+      _snack(context.l.permNotificationsOff,
+          key: const Key('notificationsOffSnack'));
+    }
+  }
+
   @override
   void dispose() {
-    _sub?.cancel();
-    _pairSub?.cancel();
+    _promptSub?.cancel();
     _autoSub?.cancel();
-    _textSub?.cancel();
     super.dispose();
   }
 

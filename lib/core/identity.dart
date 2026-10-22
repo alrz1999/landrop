@@ -89,29 +89,60 @@ class TlsIdentity {
     return TlsIdentity.fromPem(certPem, keyPem);
   }
 
+  /// The usable identity stored in [dir] (cert.pem + key.pem), or null.
+  static Future<TlsIdentity?> load(String dir) async {
+    final certFile = File('$dir${Platform.pathSeparator}cert.pem');
+    final keyFile = File('$dir${Platform.pathSeparator}key.pem');
+    try {
+      if (await certFile.exists() && await keyFile.exists()) {
+        final id = TlsIdentity.fromPem(
+            await certFile.readAsString(), await keyFile.readAsString());
+        id.securityContext(); // validate it is usable
+        return id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Writes this identity to [dir]; the key file is made readable by the
+  /// owner only where the platform supports it ([restrictToOwner]).
+  Future<void> save(String dir) async {
+    final sep = Platform.pathSeparator;
+    await Directory(dir).create(recursive: true);
+    final keyFile = File('$dir${sep}key.pem');
+    await keyFile.writeAsString(keyPem);
+    await restrictToOwner(keyFile.path);
+    await File('$dir${sep}cert.pem').writeAsString(certPem);
+  }
+
   /// Loads the identity stored in [dir], or generates and persists a new one.
   /// If [dir] is null, a fresh identity is generated for this run only.
-  static Future<TlsIdentity> loadOrCreate(String? dir) async {
+  ///
+  /// [migrateFrom]: an older location (e.g. `<saveDir>/.landrop`) whose
+  /// identity is copied to [dir] when [dir] has none yet, so the
+  /// fingerprint (and the trust of peers) survives the move. The old copy
+  /// is left where it is.
+  static Future<TlsIdentity> loadOrCreate(String? dir,
+      {String? migrateFrom}) async {
     if (dir != null) {
-      final certFile = File('$dir${Platform.pathSeparator}cert.pem');
-      final keyFile = File('$dir${Platform.pathSeparator}key.pem');
-      if (await certFile.exists() && await keyFile.exists()) {
-        try {
-          final id = TlsIdentity.fromPem(
-              await certFile.readAsString(), await keyFile.readAsString());
-          id.securityContext(); // validate it is usable
-          return id;
-        } catch (_) {
-          // fall through and regenerate
-        }
-      }
-      final id = TlsIdentity.generate();
-      await Directory(dir).create(recursive: true);
-      await certFile.writeAsString(id.certPem);
-      await keyFile.writeAsString(id.keyPem);
+      final stored = await load(dir);
+      if (stored != null) return stored;
+      final old = migrateFrom == null ? null : await load(migrateFrom);
+      final id = old ?? TlsIdentity.generate();
+      await id.save(dir);
       return id;
     }
     return TlsIdentity.generate();
+  }
+
+  /// `chmod 600` [path] on macOS and Linux desktops (Windows has no POSIX
+  /// modes; Android and iOS app folders are private to the app already).
+  /// Never throws.
+  static Future<void> restrictToOwner(String path) async {
+    if (!(Platform.isMacOS || Platform.isLinux)) return;
+    try {
+      await Process.run('chmod', ['600', path]);
+    } catch (_) {}
   }
 
   RSAPrivateKey? _key;

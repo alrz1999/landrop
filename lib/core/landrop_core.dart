@@ -57,7 +57,9 @@ class LanDropCoreOptions {
   /// Test seam: accept 127.x.x.x addresses found through mDNS.
   final bool mdnsAllowLoopback;
 
-  /// Where cert.pem/key.pem are kept. Null: `<saveDir>/.landrop`.
+  /// Where cert.pem/key.pem are kept. Null: `<saveDir>/.landrop` (copied to
+  /// a new save folder when it changes). When set, an identity found in
+  /// `<saveDir>/.landrop` is migrated here once (DESIGN.md 2.10).
   final String? identityDir;
 
   /// When false a new certificate is generated every run.
@@ -288,6 +290,10 @@ class LanDropCoreImpl implements LanDropCore {
   Completer<void> _stopped = Completer<void>();
 
   bool _pendingDecision = false;
+
+  /// The request waiting for this device's answer and the sender's
+  /// withdraw secret (null for browsers and LocalSend senders).
+  (IncomingRequest, String?)? _pending;
   _InSession? _session;
 
   /// Sends the receiver accepted and that are still uploading, by session id.
@@ -428,7 +434,13 @@ class LanDropCoreImpl implements LanDropCore {
             '$_saveDir${Platform.pathSeparator}.landrop')
         : null;
     final known = _identity;
-    final identity = _identity ??= await TlsIdentity.loadOrCreate(idDir);
+    // With an [identityDir] (the app passes its support folder), an
+    // identity left in `<saveDir>/.landrop` by older versions is copied
+    // there once, so the fingerprint stays the same.
+    final identity = _identity ??= await TlsIdentity.loadOrCreate(idDir,
+        migrateFrom: options.identityDir == null
+            ? null
+            : '$_saveDir${Platform.pathSeparator}.landrop');
     // The save folder changed during this run: keep the same identity (and
     // so the same security code) there, instead of a new one next start.
     if (known != null && idDir != null) await _storeIdentity(known, idDir);
@@ -463,12 +475,8 @@ class LanDropCoreImpl implements LanDropCore {
   /// Writes [id] to [dir] unless an identity is already stored there.
   static Future<void> _storeIdentity(TlsIdentity id, String dir) async {
     try {
-      final sep = Platform.pathSeparator;
-      final cert = File('$dir${sep}cert.pem');
-      if (await cert.exists()) return;
-      await Directory(dir).create(recursive: true);
-      await File('$dir${sep}key.pem').writeAsString(id.keyPem);
-      await cert.writeAsString(id.certPem);
+      if (await File('$dir${Platform.pathSeparator}cert.pem').exists()) return;
+      await id.save(dir);
     } catch (_) {}
   }
 
@@ -766,12 +774,14 @@ class LanDropCoreImpl implements LanDropCore {
 
   @override
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
-          {void Function(String sessionId)? onSession}) =>
-      _sendFiles(to, items, onSession: onSession);
+          {void Function(String sessionId)? onSession,
+          Future<void>? withdraw}) =>
+      _sendFiles(to, items, onSession: onSession, withdraw: withdraw);
 
   @override
   Future<SendResult> sendText(DeviceInfo to, String text,
-      {void Function(String sessionId)? onSession}) async {
+      {void Function(String sessionId)? onSession,
+      Future<void>? withdraw}) async {
     if (!_running || _self == null) throw StateError('core not started');
     final bytes = utf8.encode(text);
     if (text.trim().isEmpty || bytes.length > maxTextBytes) {
@@ -788,7 +798,7 @@ class LanDropCoreImpl implements LanDropCore {
       await f.writeAsBytes(bytes);
       return await _sendFiles(
           to, [SendItem(f.path, name: textMessageFileName)],
-          onSession: onSession, preview: text);
+          onSession: onSession, preview: text, withdraw: withdraw);
     } finally {
       try {
         await tmp.delete(recursive: true);
@@ -799,7 +809,9 @@ class LanDropCoreImpl implements LanDropCore {
   /// [sendFiles]; with [preview] (text messages) the single offer carries it
   /// as `text/plain`, and a 204 answer means delivered.
   Future<SendResult> _sendFiles(DeviceInfo to, List<SendItem> items,
-      {void Function(String sessionId)? onSession, String? preview}) async {
+      {void Function(String sessionId)? onSession,
+      String? preview,
+      Future<void>? withdraw}) async {
     if (!_running || _self == null) throw StateError('core not started');
     if (to.fingerprint.isEmpty) {
       return const SendResult(
@@ -841,6 +853,11 @@ class LanDropCoreImpl implements LanDropCore {
     String? sessionId;
     String? cancelSecret;
     _OutSend? out;
+    // Lets this sender withdraw the request while the receiver decides
+    // (LanDrop extra field `landropWithdraw`, PROTOCOL.md "Withdraw").
+    final withdrawSecret = randomHex(16);
+    var withdrawn = false;
+    var answered = false;
     try {
       // 1. prepare-upload (waits for the receiver's decision). When the
       // connection cannot be made, the next link is tried.
@@ -869,7 +886,13 @@ class LanDropCoreImpl implements LanDropCore {
                 (e.key, e.value.$2.fileName, e.value.$2.size)
             ]))),
           },
+        'landropWithdraw': withdrawSecret,
       };
+      unawaited(withdraw?.then((_) async {
+        if (sessionId != null || answered) return;
+        withdrawn = true;
+        await _postCancel(route.link, {'withdrawSecret': withdrawSecret});
+      }));
       (int, Map<String, dynamic>?) prep;
       while (true) {
         try {
@@ -885,6 +908,18 @@ class LanDropCoreImpl implements LanDropCore {
       // A text message was shown: nothing to upload (LocalSend behaviour).
       if (prep.$1 == 204 && preview != null) {
         return const SendResult(ok: true);
+      }
+      answered = true;
+      if (withdrawn) {
+        if (prep.$1 == 200 && prep.$2?['sessionId'] is String) {
+          // Accepted just before the withdrawal arrived: end the session.
+          unawaited(_sendCancel(route.link, prep.$2!['sessionId'] as String,
+              prep.$2!['cancelSecret'] as String?));
+        }
+        return const SendResult(
+            ok: false,
+            error: _cancelledError,
+            errorCode: SendErrorCode.cancelled);
       }
       if (prep.$1 != 200 || prep.$2 == null) {
         return SendResult(
@@ -1425,14 +1460,18 @@ class LanDropCoreImpl implements LanDropCore {
   }
 
   Future<void> _sendCancel(
-      Link to, String sessionId, String? cancelSecret) async {
+          Link to, String sessionId, String? cancelSecret) =>
+      _postCancel(to, {
+        'sessionId': sessionId,
+        'cancelSecret': ?cancelSecret,
+      });
+
+  /// POST /cancel with [query] (a session's cancel, or a withdrawal).
+  Future<void> _postCancel(Link to, Map<String, String> query) async {
     final c = _newClient(expectFp: to.fingerprint);
     try {
       final req = await c
-          .postUrl(to.uri('$_apiBase/cancel', {
-            'sessionId': sessionId,
-            'cancelSecret': ?cancelSecret,
-          }))
+          .postUrl(to.uri('$_apiBase/cancel', query))
           .timeout(options.probeTimeout);
       final res = await req.close().timeout(options.probeTimeout);
       await res.drain<void>();
@@ -1873,7 +1912,11 @@ class LanDropCoreImpl implements LanDropCore {
     final sender = _infoFromJson(infoJson, ip,
         infoJson['port'] is int ? infoJson['port'] as int : 53317);
     if (sender == null) throw _HttpError(400, 'invalid sender info');
+    final withdraw = body['landropWithdraw'];
     await _prepareIncoming(req, sender, filesJson,
+        withdrawSecret: withdraw is String && withdraw.length >= 16
+            ? withdraw
+            : null,
         verified: _senderProven(sender, filesJson, body['landropProof']));
   }
 
@@ -1910,7 +1953,7 @@ class LanDropCoreImpl implements LanDropCore {
   /// prepare-upload and browser uploads ([owner] = browser session id).
   Future<void> _prepareIncoming(
       HttpRequest req, DeviceInfo sender, Map<dynamic, dynamic> filesJson,
-      {String? owner, bool verified = false}) async {
+      {String? owner, bool verified = false, String? withdrawSecret}) async {
     if (_pendingDecision || _session != null) {
       throw _HttpError(409, 'busy');
     }
@@ -1947,17 +1990,30 @@ class LanDropCoreImpl implements LanDropCore {
     if (!_incomingCtrl.hasListener) throw _HttpError(403, 'declined');
 
     _pendingDecision = true;
+    _pending = (request, withdrawSecret);
     bool accepted;
     try {
       _incomingCtrl.add(request);
       accepted = await Future.any<bool>([
         request.decision.future,
-        _stopped.future.then((_) => false),
-      ]).timeout(options.decisionTimeout, onTimeout: () => false);
+        _stopped.future.then((_) {
+          request.endedBy ??= IncomingRequestEnd.stopped;
+          return false;
+        }),
+      ]).timeout(options.decisionTimeout, onTimeout: () {
+        request.endedBy ??= IncomingRequestEnd.timeout;
+        return false;
+      });
     } catch (_) {
       accepted = false;
     } finally {
       _pendingDecision = false;
+      _pending = null;
+      // Ended without an answer: the UI closes its dialog (endedBy says why).
+      if (!request.decision.isCompleted) {
+        request.endedBy ??= IncomingRequestEnd.stopped;
+        request.decision.complete(false);
+      }
     }
     if (!accepted || !_running) throw _HttpError(403, 'declined');
     if (isText) {
@@ -2240,6 +2296,21 @@ class LanDropCoreImpl implements LanDropCore {
 
   void _handleCancel(HttpRequest req) {
     final q = req.uri.queryParameters;
+    // A LanDrop sender withdraws a request nobody answered yet.
+    final w = q['withdrawSecret'];
+    if (w != null) {
+      final p = _pending;
+      final secret = p?.$2;
+      if (p == null || secret == null || !_secretEquals(secret, w)) {
+        throw _HttpError(403, 'nothing to withdraw');
+      }
+      if (!p.$1.decision.isCompleted) {
+        p.$1.endedBy = IncomingRequestEnd.withdrawn;
+        p.$1.decision.complete(false);
+      }
+      _json(req.response, 200, {});
+      return;
+    }
     final sid = q['sessionId'];
     final secret = q['cancelSecret'];
     final s = _session;

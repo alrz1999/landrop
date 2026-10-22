@@ -174,8 +174,25 @@ class IncomingRequest {
   /// such as auto-accept; otherwise it is just a claim. Always false for
   /// browsers and plain LocalSend senders.
   final bool verified;
+
+  /// Set by the core when the request ended without an answer from this
+  /// device ([decision] is then completed with false), so the UI can close
+  /// its dialog and say why.
+  IncomingRequestEnd? endedBy;
   IncomingRequest(this.sessionId, this.sender, this.files,
       {this.verified = false});
+}
+
+/// Why an [IncomingRequest] ended before this device answered.
+enum IncomingRequestEnd {
+  /// Nobody answered within `decisionTimeout`.
+  timeout,
+
+  /// The sender cancelled (withdrew) the request, or the browser left.
+  withdrawn,
+
+  /// This device's server stopped.
+  stopped,
 }
 
 class TransferProgress {
@@ -392,8 +409,11 @@ abstract class LanDropCore {
   /// Send files and/or directories. [onSession] is called with the session id
   /// as soon as the receiver accepts, before any progress for that session is
   /// emitted, so callers can attribute [progress] events by session id.
+  /// When [withdraw] completes while the receiver has not answered yet, the
+  /// request is withdrawn (its dialog closes there, PROTOCOL.md "Withdraw")
+  /// and the result is [SendErrorCode.cancelled].
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
-      {void Function(String sessionId)? onSession});
+      {void Function(String sessionId)? onSession, Future<void>? withdraw});
 
   /// Sends [text] (a note or a link) as a text message (PROTOCOL.md "Text
   /// messages"): one `message.txt` offer of type `text/plain` whose
@@ -403,7 +423,7 @@ abstract class LanDropCore {
   /// the normal pipeline. Empty text or more than [maxTextBytes] is refused
   /// without contacting the receiver.
   Future<SendResult> sendText(DeviceInfo to, String text,
-      {void Function(String sessionId)? onSession});
+      {void Function(String sessionId)? onSession, Future<void>? withdraw});
 
   /// Changes the folder for transfers accepted from now on, without a
   /// restart (used when Android grants "All files access" while a request

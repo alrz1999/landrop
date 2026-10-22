@@ -17,9 +17,11 @@ import 'history_store.dart';
 import 'hotspot_service.dart';
 import 'l10n.dart' show englishStrings;
 import 'multicast_lock.dart';
+import 'permission_explainer.dart';
 import 'storage_access.dart';
 
 export 'history_store.dart' show HistoryEntry, HistoryStore, MemoryHistoryStore;
+export 'permission_explainer.dart' show AppPermission, PermissionAccess;
 
 /// Persists alias + save directory. The default implementation writes a small
 /// JSON file in the application support directory.
@@ -38,6 +40,18 @@ class SettingsStore {
     try {
       final dir = await getApplicationSupportDirectory();
       return '${dir.path}${Platform.pathSeparator}landrop_shares.json';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The device identity folder (`LanDropCoreOptions.identityDir`):
+  /// `identity` in the app support directory, outside the save folder.
+  /// Null when there is no app support directory.
+  static Future<String?> identityPath() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      return '${dir.path}${Platform.pathSeparator}identity';
     } catch (_) {
       return null;
     }
@@ -152,9 +166,58 @@ class TransferSession {
     this.peer,
     this.paths = const [],
     this.text,
+    this.senderAddress,
   });
 
   String sessionId;
+
+  /// Received transfers: the sender's `ip:port` when it asked.
+  final String? senderAddress;
+
+  /// `ip:port` of the other device (the sender's address for received
+  /// transfers), for the Details sheet; null when unknown.
+  String? get peerAddress =>
+      senderAddress ??
+      (peer == null
+          ? null
+          : peer!.port > 0
+              ? '${peer!.ip}:${peer!.port}'
+              : peer!.ip);
+
+  /// Why it ended, as a stable code for reports: `declined`, a
+  /// [SendErrorCode] name, or `unknown`; null while not failed.
+  String? get failureCodeName => switch (state) {
+        TransferState.declined => 'declined',
+        TransferState.cancelled => 'cancelled',
+        TransferState.failed => (failureCode ?? SendErrorCode.unknown).name,
+        _ => null,
+      };
+
+  /// Plain-text report of a failed, cancelled or declined transfer for
+  /// support. Always English (like the connection report).
+  String report() {
+    final files = this.files.values;
+    final b = StringBuffer()
+      ..writeln('LanDrop transfer report')
+      ..writeln('Direction: ${incoming ? 'received from' : 'sent to'} '
+          '$peerAlias')
+      ..writeln('Address: ${peerAddress ?? 'unknown'}')
+      ..writeln('Fingerprint: '
+          '${peerFingerprint.isEmpty ? 'not verified' : peerFingerprint}')
+      ..writeln('Result: ${state.name}')
+      ..writeln('Error code: ${failureCodeName ?? '-'}');
+    final err = error ??
+        files.map((f) => f.error).whereType<String>().firstOrNull;
+    if (err != null) b.writeln('Error: $err');
+    b
+      ..writeln('Started: ${started.toUtc().toIso8601String()}')
+      ..writeln('Files: ${files.length}, $totalBytes bytes'
+          '${text != null ? ' (text message)' : ''}');
+    for (final f in files.where((f) => f.error != null).take(5)) {
+      b.writeln('  ${f.name}: ${f.errorCode?.name ?? 'error'} (${f.error})');
+    }
+    return b.toString();
+  }
 
   /// Outgoing: the device and the paths sent, so "Try again" can send the
   /// same items to the same device.
@@ -184,6 +247,10 @@ class TransferSession {
 
   /// Cancel was pressed before the receiver accepted (no session id yet).
   bool cancelRequested = false;
+
+  /// Outgoing: completed by [AppController.cancel] before the receiver
+  /// answered, so the core withdraws the request (its dialog closes).
+  final Completer<void> withdraw = Completer<void>();
 
   int get sentBytes => files.values.fold(0, (a, f) => a + f.sent);
   int get totalBytes => files.values.fold(0, (a, f) => a + f.total);
@@ -333,11 +400,19 @@ enum SenderTrust {
   /// The sender did not prove its fingerprint (e.g. a plain LocalSend app).
   unverified,
 
-  /// A proven fingerprint never accepted before.
+  /// A proven fingerprint never seen before: not trusted and not in the
+  /// recent devices from an earlier run or an earlier transfer.
   firstTime,
 
+  /// A proven fingerprint in the recent devices (seen in an earlier run or
+  /// used for a transfer) but never accepted from.
+  known,
+
   /// A proven fingerprint the user accepted before.
-  trusted,
+  trusted;
+
+  /// Proven, so it may be remembered as trusted when accepted.
+  bool get proven => this == firstTime || this == known || this == trusted;
 }
 
 /// A device seen nearby before (UX.md 3.2 "Recent"), kept in the settings
@@ -348,18 +423,29 @@ class RecentDevice {
     required this.alias,
     required this.deviceType,
     required this.lastSeen,
-  });
+    DateTime? firstSeen,
+    this.lastUsed,
+  }) : firstSeen = firstSeen ?? lastSeen;
 
   final String fingerprint;
   String alias;
   String deviceType;
   DateTime lastSeen;
 
+  /// When it was first seen (entries saved before this field: their
+  /// `lastSeen`, i.e. seen in an earlier run).
+  final DateTime firstSeen;
+
+  /// The last transfer or text with it (sent, or accepted from it).
+  DateTime? lastUsed;
+
   Map<String, dynamic> toJson() => {
         'fingerprint': fingerprint,
         'alias': alias,
         'deviceType': deviceType,
         'lastSeen': lastSeen.toUtc().toIso8601String(),
+        'firstSeen': firstSeen.toUtc().toIso8601String(),
+        if (lastUsed != null) 'lastUsed': lastUsed!.toUtc().toIso8601String(),
       };
 
   static RecentDevice? fromJson(Object? j) {
@@ -371,11 +457,15 @@ class RecentDevice {
     final at = DateTime.tryParse(seen);
     if (at == null) return null;
     final type = j['deviceType'];
+    DateTime? time(Object? v) =>
+        v is String ? DateTime.tryParse(v)?.toLocal() : null;
     return RecentDevice(
         fingerprint: fp,
         alias: alias,
         deviceType: type is String ? type : 'desktop',
-        lastSeen: at.toLocal());
+        lastSeen: at.toLocal(),
+        firstSeen: time(j['firstSeen']),
+        lastUsed: time(j['lastUsed']));
   }
 }
 
@@ -408,8 +498,10 @@ class AppController extends ChangeNotifier {
     DateTime Function()? clock,
     StorageAccess? storageAccess,
     HistoryStore? historyStore,
+    PermissionAccess? permissionAccess,
   })  : _store = store ?? const SettingsStore(),
         storage = storageAccess ?? const StorageAccess(),
+        permissions = permissionAccess ?? const PermissionAccess(),
         _historyStore = historyStore ?? (store ?? const SettingsStore()).history,
         _saveDir = initialSaveDir ?? '',
         _alias = initialAlias ?? _defaultAlias(),
@@ -423,6 +515,74 @@ class AppController extends ChangeNotifier {
 
   /// Android "All files access" (test seam).
   final StorageAccess storage;
+
+  /// Android runtime permissions explained before they are asked (test
+  /// seam, UX.md 3.6).
+  final PermissionAccess permissions;
+
+  /// Permissions whose explanation was answered once (persisted as
+  /// `permissionsExplained`), so it is never shown again.
+  final Set<String> _explained = {};
+
+  bool permissionExplained(AppPermission p) => _explained.contains(p.name);
+
+  Future<void> markPermissionExplained(AppPermission p) async {
+    if (!_explained.add(p.name)) return;
+    await _persist();
+    _notify();
+  }
+
+  /// Android with "Keep running in background": the notification
+  /// permission is missing (checked after each start).
+  bool notificationsOff = false;
+
+  /// The background service runs and its notification permission was
+  /// never explained: the home page explains it before Android asks.
+  bool get needsNotificationExplanation =>
+      notificationsOff && !permissionExplained(AppPermission.notifications);
+
+  /// Hotspot: "Not now" on the "Nearby devices" explanation; the card says
+  /// it stays off until then (cleared by the next start).
+  bool hotspotPermissionDeclined = false;
+
+  /// "Not now" on the hotspot's permission explanation.
+  void declineHotspotPermission() {
+    hotspotPermissionDeclined = true;
+    hotspotError = null;
+    hotspotFailure = null;
+    _notify();
+  }
+
+  Future<void> _checkNotifications() async {
+    if (!permissions.isAndroid || !_background) {
+      notificationsOff = false;
+      return;
+    }
+    notificationsOff =
+        !await permissions.granted(AppPermission.notifications);
+    if (needsNotificationExplanation && !_promptCtrl.isClosed) {
+      _promptCtrl.add(null); // the home page shows the explanation
+    }
+    _notify();
+  }
+
+  /// The user answered the notification explanation ([allow]: Android asks
+  /// now). Returns whether notifications are allowed afterwards.
+  Future<bool> answerNotificationExplanation(bool allow) async {
+    _explained.add(AppPermission.notifications.name);
+    await _persist();
+    if (allow) return requestNotifications();
+    _notify();
+    return false;
+  }
+
+  /// Opens Android's notification dialog (Settings' "Allow notifications").
+  Future<bool> requestNotifications() async {
+    final ok = await permissions.request(AppPermission.notifications);
+    notificationsOff = !ok;
+    _notify();
+    return ok;
+  }
 
   /// Where the transfer history is kept (test seam).
   final HistoryStore _historyStore;
@@ -502,6 +662,14 @@ class AppController extends ChangeNotifier {
   final _pairingCtrl = StreamController<WebPairingRequest>.broadcast();
   final _autoAcceptedCtrl = StreamController<TransferSession>.broadcast();
   final _textCtrl = StreamController<IncomingText>.broadcast();
+  final _promptCtrl = StreamController<void>.broadcast();
+
+  /// Requests waiting for their dialog, oldest first: [IncomingRequest],
+  /// [IncomingText] and [WebPairingRequest]. Kept here (not only in the
+  /// streams) so requests that arrive while onboarding is open or before
+  /// home is shown are presented as soon as it is. An entry leaves the
+  /// queue by itself when the core ends it (timeout, sender withdrew).
+  final List<Object> _prompts = [];
 
   /// Devices the user accepted from, by fingerprint (persisted).
   final Map<String, TrustedDevice> _trusted = {};
@@ -534,6 +702,44 @@ class AppController extends ChangeNotifier {
   /// Text messages to show (PROTOCOL.md "Text messages"). Unless
   /// [IncomingText.auto], the UI calls [receiveText] when it shows one.
   Stream<IncomingText> get incomingTexts => _textCtrl.stream;
+
+  /// Fires when [pendingPrompts] got a new entry.
+  Stream<void> get promptsAdded => _promptCtrl.stream;
+
+  /// See [_prompts].
+  List<Object> get pendingPrompts => List.unmodifiable(_prompts);
+
+  /// The oldest waiting request that still needs an answer (removed from
+  /// the queue), or null.
+  Object? takePrompt() {
+    while (_prompts.isNotEmpty) {
+      final p = _prompts.removeAt(0);
+      if (!_promptEnded(p)) return p;
+    }
+    return null;
+  }
+
+  static bool _promptEnded(Object p) => switch (p) {
+        IncomingRequest r => r.decision.isCompleted,
+        WebPairingRequest r => r.decision.isCompleted,
+        IncomingText t => !t.auto && t.request.decision.isCompleted,
+        _ => true,
+      };
+
+  void _enqueue(Object p) {
+    _prompts.add(p);
+    final decision = switch (p) {
+      IncomingRequest r => r.decision,
+      WebPairingRequest r => r.decision,
+      IncomingText t when !t.auto => t.request.decision,
+      _ => null,
+    };
+    // Ended by the core (or answered elsewhere) while still waiting.
+    decision?.future.then((_) {
+      if (_prompts.remove(p)) _notify();
+    });
+    if (!_promptCtrl.isClosed) _promptCtrl.add(null);
+  }
 
   /// The settings file was read (the UI waits for it before choosing
   /// between onboarding and home).
@@ -691,6 +897,7 @@ class AppController extends ChangeNotifier {
 
   /// Load settings, subscribe to core streams and start the core.
   Future<void> init() async {
+    _runStarted ??= _clock();
     _subs.add(core.peers.listen((p) {
       peers = _oneEntryPerDevice(p);
       _rememberPeers();
@@ -698,7 +905,10 @@ class AppController extends ChangeNotifier {
     }));
     _subs.add(core.incoming.listen(_onIncoming));
     _subs.add(core.progress.listen(_onProgress));
-    _subs.add(core.webPairing.listen(_pairingCtrl.add));
+    _subs.add(core.webPairing.listen((r) {
+      _pairingCtrl.add(r);
+      _enqueue(r);
+    }));
     // Events arrive asynchronously and may be older than what createShare /
     // revoke already applied, so the current lists are read instead.
     _subs.add(core.sharesChanged.listen((_) {
@@ -723,6 +933,8 @@ class AppController extends ChangeNotifier {
     _onboarded = s['onboarded'] == true ||
         (!s.containsKey('onboarded') && s.isNotEmpty);
     _storageAsked = s['storageAsked'] == true;
+    final explained = s['permissionsExplained'];
+    if (explained is List) _explained.addAll(explained.whereType<String>());
     if (s['keepHistory'] is bool) _keepHistory = s['keepHistory'] as bool;
     final recent = s['recentDevices'];
     if (recent is List) {
@@ -772,7 +984,9 @@ class AppController extends ChangeNotifier {
     _notify();
     try {
       await MulticastLock.acquire();
-      if (_background) await BackgroundService.start();
+      // The notification permission is asked only after the explanation
+      // (UX.md 3.6); the service runs without it, its notification hidden.
+      if (_background) await BackgroundService.start(askNotification: false);
       // Before start: when off, the stored shares are deleted, not restored.
       core.setSharesPersistence(_keepShares);
       await core.start(alias: _alias, saveDir: _saveDir);
@@ -792,6 +1006,7 @@ class AppController extends ChangeNotifier {
       lastError = '$e';
     }
     _notify();
+    await _checkNotifications();
     final ip = self?.ip;
     if (status == CoreStatus.running && (ip == null || ip.isEmpty || ip == '0.0.0.0')) {
       try {
@@ -890,10 +1105,13 @@ class AppController extends ChangeNotifier {
     _background = on;
     await _persist();
     if (on) {
-      await BackgroundService.start();
+      await BackgroundService.start(
+          askNotification:
+              permissionExplained(AppPermission.notifications));
     } else {
       await BackgroundService.stop();
     }
+    await _checkNotifications();
     _lastStatus = null; // send the counts to a (re)started service
     _notify();
   }
@@ -967,6 +1185,7 @@ class AppController extends ChangeNotifier {
         },
         'onboarded': _onboarded,
         if (_storageAsked) 'storageAsked': true,
+        if (_explained.isNotEmpty) 'permissionsExplained': _explained.toList(),
         'keepHistory': _keepHistory,
         'recentDevices': [for (final r in _recent.values) r.toJson()],
         if (_customDir) 'saveDir': _saveDir,
@@ -982,7 +1201,9 @@ class AppController extends ChangeNotifier {
 
   TransferSession? _respond(IncomingRequest req, bool accept,
       {bool alwaysAccept = false, bool auto = false}) {
-    if (!req.decision.isCompleted) req.decision.complete(accept);
+    // Already ended by the core (timed out, withdrawn): nothing to track.
+    if (req.decision.isCompleted) return null;
+    req.decision.complete(accept);
     if (!accept) return null;
     final s = TransferSession(
       sessionId: req.sessionId,
@@ -991,6 +1212,9 @@ class AppController extends ChangeNotifier {
       peerFingerprint: req.verified ? req.sender.fingerprint : '',
       savedTo: _saveDir,
       autoAccepted: auto,
+      senderAddress: req.sender.port > 0
+          ? '${req.sender.ip}:${req.sender.port}'
+          : req.sender.ip,
     );
     for (final f in req.files) {
       s.files[f.id] = FileTransfer(f.id, f.fileName, f.size);
@@ -998,8 +1222,9 @@ class AppController extends ChangeNotifier {
     sessions.insert(0, s);
     _trimHistory();
     _bind(s, req.sessionId);
-    if (trustOf(req) case SenderTrust.firstTime || SenderTrust.trusted) {
+    if (trustOf(req).proven) {
       final fp = req.sender.fingerprint;
+      _used(req.sender);
       final t = _trusted[fp];
       if (t == null) {
         _trusted[fp] = TrustedDevice(
@@ -1042,9 +1267,8 @@ class AppController extends ChangeNotifier {
     final d = req.sender;
     if (d.deviceType == 'web') return SenderTrust.browser;
     if (!req.verified || d.fingerprint.isEmpty) return SenderTrust.unverified;
-    return _trusted.containsKey(d.fingerprint)
-        ? SenderTrust.trusted
-        : SenderTrust.firstTime;
+    if (_trusted.containsKey(d.fingerprint)) return SenderTrust.trusted;
+    return seenBefore(d.fingerprint) ? SenderTrust.known : SenderTrust.firstTime;
   }
 
   /// A trusted device whose name [req]'s sender uses although it is not
@@ -1054,10 +1278,7 @@ class AppController extends ChangeNotifier {
     String norm(String s) => s.trim().toLowerCase();
     final alias = norm(req.sender.alias);
     if (alias.isEmpty) return null;
-    final own = trustOf(req) == SenderTrust.trusted ||
-            trustOf(req) == SenderTrust.firstTime
-        ? req.sender.fingerprint
-        : null;
+    final own = trustOf(req).proven ? req.sender.fingerprint : null;
     for (final t in _trusted.values) {
       if (t.fingerprint == own) continue;
       if (norm(t.alias) == alias ||
@@ -1087,7 +1308,9 @@ class AppController extends ChangeNotifier {
       // is answered at once, every other sender when the dialog shows it.
       final auto = shouldAutoAccept(req);
       if (auto) receiveText(req);
-      _textCtrl.add(IncomingText(req, auto: auto));
+      final t = IncomingText(req, auto: auto);
+      _textCtrl.add(t);
+      _enqueue(t);
       return;
     }
     if (shouldAutoAccept(req)) {
@@ -1096,6 +1319,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     _incomingCtrl.add(req);
+    _enqueue(req);
   }
 
   Future<void> setAutoAccept(String fingerprint, bool on) async {
@@ -1132,6 +1356,7 @@ class AppController extends ChangeNotifier {
     if (s.state.isFinal) return;
     if (s.sessionId.isEmpty) {
       s.cancelRequested = true;
+      if (!s.withdraw.isCompleted) s.withdraw.complete();
       _notify();
       return;
     }
@@ -1181,6 +1406,7 @@ class AppController extends ChangeNotifier {
   Future<void> startHotspot() async {
     if (hotspotStarting) return;
     hotspotStarting = true;
+    hotspotPermissionDeclined = false;
     hotspotError = null;
     hotspotFailure = null;
     _notify();
@@ -1286,6 +1512,7 @@ class AppController extends ChangeNotifier {
     );
     sessions.insert(0, s);
     _trimHistory();
+    _used(to);
     _notify();
     SendResult res;
     void onSession(String sid) {
@@ -1297,9 +1524,10 @@ class AppController extends ChangeNotifier {
 
     try {
       final r = text != null
-          ? await core.sendText(to, text, onSession: onSession)
+          ? await core.sendText(to, text,
+              onSession: onSession, withdraw: s.withdraw.future)
           : await core.sendFiles(to, [for (final p in paths) SendItem(p)],
-              onSession: onSession);
+              onSession: onSession, withdraw: s.withdraw.future);
       res = r;
       s.error = r.error;
       s.errorCode = r.ok ? null : r.errorCode;
@@ -1489,6 +1717,55 @@ class AppController extends ChangeNotifier {
 
   // ------------------------------------------------------ recent devices
 
+  /// When this run started: devices first seen before it count as "seen
+  /// before" for the incoming dialog's badge.
+  DateTime? _runStarted;
+
+  /// [fingerprint] is in the recent devices from an earlier run, or was
+  /// used for a transfer (the "First time" badge is shown otherwise).
+  bool seenBefore(String fingerprint) {
+    final r = _recent[fingerprint];
+    if (r == null) return false;
+    return r.lastUsed != null ||
+        r.firstSeen.isBefore(_runStarted ?? _clock());
+  }
+
+  /// [peers] in the order of the "Choose device" list (UX.md 3.3): devices
+  /// used most recently first, then trusted ones, then the rest as found.
+  List<DeviceInfo> pickerOrder(List<DeviceInfo> peers) {
+    final indexed = peers.indexed.toList();
+    int rank(DeviceInfo p) => _trusted.containsKey(p.fingerprint) ? 0 : 1;
+    indexed.sort((a, b) {
+      final ua = _recent[a.$2.fingerprint]?.lastUsed;
+      final ub = _recent[b.$2.fingerprint]?.lastUsed;
+      if (ua != null || ub != null) {
+        if (ua == null) return 1;
+        if (ub == null) return -1;
+        final c = ub.compareTo(ua);
+        if (c != 0) return c;
+      }
+      final r = rank(a.$2).compareTo(rank(b.$2));
+      return r != 0 ? r : a.$1.compareTo(b.$1);
+    });
+    return [for (final (_, p) in indexed) p];
+  }
+
+  /// Records a transfer with [d] in the recent devices (added when it was
+  /// not discovered, e.g. a sender reached through another network).
+  void _used(DeviceInfo d) {
+    if (d.fingerprint.isEmpty || d.deviceType == 'web') return;
+    final now = _clock();
+    final r = _recent.putIfAbsent(
+        d.fingerprint,
+        () => RecentDevice(
+            fingerprint: d.fingerprint,
+            alias: d.alias,
+            deviceType: d.deviceType,
+            lastSeen: now));
+    r.lastUsed = now;
+    if (_settingsLoaded) unawaited(_persist());
+  }
+
   /// Devices seen before that are not nearby now, most recent first.
   List<RecentDevice> get recentOffline {
     final online = {for (final p in peers) p.fingerprint};
@@ -1548,6 +1825,7 @@ class AppController extends ChangeNotifier {
     _pairingCtrl.close();
     _autoAcceptedCtrl.close();
     _textCtrl.close();
+    _promptCtrl.close();
     if (hotspot != null) hotspotService.stop();
     core.stop().catchError((_) {});
     MulticastLock.release();

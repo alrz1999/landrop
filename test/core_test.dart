@@ -1187,4 +1187,173 @@ void main() {
       expect(File('${dirB.path}/n.txt').existsSync(), isFalse);
     });
   });
+
+  group('unanswered requests', () {
+    late Directory tmp;
+    late LanDropCoreImpl a, b;
+    Future<void> start(Duration decisionTimeout) async {
+      tmp = await Directory.systemTemp.createTemp('landrop_unanswered');
+      LanDropCoreOptions o() => LanDropCoreOptions(
+            port: 0,
+            bindAddress: InternetAddress.loopbackIPv4,
+            advertiseIp: '127.0.0.1',
+            multicastEnabled: false,
+            persistIdentity: false,
+            decisionTimeout: decisionTimeout,
+          );
+      a = LanDropCoreImpl(o());
+      b = LanDropCoreImpl(o());
+      await a.start(alias: 'Alice', saveDir: '${tmp.path}/a');
+      await b.start(alias: 'Bob', saveDir: '${tmp.path}/b');
+    }
+
+    tearDown(() async {
+      await a.dispose();
+      await b.dispose();
+      try {
+        await tmp.delete(recursive: true);
+      } catch (_) {}
+    });
+
+    test('the decision timeout ends the request (endedBy timeout)', () async {
+      await start(const Duration(milliseconds: 300));
+      final got = b.incoming.first;
+      final src = File('${tmp.path}/t.txt')..writeAsStringSync('x');
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final r = await a.sendFiles(peer, [SendItem(src.path)]);
+      expect(r.errorCode, SendErrorCode.declined);
+      final req = await got;
+      expect(req.decision.isCompleted, isTrue);
+      expect(await req.decision.future, isFalse);
+      expect(req.endedBy, IncomingRequestEnd.timeout);
+    });
+
+    test('a sender that withdraws closes the request on the receiver',
+        () async {
+      await start(const Duration(seconds: 20));
+      final got = b.incoming.first;
+      final src = File('${tmp.path}/w.txt')..writeAsStringSync('x');
+      final peer = (await a.addPeerByIp('127.0.0.1', port: b.self.port))!;
+      final withdraw = Completer<void>();
+      final send = a.sendFiles(peer, [SendItem(src.path)],
+          withdraw: withdraw.future);
+      final req = await got.timeout(const Duration(seconds: 5));
+      expect(req.decision.isCompleted, isFalse);
+      withdraw.complete();
+      final r = await send.timeout(const Duration(seconds: 5));
+      expect(r.ok, isFalse);
+      expect(r.errorCode, SendErrorCode.cancelled);
+      expect(req.endedBy, IncomingRequestEnd.withdrawn);
+      expect(await req.decision.future, isFalse);
+      expect(Directory('${tmp.path}/b').listSync(), isEmpty);
+      // A wrong secret cannot withdraw anything.
+      final c = HttpClient()..badCertificateCallback = (_, _, _) => true;
+      try {
+        final q = await c.postUrl(Uri.parse(
+            'https://127.0.0.1:${b.self.port}/api/localsend/v2/cancel'
+            '?withdrawSecret=0123456789abcdef'));
+        final res = await q.close();
+        await res.drain<void>();
+        expect(res.statusCode, 403);
+      } finally {
+        c.close(force: true);
+      }
+    });
+  });
+
+  group('identity location', () {
+    late Directory tmp;
+    setUp(() async =>
+        tmp = await Directory.systemTemp.createTemp('landrop_identity'));
+    tearDown(() async {
+      try {
+        await tmp.delete(recursive: true);
+      } catch (_) {}
+    });
+
+    LanDropCoreOptions opts(String? identityDir) => LanDropCoreOptions(
+          port: 0,
+          bindAddress: InternetAddress.loopbackIPv4,
+          advertiseIp: '127.0.0.1',
+          multicastEnabled: false,
+          identityDir: identityDir,
+        );
+
+    Future<String> fingerprintOf(LanDropCoreOptions o, String saveDir) async {
+      final c = LanDropCoreImpl(o);
+      try {
+        await c.start(alias: 'Id', saveDir: saveDir);
+        return c.self.fingerprint;
+      } finally {
+        await c.dispose();
+      }
+    }
+
+    test('an identity in <saveDir>/.landrop is migrated once, same fingerprint',
+        () async {
+      final save = '${tmp.path}/save';
+      final old = TlsIdentity.generate();
+      await old.save('$save/.landrop');
+      final support = '${tmp.path}/support/identity';
+
+      expect(await fingerprintOf(opts(support), save), old.fingerprint);
+      expect(File('$support/cert.pem').readAsStringSync(), old.certPem);
+      expect(File('$support/key.pem').readAsStringSync(), old.keyPem);
+      // The old copy is left in place.
+      expect(File('$save/.landrop/key.pem').existsSync(), isTrue);
+      if (Platform.isMacOS || Platform.isLinux) {
+        final mode = File('$support/key.pem').statSync().mode & 0x1ff;
+        expect(mode, 0x180, reason: 'key.pem must be 0600'); // rw-------
+      }
+
+      // Never migrated again: a different identity in a save folder does
+      // not replace the stored one.
+      final other = '${tmp.path}/other';
+      await TlsIdentity.generate().save('$other/.landrop');
+      expect(await fingerprintOf(opts(support), other), old.fingerprint);
+    });
+
+    test('same fingerprint after moving the save folder', () async {
+      final support = '${tmp.path}/support/identity';
+      final first = await fingerprintOf(opts(support), '${tmp.path}/s1');
+      // Nothing is written into the save folder any more.
+      expect(Directory('${tmp.path}/s1/.landrop').existsSync(), isFalse);
+      expect(await fingerprintOf(opts(support), '${tmp.path}/s2'), first);
+
+      // Also during a run (setSaveDir) and at the next start.
+      final c = LanDropCoreImpl(opts(support));
+      try {
+        await c.start(alias: 'Id', saveDir: '${tmp.path}/s3');
+        await c.setSaveDir('${tmp.path}/s4');
+        expect(c.self.fingerprint, first);
+      } finally {
+        await c.dispose();
+      }
+      expect(Directory('${tmp.path}/s4/.landrop').existsSync(), isFalse);
+      expect(await fingerprintOf(opts(support), '${tmp.path}/s4'), first);
+    });
+
+    test('a fresh support folder without an old identity generates one',
+        () async {
+      final support = '${tmp.path}/support/identity';
+      final fp = await fingerprintOf(opts(support), '${tmp.path}/s');
+      expect(File('$support/cert.pem').existsSync(), isTrue);
+      expect((await TlsIdentity.load(support))!.fingerprint, fp);
+      expect(await TlsIdentity.load('${tmp.path}/nothing'), isNull);
+    });
+
+    test('without identityDir the identity follows the save folder (legacy)',
+        () async {
+      final c = LanDropCoreImpl(opts(null));
+      late String fp;
+      try {
+        await c.start(alias: 'Id', saveDir: '${tmp.path}/l1');
+        fp = c.self.fingerprint;
+        await c.setSaveDir('${tmp.path}/l2');
+      } finally {
+        await c.dispose();
+      }
+      expect(await fingerprintOf(opts(null), '${tmp.path}/l2'), fp);
+    });
+  });
 }

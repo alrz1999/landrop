@@ -11,6 +11,7 @@ import 'format.dart';
 import 'hotspot_service.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
+import 'permission_explainer.dart';
 import 'widgets.dart';
 import 'wifi_join_page.dart' show openWifiJoin;
 
@@ -238,6 +239,18 @@ class OtherDeviceSteps extends StatelessWidget {
   }
 }
 
+/// "Start hotspot": explains the "Nearby devices" permission once before
+/// Android asks (UX.md 3.6); "Not now" leaves the hotspot off and the card
+/// says so, with "Try again".
+Future<void> startHotspotExplained(BuildContext context) async {
+  final c = AppScope.read(context);
+  if (!await explainBeforeAsking(context, AppPermission.nearbyDevices)) {
+    c.declineHotspotPermission();
+    return;
+  }
+  await c.startHotspot();
+}
+
 /// Android: start / show / stop the LanDrop hotspot (local-only hotspot).
 class HotspotCard extends StatelessWidget {
   const HotspotCard({super.key});
@@ -259,7 +272,9 @@ class HotspotCard extends StatelessWidget {
             if (h == null) ...[
               FilledButton.tonalIcon(
                 key: const Key('startHotspot'),
-                onPressed: c.hotspotStarting ? null : c.startHotspot,
+                onPressed: c.hotspotStarting
+                    ? null
+                    : () => startHotspotExplained(context),
                 icon: c.hotspotStarting
                     ? const SizedBox(
                         width: 16,
@@ -268,7 +283,14 @@ class HotspotCard extends StatelessWidget {
                     : const Icon(Icons.wifi_tethering),
                 label: Text(l.hotspotStart),
               ),
-              if (error != null)
+              if (c.hotspotPermissionDeclined)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(top: 8),
+                  child: PermissionNotNowNote(
+                      permission: AppPermission.nearbyDevices,
+                      onRetry: c.startHotspot),
+                )
+              else if (error != null)
                 Padding(
                   padding: const EdgeInsetsDirectional.only(top: 8),
                   child: Text(error,

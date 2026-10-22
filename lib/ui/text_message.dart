@@ -143,6 +143,7 @@ class _IncomingTextDialog extends StatelessWidget {
     final badge = switch (trust) {
       SenderTrust.trusted => (Icons.verified_user_outlined, l.incomingTrusted),
       SenderTrust.firstTime => (Icons.fiber_new_outlined, l.incomingFirstTime),
+      SenderTrust.known => (Icons.history, l.incomingKnown),
       SenderTrust.unverified => (Icons.help_outline, l.incomingUnverified),
       SenderTrust.browser => null,
     };

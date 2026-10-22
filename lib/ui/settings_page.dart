@@ -294,15 +294,32 @@ class SettingsPage extends StatelessWidget {
                 value: c.keepHistory,
                 onChanged: c.setKeepHistory,
               ),
-              if (Platform.isAndroid) ...[
+              if (c.permissions.isAndroid) ...[
                 SectionHeader(l.settingsSectionApp),
                 SwitchListTile(
+                  key: const Key('backgroundSwitch'),
                   secondary: const Icon(Icons.sync_outlined),
                   title: Text(l.settingsBackground),
                   subtitle: Text(l.settingsBackgroundSub),
                   value: c.background,
                   onChanged: c.setBackground,
                 ),
+                // Retry path after "Not now" (UX.md 3.6).
+                if (c.background &&
+                    c.notificationsOff &&
+                    c.permissionExplained(AppPermission.notifications))
+                  ListTile(
+                    key: const Key('allowNotifications'),
+                    leading: const Icon(Icons.notifications_off_outlined),
+                    title: Text(l.permNotificationsOff),
+                    subtitle: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        onPressed: c.requestNotifications,
+                        child: Text(l.settingsAllowNotifications),
+                      ),
+                    ),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.power_settings_new),
                   title: Text(l.settingsQuit),

@@ -8,12 +8,15 @@ import 'package:permission_handler/permission_handler.dart';
 class BackgroundService {
   static const _channel = MethodChannel('dev.landrop/service');
 
-  static Future<void> start() async {
+  /// [askNotification]: ask for the Android 13+ notification permission
+  /// first. The app passes false until it has explained why (UX.md 3.6,
+  /// `PermissionExplainer`); the service runs either way.
+  static Future<void> start({bool askNotification = true}) async {
     if (!Platform.isAndroid) return;
     try {
       // Android 13+: the notification is hidden without this, but the
       // service still runs.
-      await Permission.notification.request();
+      if (askNotification) await Permission.notification.request();
       await _channel.invokeMethod<bool>('start');
     } catch (_) {}
   }

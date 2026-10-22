@@ -1942,6 +1942,88 @@ class AppLocalizationsFa extends AppLocalizations {
   String get incomingChangeFolder => 'تغییر';
 
   @override
+  String incomingExpired(String name) {
+    return 'مهلت درخواست $name تمام شد.';
+  }
+
+  @override
+  String incomingWithdrawn(String name) {
+    return '$name درخواست را لغو کرد.';
+  }
+
+  @override
+  String get permContinue => 'ادامه';
+
+  @override
+  String get permNotNow => 'الان نه';
+
+  @override
+  String get permLater =>
+      'در مرحلهٔ بعد اندروید از شما می‌پرسد. بعداً هم می‌توانید این را در تنظیمات سیستم تغییر دهید.';
+
+  @override
+  String get permNotificationsTitle =>
+      'نشان داده شود که LanDrop در حال اجراست؟';
+
+  @override
+  String get permNotificationsBody =>
+      'LanDrop در پس‌زمینه هم فایل‌ها را دریافت می‌کند. اندروید این را با یک اعلان نشان می‌دهد و در صفحهٔ بعد از شما می‌خواهد اعلان‌های LanDrop را مجاز کنید.';
+
+  @override
+  String get permNearbyTitle => 'اجازهٔ «دستگاه‌های اطراف» داده شود؟';
+
+  @override
+  String get permNearbyBody =>
+      'برای روشن کردن نقطهٔ اتصال یا اتصال Wi-Fi Direct، اندروید به اجازهٔ «دستگاه‌های اطراف» (در گوشی‌های قدیمی‌تر «مکان») نیاز دارد. LanDrop از مکان شما استفاده نمی‌کند.';
+
+  @override
+  String get permCameraTitle => 'از دوربین برای اسکن کد استفاده شود؟';
+
+  @override
+  String get permCameraBody =>
+      'LanDrop فقط برای خواندن کد QR وای‌فای گوشی دیگر از دوربین استفاده می‌کند. هیچ عکسی گرفته یا ذخیره نمی‌شود.';
+
+  @override
+  String get permNotificationsOff =>
+      'اعلان‌ها خاموش است. LanDrop همچنان در پس‌زمینه دریافت می‌کند، اما نمی‌بینید که در حال اجراست.';
+
+  @override
+  String get permNearbyOff =>
+      'تا اجازهٔ «دستگاه‌های اطراف» را ندهید، این روش خاموش می‌ماند.';
+
+  @override
+  String get permCameraOff =>
+      'دوربین خاموش می‌ماند. به‌جای آن می‌توانید نام و رمز شبکه را وارد کنید.';
+
+  @override
+  String get permTryAgain => 'دوباره امتحان کنید';
+
+  @override
+  String get settingsAllowNotifications => 'اجازهٔ اعلان‌ها';
+
+  @override
+  String get transferDetails => 'جزئیات';
+
+  @override
+  String get transferDetailsTitle => 'چه اتفاقی افتاد';
+
+  @override
+  String get transferDetailsReason => 'علت';
+
+  @override
+  String get transferDetailsCode => 'کد خطا';
+
+  @override
+  String get transferDetailsUnknown => 'نامشخص';
+
+  @override
+  String get transferDetailsReportNote =>
+      'گزارش کپی‌شده به انگلیسی است تا هر کسی بتواند کمک کند.';
+
+  @override
+  String get incomingKnown => 'قبلاً دیده شده، هنوز مورد اعتماد نیست';
+
+  @override
   String get incomingDetails => 'جزئیات';
 
   @override
@@ -2290,4 +2372,35 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get themeDark => 'تیره';
+
+  @override
+  String shareSendingFiles(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString فایل',
+    );
+    return 'در حال ارسال $_temp0';
+  }
+
+  @override
+  String get shareSendingText => 'در حال ارسال متن';
+
+  @override
+  String get shareErrTooMany =>
+      'تعداد مورد‌ها برای یک‌باره به‌اشتراک‌گذاری زیاد است. تعداد کمتری انتخاب کنید.';
+
+  @override
+  String get shareErrTooBig =>
+      'حجم این مورد‌ها برای این روش زیاد است. به‌جای آن از دکمه ارسال داخل LanDrop استفاده کنید.';
+
+  @override
+  String get shareErrUnreadable => 'بعضی مورد‌ها خوانده نشدند و رد شدند.';
+
+  @override
+  String get shareErrFailed => 'مورد‌های اشتراکی دریافت نشد.';
 }

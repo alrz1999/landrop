@@ -7,7 +7,7 @@ import 'format.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
 import 'app_controller.dart' show SenderTrust;
-import 'widgets.dart' show AppScope, deviceKindLabel;
+import 'widgets.dart' show AppScope, DeviceAvatar, deviceKindLabel;
 
 /// The last two parts of [path] ("Download/LanDrop"), for showing where
 /// files are saved without the whole path.
@@ -46,8 +46,14 @@ List<IncomingEntry> summarizeOffers(List<FileOffer> files) {
 
 /// The answer of the incoming dialog.
 class IncomingDecision {
-  const IncomingDecision(this.accept, {this.alwaysAccept = false});
+  const IncomingDecision(this.accept,
+      {this.alwaysAccept = false, this.ended = false});
   final bool accept;
+
+  /// The dialog closed itself: the request ended before it was answered
+  /// (the core's decision timeout, or the sender withdrew it;
+  /// [IncomingRequest.endedBy] says which).
+  final bool ended;
 
   /// "Always accept from this device" was ticked (first accept only).
   final bool alwaysAccept;
@@ -75,10 +81,27 @@ Future<IncomingDecision> showIncomingDecision(
     VoidCallback? onChangeFolder}) async {
   final total = req.files.fold<int>(0, (a, f) => a + f.size);
   var always = false;
+  if (req.decision.isCompleted) return const IncomingDecision(false, ended: true);
+  final navigator = Navigator.of(context);
+  Route<bool>? route;
+  var ended = false;
+  // The core ended the request while the dialog is open: close it, also
+  // when Settings ("Change") is open on top of it.
+  req.decision.future.then((_) {
+    final r = route;
+    if (r == null || !r.isActive) return;
+    ended = true;
+    if (r.isCurrent) {
+      navigator.pop(false);
+    } else {
+      navigator.removeRoute(r, false);
+    }
+  });
   final res = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+      route ??= ModalRoute.of(ctx) as Route<bool>?;
       final l = ctx.l;
       final t = Theme.of(ctx).textTheme;
       final scheme = Theme.of(ctx).colorScheme;
@@ -88,6 +111,7 @@ Future<IncomingDecision> showIncomingDecision(
       final dir = AppScope.maybeOf(ctx)?.saveDir ?? saveDir;
       final badge = switch (trust) {
         SenderTrust.firstTime => (Icons.fiber_new_outlined, l.incomingFirstTime),
+        SenderTrust.known => (Icons.history, l.incomingKnown),
         SenderTrust.trusted => (Icons.verified_user_outlined, l.incomingTrusted),
         SenderTrust.unverified => (Icons.help_outline, l.incomingUnverified),
         SenderTrust.browser => null,
@@ -202,7 +226,9 @@ Future<IncomingDecision> showIncomingDecision(
                       ),
                   ]),
                 // Never offered next to the name warning.
-                if (trust == SenderTrust.firstTime && conflictName == null)
+                if ((trust == SenderTrust.firstTime ||
+                        trust == SenderTrust.known) &&
+                    conflictName == null)
                   CheckboxListTile(
                     key: const Key('alwaysAccept'),
                     contentPadding: EdgeInsets.zero,
@@ -254,6 +280,7 @@ Future<IncomingDecision> showIncomingDecision(
       );
     }),
   );
+  if (ended) return const IncomingDecision(false, ended: true);
   final accept = res ?? false;
   return IncomingDecision(accept, alwaysAccept: accept && always);
 }
@@ -457,6 +484,9 @@ Future<DeviceInfo?> showPeerPicker(
     BuildContext context, List<DeviceInfo> peers,
     {required String title, VoidCallback? onHelp}) async {
   var help = false;
+  // Devices used most recently first, then trusted ones (UX.md 3.3).
+  final c = AppScope.maybeOf(context);
+  final ordered = c?.pickerOrder(peers) ?? peers;
   final picked = await showDialog<DeviceInfo>(
     context: context,
     builder: (ctx) {
@@ -487,11 +517,17 @@ Future<DeviceInfo?> showPeerPicker(
                 ),
               ),
           ],
-          for (final p in peers)
+          for (final p in ordered)
             SimpleDialogOption(
+              key: Key('pick-${p.fingerprint}'),
               onPressed: () => Navigator.pop(ctx, p),
               child: ListTile(
-                leading: Icon(deviceIcon(p.deviceType)),
+                leading: DeviceAvatar(
+                    deviceType: p.deviceType,
+                    trustedKey: p.fingerprint.isNotEmpty &&
+                            c?.trustedDevice(p.fingerprint) != null
+                        ? Key('pickerTrusted-${p.fingerprint}')
+                        : null),
                 title: AutoDirText(p.alias,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(deviceKindLabel(l, p.deviceType)),

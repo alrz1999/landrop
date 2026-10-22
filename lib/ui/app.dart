@@ -7,6 +7,7 @@ import 'file_opener.dart';
 import 'home_page.dart';
 import 'hotspot_service.dart';
 import 'onboarding.dart';
+import 'share_target.dart';
 import 'storage_access.dart';
 import 'widgets.dart';
 
@@ -24,7 +25,15 @@ class LanDropApp extends StatefulWidget {
     this.storageAccess,
     this.historyStore,
     this.onboardingPlatform,
+    this.shareTarget,
+    this.permissionAccess,
   });
+
+  /// Android runtime permissions behind their explanations (test seam).
+  final PermissionAccess? permissionAccess;
+
+  /// Android share-sheet intake (test seam); default [ShareTargetService].
+  final ShareTargetApi? shareTarget;
 
   /// Android "All files access" (test seam).
   final StorageAccess? storageAccess;
@@ -67,6 +76,7 @@ class _LanDropAppState extends State<LanDropApp> {
       fileOpener: widget.fileOpener,
       storageAccess: widget.storageAccess,
       historyStore: widget.historyStore,
+      permissionAccess: widget.permissionAccess,
     );
     controller.addListener(_onControllerChanged);
     controller.init();
@@ -115,10 +125,15 @@ class _LanDropAppState extends State<LanDropApp> {
               seedColor: seed, brightness: Brightness.dark),
           useMaterial3: true,
         ),
-        home: _Root(
-          home: HomePage(
-              pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
-          onboardingPlatform: widget.onboardingPlatform,
+        home: ShareTargetHost(
+          service: widget.shareTarget,
+          pickFiles: widget.pickFiles,
+          pickFolder: widget.pickFolder,
+          child: _Root(
+            home: HomePage(
+                pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
+            onboardingPlatform: widget.onboardingPlatform,
+          ),
         ),
       ),
     );

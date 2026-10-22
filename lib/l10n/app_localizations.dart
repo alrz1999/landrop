@@ -3092,6 +3092,144 @@ abstract class AppLocalizations {
   /// **'Change'**
   String get incomingChangeFolder;
 
+  /// Snackbar: the incoming dialog closed itself because nobody answered in time.
+  ///
+  /// In en, this message translates to:
+  /// **'The request from {name} expired.'**
+  String incomingExpired(String name);
+
+  /// Snackbar: the incoming dialog closed itself because the sender cancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} cancelled the request.'**
+  String incomingWithdrawn(String name);
+
+  /// Permission explanation sheet: go on to Android's own permission dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get permContinue;
+
+  /// Permission explanation sheet: do not ask now; the feature stays off.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get permNotNow;
+
+  /// Permission explanation sheet: small print under the explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Android asks next. You can change this later in the system settings.'**
+  String get permLater;
+
+  /// Permission explanation before Android 13's notification permission (background service).
+  ///
+  /// In en, this message translates to:
+  /// **'Show that LanDrop is running?'**
+  String get permNotificationsTitle;
+
+  /// Body of the notification permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop keeps receiving files in the background. Android shows this as a notification and asks you to allow notifications for LanDrop on the next screen.'**
+  String get permNotificationsBody;
+
+  /// Permission explanation before the nearby devices / location permission (hotspot, Wi-Fi Direct).
+  ///
+  /// In en, this message translates to:
+  /// **'Allow \"Nearby devices\"?'**
+  String get permNearbyTitle;
+
+  /// Body of the nearby devices permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'To start a hotspot or a Wi-Fi Direct connection, Android needs the \"Nearby devices\" permission (\"Location\" on older phones). LanDrop does not use your location.'**
+  String get permNearbyBody;
+
+  /// Permission explanation before the camera permission (Join by QR).
+  ///
+  /// In en, this message translates to:
+  /// **'Use the camera to scan the code?'**
+  String get permCameraTitle;
+
+  /// Body of the camera permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'LanDrop uses the camera only to read the Wi-Fi QR code of the other phone. No photos are taken or saved.'**
+  String get permCameraBody;
+
+  /// After Not now (or a refusal) for notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off. LanDrop still receives in the background, but you won\'t see that it is running.'**
+  String get permNotificationsOff;
+
+  /// Hotspot / Wi-Fi Direct after Not now on the permission explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This stays off until you allow \"Nearby devices\".'**
+  String get permNearbyOff;
+
+  /// Join by QR after Not now on the camera explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'The camera stays off. You can type the network name and password instead.'**
+  String get permCameraOff;
+
+  /// Retry after Not now: opens Android's permission dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get permTryAgain;
+
+  /// Settings, Android: button under Keep running in background when notifications are off.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get settingsAllowNotifications;
+
+  /// Button on a failed, cancelled or declined transfer card: opens what happened.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get transferDetails;
+
+  /// Title of the transfer details sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'What happened'**
+  String get transferDetailsTitle;
+
+  /// Transfer details sheet: label of the localized reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason'**
+  String get transferDetailsReason;
+
+  /// Transfer details sheet: label of the technical error code (English, left to right).
+  ///
+  /// In en, this message translates to:
+  /// **'Error code'**
+  String get transferDetailsCode;
+
+  /// Transfer details sheet: the address is not known.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get transferDetailsUnknown;
+
+  /// Transfer details sheet: note above the Copy report button.
+  ///
+  /// In en, this message translates to:
+  /// **'The copied report is in English, so anyone can help.'**
+  String get transferDetailsReportNote;
+
+  /// Incoming dialog badge: a proven device from the recent devices list that was never accepted from.
+  ///
+  /// In en, this message translates to:
+  /// **'Seen before, not trusted yet'**
+  String get incomingKnown;
+
   /// Incoming dialog: expands the address and security code of the sender.
   ///
   /// In en, this message translates to:
@@ -3631,6 +3769,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark'**
   String get themeDark;
+
+  /// Device picker title when files were shared to LanDrop from another app (Android share sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Sending {count, plural, =1{1 file} other{{count} files}}'**
+  String shareSendingFiles(int count);
+
+  /// Device picker title when text or a link was shared to LanDrop from another app.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending text'**
+  String get shareSendingText;
+
+  /// Snackbar: more than 200 items were shared to LanDrop.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many items to share at once. Try fewer.'**
+  String get shareErrTooMany;
+
+  /// Snackbar: the shared items are larger than the limit for copying them.
+  ///
+  /// In en, this message translates to:
+  /// **'These items are too big to share this way. Use Send inside LanDrop instead.'**
+  String get shareErrTooBig;
+
+  /// Snackbar: some shared items could not be opened.
+  ///
+  /// In en, this message translates to:
+  /// **'Some items couldn\'t be read, so they were skipped.'**
+  String get shareErrUnreadable;
+
+  /// Snackbar: sharing to LanDrop failed for another reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t receive the shared items.'**
+  String get shareErrFailed;
 }
 
 class _AppLocalizationsDelegate

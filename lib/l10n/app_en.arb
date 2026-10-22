@@ -2499,6 +2499,108 @@
   "@incomingChangeFolder": {
     "description": "Incoming dialog: button next to the save folder, opens Settings."
   },
+  "incomingExpired": "The request from {name} expired.",
+  "@incomingExpired": {
+    "description": "Snackbar: the incoming dialog closed itself because nobody answered in time.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingWithdrawn": "{name} cancelled the request.",
+  "@incomingWithdrawn": {
+    "description": "Snackbar: the incoming dialog closed itself because the sender cancelled.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "permContinue": "Continue",
+  "@permContinue": {
+    "description": "Permission explanation sheet: go on to Android's own permission dialog."
+  },
+  "permNotNow": "Not now",
+  "@permNotNow": {
+    "description": "Permission explanation sheet: do not ask now; the feature stays off."
+  },
+  "permLater": "Android asks next. You can change this later in the system settings.",
+  "@permLater": {
+    "description": "Permission explanation sheet: small print under the explanation."
+  },
+  "permNotificationsTitle": "Show that LanDrop is running?",
+  "@permNotificationsTitle": {
+    "description": "Permission explanation before Android 13's notification permission (background service)."
+  },
+  "permNotificationsBody": "LanDrop keeps receiving files in the background. Android shows this as a notification and asks you to allow notifications for LanDrop on the next screen.",
+  "@permNotificationsBody": {
+    "description": "Body of the notification permission explanation."
+  },
+  "permNearbyTitle": "Allow \"Nearby devices\"?",
+  "@permNearbyTitle": {
+    "description": "Permission explanation before the nearby devices / location permission (hotspot, Wi-Fi Direct)."
+  },
+  "permNearbyBody": "To start a hotspot or a Wi-Fi Direct connection, Android needs the \"Nearby devices\" permission (\"Location\" on older phones). LanDrop does not use your location.",
+  "@permNearbyBody": {
+    "description": "Body of the nearby devices permission explanation."
+  },
+  "permCameraTitle": "Use the camera to scan the code?",
+  "@permCameraTitle": {
+    "description": "Permission explanation before the camera permission (Join by QR)."
+  },
+  "permCameraBody": "LanDrop uses the camera only to read the Wi-Fi QR code of the other phone. No photos are taken or saved.",
+  "@permCameraBody": {
+    "description": "Body of the camera permission explanation."
+  },
+  "permNotificationsOff": "Notifications are off. LanDrop still receives in the background, but you won't see that it is running.",
+  "@permNotificationsOff": {
+    "description": "After Not now (or a refusal) for notifications."
+  },
+  "permNearbyOff": "This stays off until you allow \"Nearby devices\".",
+  "@permNearbyOff": {
+    "description": "Hotspot / Wi-Fi Direct after Not now on the permission explanation."
+  },
+  "permCameraOff": "The camera stays off. You can type the network name and password instead.",
+  "@permCameraOff": {
+    "description": "Join by QR after Not now on the camera explanation."
+  },
+  "permTryAgain": "Try again",
+  "@permTryAgain": {
+    "description": "Retry after Not now: opens Android's permission dialog."
+  },
+  "settingsAllowNotifications": "Allow notifications",
+  "@settingsAllowNotifications": {
+    "description": "Settings, Android: button under Keep running in background when notifications are off."
+  },
+  "transferDetails": "Details",
+  "@transferDetails": {
+    "description": "Button on a failed, cancelled or declined transfer card: opens what happened."
+  },
+  "transferDetailsTitle": "What happened",
+  "@transferDetailsTitle": {
+    "description": "Title of the transfer details sheet."
+  },
+  "transferDetailsReason": "Reason",
+  "@transferDetailsReason": {
+    "description": "Transfer details sheet: label of the localized reason."
+  },
+  "transferDetailsCode": "Error code",
+  "@transferDetailsCode": {
+    "description": "Transfer details sheet: label of the technical error code (English, left to right)."
+  },
+  "transferDetailsUnknown": "Unknown",
+  "@transferDetailsUnknown": {
+    "description": "Transfer details sheet: the address is not known."
+  },
+  "transferDetailsReportNote": "The copied report is in English, so anyone can help.",
+  "@transferDetailsReportNote": {
+    "description": "Transfer details sheet: note above the Copy report button."
+  },
+  "incomingKnown": "Seen before, not trusted yet",
+  "@incomingKnown": {
+    "description": "Incoming dialog badge: a proven device from the recent devices list that was never accepted from."
+  },
   "incomingDetails": "Details",
   "@incomingDetails": {
     "description": "Incoming dialog: expands the address and security code of the sender."
@@ -2942,5 +3044,35 @@
   "themeDark": "Dark",
   "@themeDark": {
     "description": "Appearance option."
+  },
+  "shareSendingFiles": "Sending {count, plural, =1{1 file} other{{count} files}}",
+  "@shareSendingFiles": {
+    "description": "Device picker title when files were shared to LanDrop from another app (Android share sheet).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "shareSendingText": "Sending text",
+  "@shareSendingText": {
+    "description": "Device picker title when text or a link was shared to LanDrop from another app."
+  },
+  "shareErrTooMany": "Too many items to share at once. Try fewer.",
+  "@shareErrTooMany": {
+    "description": "Snackbar: more than 200 items were shared to LanDrop."
+  },
+  "shareErrTooBig": "These items are too big to share this way. Use Send inside LanDrop instead.",
+  "@shareErrTooBig": {
+    "description": "Snackbar: the shared items are larger than the limit for copying them."
+  },
+  "shareErrUnreadable": "Some items couldn't be read, so they were skipped.",
+  "@shareErrUnreadable": {
+    "description": "Snackbar: some shared items could not be opened."
+  },
+  "shareErrFailed": "Couldn't receive the shared items.",
+  "@shareErrFailed": {
+    "description": "Snackbar: sharing to LanDrop failed for another reason."
   }
 }

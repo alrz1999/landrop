@@ -147,6 +147,44 @@ class SelfCard extends StatelessWidget {
   }
 }
 
+/// A device's kind icon; with [trustedKey] a "Trusted" badge on it (tooltip
+/// and screen-reader label, never colour alone).
+class DeviceAvatar extends StatelessWidget {
+  const DeviceAvatar({super.key, required this.deviceType, this.trustedKey});
+  final String deviceType;
+
+  /// Non-null: the device is trusted; the key of its badge.
+  final Key? trustedKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = CircleAvatar(child: Icon(deviceIcon(deviceType)));
+    if (trustedKey == null) return avatar;
+    final l = context.l;
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: l.peerTrusted,
+      child: Semantics(
+        key: trustedKey,
+        label: l.peerTrusted,
+        child: Stack(clipBehavior: Clip.none, children: [
+          avatar,
+          PositionedDirectional(
+            end: -4,
+            bottom: -4,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration:
+                  BoxDecoration(color: scheme.surface, shape: BoxShape.circle),
+              child: Icon(Icons.verified_user, size: 14, color: scheme.primary),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 /// One nearby device: name, kind ("Phone · Google"), Send. No address here
 /// (UX.md 3.2): the Details sheet (info button or long press) has it.
 class PeerTile extends StatelessWidget {
@@ -161,34 +199,12 @@ class PeerTile extends StatelessWidget {
     // list only holds fingerprints verified against the certificate).
     final trusted = peer.fingerprint.isNotEmpty &&
         AppScope.maybeOf(context)?.trustedDevice(peer.fingerprint) != null;
-    final scheme = Theme.of(context).colorScheme;
-    final avatar = CircleAvatar(child: Icon(deviceIcon(peer.deviceType)));
     return ListTile(
       // A badge on the avatar (with a tooltip and a screen-reader label),
       // so the row keeps its size on narrow phones.
-      leading: trusted
-          ? Tooltip(
-              message: l.peerTrusted,
-              child: Semantics(
-                key: Key('trustedMark-${peer.fingerprint}'),
-                label: l.peerTrusted,
-                child: Stack(clipBehavior: Clip.none, children: [
-                  avatar,
-                  PositionedDirectional(
-                    end: -4,
-                    bottom: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                          color: scheme.surface, shape: BoxShape.circle),
-                      child: Icon(Icons.verified_user,
-                          size: 14, color: scheme.primary),
-                    ),
-                  ),
-                ]),
-              ),
-            )
-          : avatar,
+      leading: DeviceAvatar(
+          deviceType: peer.deviceType,
+          trustedKey: trusted ? Key('trustedMark-${peer.fingerprint}') : null),
       title: AutoDirText(peer.alias,
           maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text([
@@ -455,6 +471,81 @@ class QrCard extends StatelessWidget {
 /// never colour alone), percent, speed, time left, per-file and overall
 /// progress, Cancel while it runs; when received: Open / Show in folder on
 /// desktops, the saved path with Copy on phones.
+/// "Details" of a failed, cancelled or declined transfer: the reason in
+/// the user's language, the error code, the other device's address, when,
+/// and "Copy report" (an English plain-text [TransferSession.report]).
+Future<void> showTransferDetails(BuildContext context, TransferSession s) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      final l = ctx.l;
+      final t = Theme.of(ctx).textTheme;
+      final sid = s.sessionId;
+      Widget row(String label, Widget value) => Padding(
+            padding: const EdgeInsetsDirectional.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Text(label, style: t.labelMedium), value],
+            ),
+          );
+      return Semantics(
+        label: l.transferDetailsTitle,
+        container: true,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            key: Key('transferDetails-$sid'),
+            padding: const EdgeInsetsDirectional.fromSTEB(24, 0, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.transferDetailsTitle, style: t.titleLarge),
+                const SizedBox(height: 12),
+                row(
+                    l.transferDetailsReason,
+                    Text(TransferSessionCard._stateText(l, s).$2,
+                        key: Key('detailsReason-$sid'))),
+                row(
+                    l.transferDetailsCode,
+                    LtrText(s.failureCodeName ?? '-',
+                        key: Key('detailsCode-$sid'), selectable: true)),
+                row(
+                    l.detailsAddress,
+                    s.peerAddress == null
+                        ? Text(l.transferDetailsUnknown)
+                        : LtrText(s.peerAddress!,
+                            key: Key('detailsAddress-$sid'),
+                            selectable: true)),
+                row(l.historyWhen,
+                    Text(formatWhen(s.started, l), key: Key('detailsWhen-$sid'))),
+                const SizedBox(height: 4),
+                Text(l.transferDetailsReportNote, style: t.bodySmall),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: FilledButton.tonalIcon(
+                    key: Key('copyTransferReport-$sid'),
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.maybeOf(context);
+                      await Clipboard.setData(ClipboardData(text: s.report()));
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      messenger?.showSnackBar(
+                          SnackBar(content: Text(l.diagReportCopied)));
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: Text(l.diagCopyReport),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class TransferSessionCard extends StatelessWidget {
   const TransferSessionCard({super.key, required this.session});
   final TransferSession session;
@@ -583,6 +674,16 @@ class TransferSessionCard extends StatelessWidget {
             icon: const Icon(Icons.refresh),
             label: Text(l.commonTryAgain),
           ),
+        ),
+      // What happened, with a report to copy (UX.md 3.8).
+      if (state == TransferState.failed ||
+          state == TransferState.cancelled ||
+          state == TransferState.declined)
+        TextButton.icon(
+          key: Key('failDetails-$sid'),
+          onPressed: () => showTransferDetails(context, s),
+          icon: const Icon(Icons.info_outline),
+          label: Text(l.transferDetails),
         ),
       if (!state.isFinal && !s.cancelRequested)
         TextButton.icon(

@@ -925,6 +925,49 @@
     }
   },
   "incomingChangeFolder": "تغییر",
+  "incomingExpired": "مهلت درخواست {name} تمام شد.",
+  "@incomingExpired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "incomingWithdrawn": "{name} درخواست را لغو کرد.",
+  "@incomingWithdrawn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "permContinue": "ادامه",
+  "permNotNow": "الان نه",
+  "permLater": "در مرحلهٔ بعد اندروید از شما می‌پرسد. بعداً هم می‌توانید این را در تنظیمات سیستم تغییر دهید.",
+  "permNotificationsTitle": "نشان داده شود که LanDrop در حال اجراست؟",
+  "permNotificationsBody": "LanDrop در پس‌زمینه هم فایل‌ها را دریافت می‌کند. اندروید این را با یک اعلان نشان می‌دهد و در صفحهٔ بعد از شما می‌خواهد اعلان‌های LanDrop را مجاز کنید.",
+  "permNearbyTitle": "اجازهٔ «دستگاه‌های اطراف» داده شود؟",
+  "@permNearbyTitle": {
+    "description": "REVIEW: «دستگاه‌های اطراف» should match the AOSP Persian label of the Nearby devices permission."
+  },
+  "permNearbyBody": "برای روشن کردن نقطهٔ اتصال یا اتصال Wi-Fi Direct، اندروید به اجازهٔ «دستگاه‌های اطراف» (در گوشی‌های قدیمی‌تر «مکان») نیاز دارد. LanDrop از مکان شما استفاده نمی‌کند.",
+  "@permNearbyBody": {
+    "description": "REVIEW: permission labels «دستگاه‌های اطراف» and «مکان» as shown by Persian Android."
+  },
+  "permCameraTitle": "از دوربین برای اسکن کد استفاده شود؟",
+  "permCameraBody": "LanDrop فقط برای خواندن کد QR وای‌فای گوشی دیگر از دوربین استفاده می‌کند. هیچ عکسی گرفته یا ذخیره نمی‌شود.",
+  "permNotificationsOff": "اعلان‌ها خاموش است. LanDrop همچنان در پس‌زمینه دریافت می‌کند، اما نمی‌بینید که در حال اجراست.",
+  "permNearbyOff": "تا اجازهٔ «دستگاه‌های اطراف» را ندهید، این روش خاموش می‌ماند.",
+  "permCameraOff": "دوربین خاموش می‌ماند. به‌جای آن می‌توانید نام و رمز شبکه را وارد کنید.",
+  "permTryAgain": "دوباره امتحان کنید",
+  "settingsAllowNotifications": "اجازهٔ اعلان‌ها",
+  "transferDetails": "جزئیات",
+  "transferDetailsTitle": "چه اتفاقی افتاد",
+  "transferDetailsReason": "علت",
+  "transferDetailsCode": "کد خطا",
+  "transferDetailsUnknown": "نامشخص",
+  "transferDetailsReportNote": "گزارش کپی‌شده به انگلیسی است تا هر کسی بتواند کمک کند.",
+  "incomingKnown": "قبلاً دیده شده، هنوز مورد اعتماد نیست",
   "incomingDetails": "جزئیات",
   "autoAcceptedSnack": "دریافت از {name} به‌طور خودکار پذیرفته شد",
   "@autoAcceptedSnack": {
@@ -1141,5 +1184,14 @@
   "settingsAppearance": "ظاهر",
   "themeSystem": "مطابق سیستم",
   "themeLight": "روشن",
-  "themeDark": "تیره"
+  "themeDark": "تیره",
+  "shareSendingFiles": "در حال ارسال {count, plural, other{{count} فایل}}",
+  "shareSendingText": "در حال ارسال متن",
+  "shareErrTooMany": "تعداد مورد‌ها برای یک‌باره به‌اشتراک‌گذاری زیاد است. تعداد کمتری انتخاب کنید.",
+  "shareErrTooBig": "حجم این مورد‌ها برای این روش زیاد است. به‌جای آن از دکمه ارسال داخل LanDrop استفاده کنید.",
+  "@shareErrTooBig": {
+    "description": "REVIEW: quotes the Send button; align with homeSend."
+  },
+  "shareErrUnreadable": "بعضی مورد‌ها خوانده نشدند و رد شدند.",
+  "shareErrFailed": "مورد‌های اشتراکی دریافت نشد."
 }

@@ -8,6 +8,7 @@ import 'digits.dart';
 import 'hotspot_service.dart' show escapeWifiQr;
 import 'hotspot_wizard.dart' show FindDevicePanel;
 import 'l10n.dart';
+import 'permission_explainer.dart';
 import 'widgets.dart';
 import 'wifi_join_service.dart';
 import 'wifi_qr.dart';
@@ -79,8 +80,32 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
     super.dispose();
   }
 
+  /// "Not now" on the camera explanation (UX.md 3.6).
+  bool _cameraNotNow = false;
+
+  /// The camera explanation is open (no spinner behind it).
+  bool _explaining = false;
+
   Future<void> _askCamera() async {
-    if (mounted) setState(() => _camera = null);
+    if (mounted) {
+      setState(() {
+        _camera = null;
+        _explaining = true;
+      });
+    }
+    final go = await explainBeforeAsking(context, AppPermission.camera);
+    if (mounted) setState(() => _explaining = false);
+    if (!go) {
+      if (mounted) {
+        setState(() {
+          _cameraNotNow = true;
+          _camera = false;
+          _manual = true; // typing the name is the way on without it
+        });
+      }
+      return;
+    }
+    _cameraNotNow = false;
     final ok = await _service.requestCamera();
     if (mounted) setState(() => _camera = ok);
   }
@@ -192,7 +217,9 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
     return [
       Text(l.wifiJoinScanIntro, style: t.bodyMedium),
       const SizedBox(height: 12),
-      if (_camera == null)
+      if (_camera == null && _explaining)
+        const SizedBox(height: 48)
+      else if (_camera == null)
         const Center(child: CircularProgressIndicator())
       else if (_camera == true)
         SizedBox(
@@ -203,6 +230,9 @@ class _WifiJoinPageState extends State<WifiJoinPage> {
             child: builder(context, _onCode),
           ),
         )
+      else if (_cameraNotNow)
+        PermissionNotNowNote(
+            permission: AppPermission.camera, onRetry: _askCamera)
       else ...[
         Text(wifiJoinMessage('camera', null, l),
             key: const Key('cameraDenied'),

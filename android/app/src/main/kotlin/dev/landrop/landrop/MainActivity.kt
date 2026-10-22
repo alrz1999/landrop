@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -15,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private var wifiDirect: WifiDirectManager? = null
 
     private var wifiJoin: WifiJoinManager? = null
+    private var shareHandler: ShareIntentHandler? = null
 
     private fun wifiJoinManager(): WifiJoinManager =
         wifiJoin ?: WifiJoinManager(this).also { wifiJoin = it }
@@ -22,8 +24,47 @@ class MainActivity : FlutterActivity() {
     private fun wifiDirectManager(): WifiDirectManager =
         wifiDirect ?: WifiDirectManager(this).also { wifiDirect = it }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // configureFlutterEngine ran inside super.onCreate. A recreated
+        // activity (savedInstanceState != null) must not re-read the same share.
+        shareHandler?.cleanOld()
+        if (savedInstanceState == null) shareHandler?.handle(intent)
+    }
+
+    // singleTop: a share arriving while LanDrop runs lands here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        shareHandler?.handle(intent)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Android share target (share_target.dart, ShareIntentHandler.kt).
+        val share = shareHandler ?: ShareIntentHandler(applicationContext).also { shareHandler = it }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/share")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getInitial" -> share.getInitial(result)
+                    "clear" -> {
+                        val paths = call.argument<List<String>>("paths") ?: emptyList()
+                        share.clear(paths)
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/share/events")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    share.sink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    share.sink = null
+                }
+            })
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.landrop/multicast")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -166,6 +207,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        shareHandler?.destroy()
+        shareHandler = null
         wifiJoin?.destroy()
         wifiJoin = null
         wifiDirect?.destroy()

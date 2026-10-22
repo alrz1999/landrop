@@ -172,6 +172,19 @@ class FakeCore implements LanDropCore {
     return req;
   }
 
+  /// Every send withdrawn before the receiver answered, for tests.
+  final List<DeviceInfo> withdrawals = [];
+
+  /// Test hook: the request ends without an answer, as the real core does
+  /// when its decision timeout fires ([IncomingRequestEnd.timeout]) or the
+  /// sender withdraws it ([IncomingRequestEnd.withdrawn]).
+  void endIncoming(IncomingRequest req,
+      [IncomingRequestEnd why = IncomingRequestEnd.timeout]) {
+    if (req.decision.isCompleted) return;
+    req.endedBy = why;
+    req.decision.complete(false);
+  }
+
   /// Test/demo hook: a text message arrives (PROTOCOL.md "Text messages").
   /// Like the real core, the request is a single `message.txt` offer whose
   /// `preview` is [text]; accepting it writes nothing.
@@ -276,7 +289,8 @@ class FakeCore implements LanDropCore {
 
   @override
   Future<SendResult> sendFiles(DeviceInfo to, List<SendItem> items,
-      {void Function(String sessionId)? onSession}) async {
+      {void Function(String sessionId)? onSession,
+      Future<void>? withdraw}) async {
     sent.add((to, [for (final i in items) i.path]));
     final files = <(String, int, String)>[];
     for (final item in items) {
@@ -309,7 +323,17 @@ class FakeCore implements LanDropCore {
       return SendResult(ok: false, error: failure.name, errorCode: failure);
     }
     final sid = 'out-${++_session}';
-    await Future<void>.delayed(acceptDelays[to.fingerprint] ?? Duration.zero);
+    // Withdrawn while the receiver "decides" (acceptDelays): no session.
+    final withdrawn = await Future.any<bool>([
+      Future<void>.delayed(acceptDelays[to.fingerprint] ?? Duration.zero)
+          .then((_) => false),
+      if (withdraw != null) withdraw.then((_) => true),
+    ]);
+    if (withdrawn) {
+      withdrawals.add(to);
+      return const SendResult(
+          ok: false, error: 'cancelled', errorCode: SendErrorCode.cancelled);
+    }
     onSession?.call(sid);
     for (final (id, size, name) in files) {
       _progressCtrl.add(TransferProgress(sid, id, 0, size, fileName: name));
@@ -326,7 +350,8 @@ class FakeCore implements LanDropCore {
 
   @override
   Future<SendResult> sendText(DeviceInfo to, String text,
-      {void Function(String sessionId)? onSession}) async {
+      {void Function(String sessionId)? onSession,
+      Future<void>? withdraw}) async {
     sentTexts.add((to, text));
     if (text.trim().isEmpty || utf8.encode(text).length > maxTextBytes) {
       return const SendResult(

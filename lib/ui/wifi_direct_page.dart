@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/api.dart';
 import 'l10n.dart';
+import 'permission_explainer.dart';
 import 'ltr_text.dart';
 import 'widgets.dart';
 import 'wifi_direct_service.dart';
@@ -85,11 +86,20 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
     }
   }
 
+  /// "Not now" on the "Nearby devices" explanation (UX.md 3.6): nothing
+  /// is searched; the page says so, with "Try again".
+  bool _notNow = false;
+
   Future<void> _start() => _guard(() async {
         await _service.checkAvailable();
         final s = await _service.info();
         if (s.connected) _onState(s);
-        if (!s.connected) await _service.discover();
+        if (s.connected) return;
+        if (!mounted) return;
+        final ok = await explainBeforeAsking(
+            context, AppPermission.nearbyDevices);
+        if (mounted) setState(() => _notNow = !ok);
+        if (ok) await _service.discover();
       });
 
   Future<void> _onState(WifiDirectState s) async {
@@ -279,6 +289,11 @@ class _WifiDirectPageState extends State<WifiDirectPage> {
             children: [
               Text(l.wifiDirectIntro),
               const SizedBox(height: 12),
+              if (_notNow) ...[
+                PermissionNotNowNote(
+                    permission: AppPermission.nearbyDevices, onRetry: _start),
+                const SizedBox(height: 12),
+              ],
               if (_error != null) ...[_errorCard(), const SizedBox(height: 12)],
               if (_state.connected) _connectedCard() else _peerList(),
             ],

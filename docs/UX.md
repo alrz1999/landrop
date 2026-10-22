@@ -1042,7 +1042,9 @@ the quick wins, U1, U3, U2, U5 and L2/L3/R1 for those screens; 295 after U4 and 
 `test/trust_test.dart`, +7 in `test/l10n_test.dart`; 408 after U8 and the extras below: +19 in
 the new `test/onboarding_test.dart`, +5 in `test/core_test.dart`, +18 in the new
 `test/text_test.dart`, +11 in the new `test/history_test.dart`, +11 in the new
-`test/polish_test.dart`).
+`test/polish_test.dart`; 460 after the gap closing below: +6 in `test/core_test.dart`, +8 in the
+new `test/request_queue_test.dart`, +11 in the new `test/permission_test.dart`, +9 in the new
+`test/details_test.dart`, and +18 in `test/share_target_test.dart` from the parallel U10 work).
 
 **Test helper** (`test/helpers/pump_localized.dart`, added in step L1):
 
@@ -1092,6 +1094,8 @@ A unit test checks that `app_fa.arb` has every key of `app_en.arb` and the same 
 | **U8** | Onboarding (3 screens) + just-in-time permission pre-prompts; stop calling `ensureStorageAccess()` from `init()` | M | new `onboarding.dart`, `app_controller.dart`, `storage_access.dart` | tests start with `onboarded: true` in `MemorySettingsStore` |
 | **U9** | Desktop drag and drop; recent devices | M | `home_page.dart`, `app_controller.dart`, `pubspec.yaml` | |
 | **U10** | Android share-target intent (later: iOS share extension) | L | `AndroidManifest.xml`, `MainActivity.kt`, `app.dart` | native, CI-only build |
+
+**U10 implemented (Android only):** LanDrop is in the system Share sheet (`ACTION_SEND` and `ACTION_SEND_MULTIPLE`, `*/*` and `text/plain`, `launchMode` stays `singleTop`, `onNewIntent` handled). `ShareIntentHandler.kt` copies each `content:` stream (not `file:`) on a background thread to `cacheDir/shared/<random>/<sanitised name>` (at most 200 items and 4 GB in all: over the limit nothing is kept and `tooMany` / `tooBig` is reported; unreadable items are skipped with `unreadable`), takes `EXTRA_TEXT` (or `EXTRA_SUBJECT` when there is nothing else) as text, and offers it through the `dev.landrop/share` channel (`getInitial` returns the pending share once, `clear` with the cached `paths`) and `dev.landrop/share/events` for shares that arrive while the app runs. Copies older than a day are deleted at the next start; Dart deletes its own copies through `clear` after the send ends, also when the device picker is dismissed. `lib/ui/share_target.dart`: `ShareTargetService` (injectable channel, no-op off Android), `SharedContent`, and `ShareTargetHost`, wrapped around the home in `app.dart` (`LanDropApp.shareTarget` is the test seam). A share waits for the settings, the onboarding (the user finishes or skips it, then the share continues) and the running core, then opens the usual device picker titled "Sending N files" / "Sending text", sends with `sendWithResult` / `sendText` and shows the usual result snackbar; errors show `shareErr*` messages. Files win over a caption that came with them; text over 64 KB is refused. Limits: iOS share extension not done; the picker lists the peers known at that moment (with none it offers "Help me connect" and the share is dropped); the Kotlin code was written without an Android SDK and is compiled only in CI (untested on a device). Tests: `test/share_target_test.dart`.
 
 **Quick wins (section 7) implemented:** 1 (status line "Visible to nearby devices" in `bodyMedium`
 with an icon, `IP · port` below in muted `bodySmall`, `selfAddress` kept), 2 (incoming dialog shows
@@ -1269,9 +1273,7 @@ several files) and `reveal-<id>` ("Show in folder") through the injectable `File
 absolute paths only; a failure shows "Couldn't open it. The files are in {path}."). *Gaps:* Android
 and iOS have no "Open" without a new dependency (a `FileProvider` / document-interaction plugin):
 `canOpen` is false there and the card shows the full saved path (`savedTo-<id>`, LTR) with
-`copyPath-<id>` ("Copy path"); no "Try again" / "Details" on failed cards; cancelling while the
-receiver's dialog is still open only takes effect once it accepts (the dialog stays up there);
-speed is computed from progress events (every 256 KB), so it is not updated during a full stall;
+`copyPath-<id>` ("Copy path"); speed is computed from progress events (every 256 KB), so it is not updated during a full stall;
 Open / Show in folder were not tried on real Windows/Linux desktops.
 
 **U7 implemented:** the incoming dialog (`showIncomingDecision`, `IncomingDecision`;
@@ -1296,11 +1298,10 @@ auto-accepted transfer shows the snackbar `autoAcceptSnack` "Accepted from {name
 with "Stop auto-accept", and the card note. Settings ▸ `trustedDevicesSettings` ("Trusted devices",
 count) opens `TrustedDevicesPage` (`trusted-<fp>`, name, "Device name: …" when renamed, security
 code LTR, `autoAccept-<fp>`, `rename-<fp>` (display name only), `remove-<fp>`, `trustedEmpty`).
-*Gaps:* every accepted proven device is listed as trusted (there is no separate "recent devices"
-list yet, U9); a plain LocalSend sender and LanDrop versions before this change are always
-"Identity not confirmed" and can never be auto-accepted; the dialog does not close itself when
-the core times the request out; no "trusted" mark on the device list on home; trust is not
-time-limited.
+*Gaps:* every accepted proven device is listed as trusted; a plain LocalSend sender and LanDrop
+versions before this change are always "Identity not confirmed" and can never be auto-accepted;
+trust is not time-limited. (Closed later, see "Gap closing": the dialog closes itself when the
+request ends; the home list marks trusted devices; "First time" comes from the recent devices.)
 
 **U8 implemented:** `OnboardingPage` (`lib/ui/onboarding.dart`, key `onboarding`) is shown by
 `LanDropApp` instead of home until `onboarded` is true in the settings JSON (a blank screen while
@@ -1321,10 +1322,9 @@ change this later in Settings.") before the system screen; Allow + granted moves
 transfers to Downloads/LanDrop without a restart (`LanDropCore.setSaveDir`), denied or "Not now"
 keeps the private folder with a snackbar, and the answer is remembered (`storageAsked`). Settings
 `useDownloads` shows the sheet every time. Test seam `StorageAccess` (`LanDropApp.storageAccess`).
-*Gaps:* the Android 13 notification pre-prompt, the hotspot/Wi-Fi Direct "Nearby devices" line and
-the camera line of 3.6 are not separate pre-prompts (the wizards still ask directly); a transfer
-auto-accepted from a trusted device does not show the storage sheet; requests that arrive while
-onboarding is open are not shown (they time out); the share-target part of U8 in 3.3 is U10.
+*Gaps:* a transfer auto-accepted from a trusted device does not show the storage sheet; the
+share-target part of U8 in 3.3 is U10. (The permission pre-prompts and the requests that arrived
+during onboarding were closed later, see "Gap closing".)
 
 **Extras implemented with U8 (not in the original plan):**
 - *Send text* (PROTOCOL.md "Text messages"): the Send sheet has `sendText` ("Text") next to Files
@@ -1367,10 +1367,52 @@ New strings: 74 keys in both ARB files; uncertain Persian marked `REVIEW:` (4 ne
 `onboardingLocalNetworkComputer`, `onboardingLocalNetworkPhone`, `onboardingFirewallWindows`,
 `storageBody`).
 
-*Remaining gaps after these steps:* U9 drag and drop; recent devices are not shown first in the
-peer picker (3.3) and there is no "first time" badge from the recent list (3.7, the trust store
-still decides); no "Details" button on failed cards; the history keeps file names but not where
-sent files came from; no Jalali calendar (Gregorian dates in fa by decision); Android/iOS "Open"
+**Gap closing (2026-10-22, after U8):**
+- *Identity location* (DESIGN.md 2.6, 2.10): the app passes `LanDropCoreOptions.identityDir` =
+  `<app support>/identity` (`SettingsStore.identityPath()`); the first start copies an identity left
+  in `<saveDir>/.landrop` there (same fingerprint, trusted peers still recognise the device; the
+  old copy stays in place); `key.pem` is `chmod 600` on macOS/Linux. Moving the save folder no
+  longer touches the identity. The copy-on-folder-change workaround stays only for cores without
+  `identityDir` (tests, headless use).
+- *Requests before home*: `AppController` keeps every file request, text and browser pairing in a
+  queue (`pendingPrompts`, `takePrompt`, `promptsAdded`); the home page drains it after its first
+  frame, so a request that arrived during onboarding is shown as soon as home is. An entry leaves
+  the queue by itself when the core ends it. The core now completes `IncomingRequest.decision`
+  with false and sets `endedBy` (`timeout`, `withdrawn`, `stopped`) when nobody answered within
+  `decisionTimeout`, the sender withdrew it or the server stopped; the incoming dialog then
+  closes itself (also from under Settings opened by "Change") and the snackbar `incomingEnded`
+  says "The request from {name} expired." or "{name} cancelled the request.". Withdraw
+  (PROTOCOL.md): "Cancel" on a card still waiting for the receiver now withdraws the request
+  (`sendFiles(withdraw:)`), so the receiver's dialog closes at once.
+- *Just-in-time permissions* (3.6, `lib/ui/permission_explainer.dart`): `showPermissionExplainer`
+  (`permissionSheet-<notifications|nearbyDevices|camera>`, `permissionContinue`,
+  `permissionNotNow`) before Android's dialog: the notification permission on the first background
+  use (shown by home; the service now starts without asking, `BackgroundService.start(askNotification:)`),
+  "Nearby devices" before "Start hotspot" and before Wi-Fi Direct searches, the camera before Join
+  by QR. "Not now" leaves the feature off with `permissionNotNow-<kind>` and "Try again"
+  (`permissionRetry-<kind>`, straight to Android's dialog); for notifications a snackbar
+  (`notificationsOffSnack`) and Settings ▸ App `allowNotifications`. Each explanation is shown once
+  (`permissionsExplained` in the settings JSON) and never when the permission is granted already.
+  Test seam `PermissionAccess` (`LanDropApp.permissionAccess`); the services' own permission
+  requests are unchanged.
+- *Details on failed cards*: failed, cancelled and declined cards have `failDetails-<id>` →
+  `transferDetails-<id>` (reason in the user's language `detailsReason-<id>`, error code
+  `detailsCode-<id>` LTR, address `detailsAddress-<id>` LTR or "Unknown", when, and
+  `copyTransferReport-<id>` copying the English `TransferSession.report()`).
+- *Picker and recent devices*: `showPeerPicker` orders devices by `AppController.pickerOrder`
+  (most recently used first, then trusted, then as found; rows `pick-<fp>`) and marks trusted ones
+  with the avatar badge (`pickerTrusted-<fp>`, shared `DeviceAvatar`). `RecentDevice` gained
+  `firstSeen` and `lastUsed` (set when sending to or accepting from a device). The incoming badge now
+  follows the recent list: "First time" only for a proven device never seen in an earlier run and
+  never used; a proven device seen before but never accepted gets the new `SenderTrust.known`
+  badge `incomingBadge-known` "Seen before, not trusted yet" (and is offered "Always accept").
+- No existing test text assertions changed. New strings: 23 keys in both ARB files; `REVIEW:`
+  notes on `permNearbyTitle` and `permNearbyBody` (the Persian Android label of "Nearby devices").
+
+*Remaining gaps after these steps:* U9 drag and drop; the history keeps file names but not where
+sent files came from; the permission explanations, the withdraw and the identity migration were
+tested only in widget/core tests (no real Android device); an incoming dialog that closed itself
+while another app was in front only leaves a snackbar (no notification); no Jalali calendar (Gregorian dates in fa by decision); Android/iOS "Open"
 still needs a dependency; the onboarding, text, history and theme screens were tested only in
 widget tests (no real device); the Persian copy needs the native review (4.12).
 
