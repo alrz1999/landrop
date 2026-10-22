@@ -351,6 +351,8 @@
   "shareLinkWorksFor": "اعتبار لینک",
   "shareDownloadsAllowed": "تعداد دانلود مجاز",
   "shareOptionsNote": "هر کس در این شبکه لینک را داشته باشد، تا وقتی لینک معتبر است می‌تواند دانلود کند. پخش یک ویدیو یک دانلود حساب می‌شود.",
+  "shareShowNearby": "نمایش به دستگاه‌های نزدیک",
+  "shareShowNearbyHint": "فقط دستگاه‌های مورد اعتماد و مرورگرهای تأییدشده آن را می‌بینند.",
   "shareConfirm": "اشتراک‌گذاری",
   "shareOptionsTitleFiles": "اشتراک {count, plural, other{{count} فایل}}",
   "shareOptionsTitleFolder": "اشتراک پوشهٔ «{name}»",

@@ -1154,11 +1154,19 @@ class AppController extends ChangeNotifier {
   }
 
   /// Shares files/folders with browsers. Throws when nothing can be shared.
-  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) {
-    final s = core.createShare(paths, ttl: ttl, maxDownloads: maxDownloads);
+  Share createShare(List<String> paths,
+      {Duration? ttl, int? maxDownloads, bool nearby = false}) {
+    final s = core.createShare(paths,
+        ttl: ttl, maxDownloads: maxDownloads, nearby: nearby);
     shares = core.shares;
     _notify();
     return s;
+  }
+
+  void setShareNearby(String id, bool on) {
+    core.setShareNearby(id, on);
+    shares = core.shares;
+    _notify();
   }
 
   void revokeShare(String id) {

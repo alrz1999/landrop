@@ -103,6 +103,15 @@ audio.preview { width: 100%; }
     <ul id="shared-list" class="files"></ul>
   </section>
 
+  <section id="nearby" hidden aria-labelledby="nearby-h">
+    <h2 id="nearby-h" data-t="nearbyTitle">Shared with this browser</h2>
+    <p id="nearby-none" class="muted" hidden data-t="nearbyNone">Nothing shared yet</p>
+    <ul id="nearby-list" class="files"></ul>
+    <div class="actions">
+      <button id="nearby-refresh" class="secondary" type="button" data-t="nearbyRefresh">Refresh</button>
+    </div>
+  </section>
+
   <section id="send" aria-labelledby="send-h">
     <h2 id="send-h" data-t="sendTitle">Send files to this device</h2>
     <div id="pair">
@@ -147,6 +156,11 @@ audio.preview { width: 100%; }
   var T = {
     en: {
       sharedWithYou: 'Shared with you',
+      nearbyTitle: 'Shared with this browser',
+      nearbyNone: 'Nothing shared yet',
+      nearbyPlay: 'Play',
+      nearbyDownload: 'Download',
+      nearbyRefresh: 'Refresh',
       loading: 'Loading…',
       sendTitle: 'Send files to this device',
       pairFirst: 'First the device owner has to allow this browser.',
@@ -203,6 +217,11 @@ audio.preview { width: 100%; }
     },
     fa: {
       sharedWithYou: 'به اشتراک گذاشته شده با شما',
+      nearbyTitle: 'به اشتراک گذاشته‌شده با این مرورگر',
+      nearbyNone: 'هنوز چیزی به اشتراک گذاشته نشده',
+      nearbyPlay: 'پخش',
+      nearbyDownload: 'دانلود',
+      nearbyRefresh: 'تازه‌سازی',
       loading: 'در حال بارگذاری…',
       sendTitle: 'ارسال فایل به این دستگاه',
       pairFirst: 'ابتدا صاحب دستگاه باید به این مرورگر اجازه بدهد.',
@@ -520,13 +539,76 @@ audio.preview { width: 100%; }
   var st0 = shareToken();
   if (st0) loadShare(st0);
 
+  // ---------------------------------------------------------------- nearby
+  // Shares the owner offered to paired browsers (cookie session; the file
+  // links work in <a download> and <video src>).
+  function nearbyItem(shareId, f) {
+    var li = el('li');
+    var href = API + '/web/nearby/' + encodeURIComponent(shareId) + '/files/' +
+        encodeURIComponent(f.id);
+    var row = el('div', 'row');
+    row.appendChild(nameSpan(f.name));
+    row.appendChild(sz(el('span', 'muted small'), f.size));
+    li.appendChild(row);
+    var actions = el('div', 'actions');
+    var a = tel('a', 'button', 'nearbyDownload');
+    a.href = href;
+    a.rel = 'noreferrer';
+    a.setAttribute('download', baseName(f.name));
+    ax(a, 'ariaDownload', [iso(f.name)]);
+    actions.appendChild(a);
+    var mime = String(f.mime || '');
+    var kind = /^video\//.test(mime) ? 'video' : /^audio\//.test(mime) ? 'audio' : null;
+    if (kind) {
+      var b = tel('button', 'secondary', 'nearbyPlay');
+      b.type = 'button';
+      ax(b, 'ariaPlay', [iso(f.name)]);
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        var m = el(kind, 'preview');
+        m.controls = true;
+        m.preload = 'metadata';
+        m.setAttribute('aria-label', f.name);
+        m.src = href + '?inline=1';
+        li.appendChild(m);
+      });
+      actions.appendChild(b);
+    }
+    li.appendChild(actions);
+    return li;
+  }
+  function loadNearby() {
+    call('GET', API + '/web/nearby', null, function (st, j) {
+      var sec = $('nearby');
+      var list = $('nearby-list');
+      var none = $('nearby-none');
+      list.textContent = '';
+      if (st !== 200 || !j || !j.shares || !j.shares.length) {
+        // Stays visible after a refresh that finds nothing (it had shares).
+        none.hidden = false;
+        if (st !== 200 || sec.hidden) sec.hidden = true;
+        return;
+      }
+      none.hidden = true;
+      for (var i = 0; i < j.shares.length; i++) {
+        var s = j.shares[i];
+        if (!s || typeof s.id !== 'string' || !s.files) continue;
+        for (var k = 0; k < s.files.length; k++) list.appendChild(nearbyItem(s.id, s.files[k]));
+      }
+      sec.hidden = list.children.length === 0;
+    });
+  }
+  $('nearby-refresh').addEventListener('click', loadNearby);
+
   // ---------------------------------------------------------------- pairing
   function showUpload() {
     $('pair').hidden = true;
     $('upload').hidden = false;
+    loadNearby();
   }
   function showPair(key) {
     sessionToken = null;
+    $('nearby').hidden = true;
     $('upload').hidden = true;
     $('pair').hidden = false;
     $('pair-code-box').hidden = true;

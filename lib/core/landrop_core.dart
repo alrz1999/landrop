@@ -412,8 +412,12 @@ class LanDropCoreImpl implements LanDropCore {
   @override
   Stream<List<Share>> get sharesChanged => _web.sharesChanged;
   @override
-  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) =>
-      _web.createShare(paths, ttl: ttl, maxDownloads: maxDownloads);
+  Share createShare(List<String> paths,
+          {Duration? ttl, int? maxDownloads, bool nearby = false}) =>
+      _web.createShare(paths,
+          ttl: ttl, maxDownloads: maxDownloads, nearby: nearby);
+  @override
+  void setShareNearby(String id, bool on) => _web.setShareNearby(id, on);
   @override
   void revokeShare(String id) => _web.revokeShare(id);
   @override

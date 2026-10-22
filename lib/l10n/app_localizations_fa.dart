@@ -840,6 +840,13 @@ class AppLocalizationsFa extends AppLocalizations {
       'هر کس در این شبکه لینک را داشته باشد، تا وقتی لینک معتبر است می‌تواند دانلود کند. پخش یک ویدیو یک دانلود حساب می‌شود.';
 
   @override
+  String get shareShowNearby => 'نمایش به دستگاه‌های نزدیک';
+
+  @override
+  String get shareShowNearbyHint =>
+      'فقط دستگاه‌های مورد اعتماد و مرورگرهای تأییدشده آن را می‌بینند.';
+
+  @override
   String get shareConfirm => 'اشتراک‌گذاری';
 
   @override

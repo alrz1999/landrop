@@ -1087,6 +1087,14 @@
   "@shareOptionsNote": {
     "description": "Share options: note under the choices."
   },
+  "shareShowNearby": "Show to nearby devices",
+  "@shareShowNearby": {
+    "description": "Share options and active share: switch that lists the share to trusted devices and approved browsers."
+  },
+  "shareShowNearbyHint": "Only devices you trust and browsers you approved can see it.",
+  "@shareShowNearbyHint": {
+    "description": "Subtitle of the nearby switch."
+  },
   "shareConfirm": "Share",
   "@shareConfirm": {
     "description": "Share options: confirm button."

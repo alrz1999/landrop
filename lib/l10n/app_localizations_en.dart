@@ -848,6 +848,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Anyone on this network who has the link can download while it works. Playing a video counts as one download.';
 
   @override
+  String get shareShowNearby => 'Show to nearby devices';
+
+  @override
+  String get shareShowNearbyHint =>
+      'Only devices you trust and browsers you approved can see it.';
+
+  @override
   String get shareConfirm => 'Share';
 
   @override

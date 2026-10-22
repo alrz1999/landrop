@@ -435,6 +435,9 @@ class FakeCore implements LanDropCore {
   /// Every [createShare] call as (paths, ttl, maxDownloads), for tests.
   final List<(List<String>, Duration?, int?)> shareCalls = [];
 
+  /// The `nearby` flag of every [createShare] call, in order, for tests.
+  final List<bool> shareNearbyCalls = [];
+
   /// Test hook: a browser asks to pair.
   WebPairingRequest simulatePairing(
       {String code = '4821',
@@ -481,8 +484,10 @@ class FakeCore implements LanDropCore {
   Stream<List<Share>> get sharesChanged => _sharesCtrl.stream;
 
   @override
-  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) {
+  Share createShare(List<String> paths,
+      {Duration? ttl, int? maxDownloads, bool nearby = false}) {
     shareCalls.add((paths, ttl, maxDownloads));
+    shareNearbyCalls.add(nearby);
     if (paths.isEmpty) throw ArgumentError('nothing to share');
     final token = 'tok${++_shareSeq}abcdefghijklmnop';
     final s = Share(
@@ -503,10 +508,31 @@ class FakeCore implements LanDropCore {
       expiresAt: ttl == null ? null : DateTime.now().add(ttl),
       maxDownloads: maxDownloads,
       downloadsLeft: maxDownloads,
+      nearby: nearby,
     );
     _shares.add(s);
     _sharesCtrl.add(shares);
     return s;
+  }
+
+  @override
+  void setShareNearby(String id, bool on) {
+    final i = _shares.indexWhere((s) => s.id == id);
+    if (i < 0) return;
+    final o = _shares[i];
+    _shares[i] = Share(
+      id: o.id,
+      token: o.token,
+      files: o.files,
+      url: o.url,
+      httpUrl: o.httpUrl,
+      createdAt: o.createdAt,
+      expiresAt: o.expiresAt,
+      maxDownloads: o.maxDownloads,
+      downloadsLeft: o.downloadsLeft,
+      nearby: on,
+    );
+    _sharesCtrl.add(shares);
   }
 
   @override

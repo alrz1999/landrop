@@ -13,7 +13,7 @@ import 'ltr_text.dart';
 import 'pickers.dart';
 import 'widgets.dart';
 
-typedef ShareOptions = ({Duration? ttl, int? maxDownloads});
+typedef ShareOptions = ({Duration? ttl, int? maxDownloads, bool nearby});
 
 /// "14 min", "1 h 20 min", "less than a minute" (Persian digits in fa).
 String _remaining(AppLocalizations l, Duration d) => d.inMinutes < 1
@@ -23,7 +23,9 @@ String _remaining(AppLocalizations l, Duration d) => d.inMinutes < 1
 /// Asks how long and how often a share may be used. Null when cancelled.
 /// [title] is the dialog title ("Share 2 files").
 Future<ShareOptions?> showShareOptionsDialog(
-    BuildContext context, String title) {
+  BuildContext context,
+  String title,
+) {
   return showDialog<ShareOptions>(
     context: context,
     builder: (_) => _ShareOptionsDialog(title),
@@ -51,13 +53,14 @@ class _ShareOptionsDialogState extends State<_ShareOptionsDialog> {
   ];
   int _ttl = 1;
   int _limit = 0;
+  bool _nearby = false; // default OFF
 
   String _ttlLabel(AppLocalizations l, Duration? d) => switch (d?.inMinutes) {
-        null => l.shareTtlNone,
-        60 => l.shareTtl1h,
-        1440 => l.shareTtl24h,
-        _ => formatDuration(d!, l),
-      };
+    null => l.shareTtlNone,
+    60 => l.shareTtl1h,
+    1440 => l.shareTtl24h,
+    _ => formatDuration(d!, l),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -68,46 +71,72 @@ class _ShareOptionsDialogState extends State<_ShareOptionsDialog> {
       title: Text(widget.title),
       content: SizedBox(
         width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l.shareLinkWorksFor, style: t.labelLarge),
-            const SizedBox(height: 4),
-            Wrap(spacing: 8, runSpacing: 4, children: [
-              for (final (i, (key, ttl)) in _ttls.indexed)
-                ChoiceChip(
-                  key: Key(key),
-                  label: Text(_ttlLabel(l, ttl)),
-                  selected: _ttl == i,
-                  onSelected: (_) => setState(() => _ttl = i),
-                ),
-            ]),
-            const SizedBox(height: 16),
-            Text(l.shareDownloadsAllowed, style: t.labelLarge),
-            const SizedBox(height: 4),
-            Wrap(spacing: 8, runSpacing: 4, children: [
-              for (final (i, (key, max)) in _limits.indexed)
-                ChoiceChip(
-                  key: Key(key),
-                  label: Text(max == null ? l.shareUnlimited : l.digits(max)),
-                  selected: _limit == i,
-                  onSelected: (_) => setState(() => _limit = i),
-                ),
-            ]),
-            const SizedBox(height: 16),
-            Text(l.shareOptionsNote, style: t.bodySmall),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l.shareLinkWorksFor, style: t.labelLarge),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final (i, (key, ttl)) in _ttls.indexed)
+                    ChoiceChip(
+                      key: Key(key),
+                      label: Text(_ttlLabel(l, ttl)),
+                      selected: _ttl == i,
+                      onSelected: (_) => setState(() => _ttl = i),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(l.shareDownloadsAllowed, style: t.labelLarge),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final (i, (key, max)) in _limits.indexed)
+                    ChoiceChip(
+                      key: Key(key),
+                      label: Text(
+                        max == null ? l.shareUnlimited : l.digits(max),
+                      ),
+                      selected: _limit == i,
+                      onSelected: (_) => setState(() => _limit = i),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const Key('shareNearbyToggle'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(l.shareShowNearby),
+                subtitle: Text(l.shareShowNearbyHint),
+                value: _nearby,
+                onChanged: (v) => setState(() => _nearby = v),
+              ),
+              const SizedBox(height: 8),
+              Text(l.shareOptionsNote, style: t.bodySmall),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l.commonCancel)),
+          onPressed: () => Navigator.pop(context),
+          child: Text(l.commonCancel),
+        ),
         FilledButton(
           key: const Key('confirmShare'),
-          onPressed: () => Navigator.pop<ShareOptions>(context,
-              (ttl: _ttls[_ttl].$2, maxDownloads: _limits[_limit].$2)),
+          onPressed: () => Navigator.pop<ShareOptions>(context, (
+            ttl: _ttls[_ttl].$2,
+            maxDownloads: _limits[_limit].$2,
+            nearby: _nearby,
+          )),
           child: Text(l.shareConfirm),
         ),
       ],
@@ -140,21 +169,29 @@ Future<void> startShareFlow(
   }
   if (paths.isEmpty || !context.mounted) return;
   final name = folder
-      ? l.isoName(paths.single
-          .split(RegExp(r'[\\/]'))
-          .lastWhere((s) => s.isNotEmpty, orElse: () => paths.single))
+      ? l.isoName(
+          paths.single
+              .split(RegExp(r'[\\/]'))
+              .lastWhere((s) => s.isNotEmpty, orElse: () => paths.single),
+        )
       : '';
   final opts = await showShareOptionsDialog(
-      context,
-      folder
-          ? l.shareOptionsTitleFolder(name)
-          : l.shareOptionsTitleFiles(paths.length));
+    context,
+    folder
+        ? l.shareOptionsTitleFolder(name)
+        : l.shareOptionsTitleFiles(paths.length),
+  );
   if (opts == null) return;
   try {
-    c.createShare(paths, ttl: opts.ttl, maxDownloads: opts.maxDownloads);
-    snack(folder
-        ? l.shareCreatedFolder(name)
-        : l.shareCreatedFiles(paths.length));
+    c.createShare(
+      paths,
+      ttl: opts.ttl,
+      maxDownloads: opts.maxDownloads,
+      nearby: opts.nearby,
+    );
+    snack(
+      folder ? l.shareCreatedFolder(name) : l.shareCreatedFiles(paths.length),
+    );
   } catch (e) {
     snack(l.errorShare('$e'));
   }
@@ -181,13 +218,14 @@ class ShareCard extends StatelessWidget {
       time = l.shareExpired;
     } else {
       time = l.shareEndsIn(
-          _remaining(l, s.expiresAt!.difference(DateTime.now())));
+        _remaining(l, s.expiresAt!.difference(DateTime.now())),
+      );
     }
     final downloads = s.maxDownloads == null
         ? l.shareUnlimitedDownloads
         : s.exhausted
-            ? l.shareLimitReached
-            : l.shareDownloadsLeft(s.downloadsLeft ?? 0, s.maxDownloads!);
+        ? l.shareLimitReached
+        : l.shareDownloadsLeft(s.downloadsLeft ?? 0, s.maxDownloads!);
     return Card(
       key: Key('share-${s.id}'),
       child: Padding(
@@ -195,77 +233,112 @@ class ShareCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (s.files.length == 1)
-                      AutoDirText(first,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (s.files.length == 1)
+                        AutoDirText(
+                          first,
                           fileName: true,
                           style: t.titleSmall,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis)
-                    else
-                      Text(
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      else
+                        Text(
                           l.shareTitleMore(
-                              l.isoName(middleEllipsis(first)),
-                              s.files.length - 1),
+                            l.isoName(middleEllipsis(first)),
+                            s.files.length - 1,
+                          ),
                           style: t.titleSmall,
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                    Text(
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      Text(
                         '${l.fileCount(s.files.length)}'
                         ' · ${formatBytes(s.totalBytes, l)}',
-                        style: t.bodySmall),
-                    const SizedBox(height: 6),
-                    Text(time, key: Key('shareTime-${s.id}'), style: t.bodySmall),
-                    Text(downloads,
+                        style: t.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        time,
+                        key: Key('shareTime-${s.id}'),
+                        style: t.bodySmall,
+                      ),
+                      Text(
+                        downloads,
                         key: Key('shareDownloads-${s.id}'),
                         style: t.bodySmall?.copyWith(
-                            color: s.exhausted ? scheme.error : null)),
-                  ],
+                          color: s.exhausted ? scheme.error : null,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Semantics(
-                label: l.shareQrSemantics,
-                child: Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(4),
-                  child: QrImageView(
-                      data: link, size: 112, backgroundColor: Colors.white),
+                const SizedBox(width: 8),
+                Semantics(
+                  label: l.shareQrSemantics,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(4),
+                    child: QrImageView(
+                      data: link,
+                      size: 112,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
             const SizedBox(height: 8),
-            LtrText(link,
-                key: Key('shareUrl-${s.id}'),
-                style: t.bodySmall,
-                selectable: true),
+            LtrText(
+              link,
+              key: Key('shareUrl-${s.id}'),
+              style: t.bodySmall,
+              selectable: true,
+            ),
             if (s.httpUrl != null)
-              Text(l.shareHttpWarning,
-                  style: t.bodySmall?.copyWith(color: scheme.error)),
-            Wrap(spacing: 8, children: [
-              TextButton.icon(
-                key: Key('copyShare-${s.id}'),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: link));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(context.l.shareLinkCopied)));
-                  }
-                },
-                icon: const Icon(Icons.copy, size: 18),
-                label: Text(l.shareCopyLink),
+              Text(
+                l.shareHttpWarning,
+                style: t.bodySmall?.copyWith(color: scheme.error),
               ),
-              OutlinedButton.icon(
-                key: Key('stopShare-${s.id}'),
-                onPressed: () => c.revokeShare(s.id),
-                icon: const Icon(Icons.stop_circle_outlined, size: 18),
-                label: Text(l.shareStop),
-              ),
-            ]),
+            SwitchListTile(
+              key: Key('nearbyToggle-${s.id}'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(l.shareShowNearby),
+              subtitle: Text(l.shareShowNearbyHint),
+              value: s.nearby,
+              onChanged: (v) => c.setShareNearby(s.id, v),
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  key: Key('copyShare-${s.id}'),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(context.l.shareLinkCopied)),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: Text(l.shareCopyLink),
+                ),
+                OutlinedButton.icon(
+                  key: Key('stopShare-${s.id}'),
+                  onPressed: () => c.revokeShare(s.id),
+                  icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                  label: Text(l.shareStop),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -276,8 +349,11 @@ class ShareCard extends StatelessWidget {
 /// "Send a link": active shares plus "Share files" / "Share folder"
 /// buttons. Rebuilds every 30 s so remaining times stay current.
 class SharesSection extends StatefulWidget {
-  const SharesSection(
-      {super.key, required this.pickFiles, required this.pickFolder});
+  const SharesSection({
+    super.key,
+    required this.pickFiles,
+    required this.pickFolder,
+  });
   final FilesPicker pickFiles;
   final FolderPicker pickFolder;
 
@@ -318,24 +394,32 @@ class _SharesSectionState extends State<SharesSection> {
         ),
         Padding(
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 8),
-          child: Wrap(spacing: 4, children: [
-            FilledButton.tonalIcon(
-              key: const Key('shareFiles'),
-              onPressed: () => startShareFlow(context,
-                  pickFiles: widget.pickFiles, pickFolder: widget.pickFolder),
-              icon: const Icon(Icons.ios_share),
-              label: Text(l.shareFiles),
-            ),
-            TextButton.icon(
-              key: const Key('shareFolder'),
-              onPressed: () => startShareFlow(context,
+          child: Wrap(
+            spacing: 4,
+            children: [
+              FilledButton.tonalIcon(
+                key: const Key('shareFiles'),
+                onPressed: () => startShareFlow(
+                  context,
                   pickFiles: widget.pickFiles,
                   pickFolder: widget.pickFolder,
-                  folder: true),
-              icon: const Icon(Icons.folder_shared_outlined),
-              label: Text(l.shareFolder),
-            ),
-          ]),
+                ),
+                icon: const Icon(Icons.ios_share),
+                label: Text(l.shareFiles),
+              ),
+              TextButton.icon(
+                key: const Key('shareFolder'),
+                onPressed: () => startShareFlow(
+                  context,
+                  pickFiles: widget.pickFiles,
+                  pickFolder: widget.pickFolder,
+                  folder: true,
+                ),
+                icon: const Icon(Icons.folder_shared_outlined),
+                label: Text(l.shareFolder),
+              ),
+            ],
+          ),
         ),
         if (c.shares.isEmpty)
           Padding(
@@ -352,10 +436,11 @@ class _SharesSectionState extends State<SharesSection> {
 /// Shares screen (app bar, and Settings): "Send a link" (others download
 /// from me) and "Use from a browser" (others send to me), UX.md 3.9.
 class SharesPage extends StatelessWidget {
-  const SharesPage(
-      {super.key,
-      this.pickFiles = defaultPickFiles,
-      this.pickFolder = defaultPickFolder});
+  const SharesPage({
+    super.key,
+    this.pickFiles = defaultPickFiles,
+    this.pickFolder = defaultPickFolder,
+  });
   final FilesPicker pickFiles;
   final FolderPicker pickFolder;
 
@@ -378,8 +463,10 @@ class SharesPage extends StatelessWidget {
                   SectionHeader(l.browserSectionTitle),
                   Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 4),
-                    child: Text(l.browserSectionBody,
-                        style: Theme.of(context).textTheme.bodyMedium),
+                    child: Text(
+                      l.browserSectionBody,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   const WebAccessCard(),
                   const ConnectedBrowsersCard(),
@@ -394,7 +481,8 @@ class SharesPage extends StatelessWidget {
 }
 
 String _clock(AppLocalizations l, DateTime t) => l.digits(
-    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+  '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}',
+);
 
 String _ago(AppLocalizations l, DateTime t) {
   final d = DateTime.now().difference(t);
@@ -435,17 +523,24 @@ class ConnectedBrowsersCard extends StatelessWidget {
                   key: Key('webSession-${s.id}'),
                   leading: const Icon(Icons.public),
                   title: AutoDirText(s.userAgent),
-                  subtitle: Text(l.browserSessionSubtitle(
+                  subtitle: Text(
+                    l.browserSessionSubtitle(
                       l.ltrValue(s.remoteIp),
                       _clock(l, s.pairedAt),
-                      _ago(l, s.lastSeen))),
+                      _ago(l, s.lastSeen),
+                    ),
+                  ),
                   trailing: TextButton(
                     key: Key('disconnect-${s.id}'),
                     onPressed: () {
                       c.revokeWebSession(s.id);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
                           content: Text(
-                              l.browserDisconnected(l.isoName(s.userAgent)))));
+                            l.browserDisconnected(l.isoName(s.userAgent)),
+                          ),
+                        ),
+                      );
                     },
                     child: Text(l.browserDisconnect),
                   ),
@@ -490,18 +585,24 @@ class WebAccessCard extends StatelessWidget {
                     color: Colors.white,
                     padding: const EdgeInsets.all(8),
                     child: QrImageView(
-                        data: httpUrl ?? url,
-                        size: 160,
-                        backgroundColor: Colors.white),
+                      data: httpUrl ?? url,
+                      size: 160,
+                      backgroundColor: Colors.white,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               if (httpUrl != null) ...[
-                LtrText(httpUrl,
-                    key: const Key('webHttpUrl'), selectable: true),
-                Text(l.webHttpOnNote,
-                    style: t.bodySmall?.copyWith(color: scheme.error)),
+                LtrText(
+                  httpUrl,
+                  key: const Key('webHttpUrl'),
+                  selectable: true,
+                ),
+                Text(
+                  l.webHttpOnNote,
+                  style: t.bodySmall?.copyWith(color: scheme.error),
+                ),
               ],
               LtrText(url, key: const Key('webUrl'), selectable: true),
               // The certificate warning is explained only when asked.
@@ -511,8 +612,7 @@ class WebAccessCard extends StatelessWidget {
                 child: ExpansionTile(
                   key: const Key('certWarningHelp'),
                   tilePadding: EdgeInsets.zero,
-                  childrenPadding:
-                      const EdgeInsetsDirectional.only(bottom: 8),
+                  childrenPadding: const EdgeInsetsDirectional.only(bottom: 8),
                   expandedCrossAxisAlignment: CrossAxisAlignment.start,
                   title: Text(l.webWarningTitle, style: t.bodyMedium),
                   children: [Text(l.webWarningBody, style: t.bodySmall)],

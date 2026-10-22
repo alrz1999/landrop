@@ -357,6 +357,9 @@ class Share {
   final String? httpUrl;
   final DateTime createdAt;
 
+  /// Shown to nearby devices (trusted apps and paired browsers).
+  final bool nearby;
+
   const Share({
     required this.id,
     required this.token,
@@ -367,12 +370,43 @@ class Share {
     this.maxDownloads,
     this.downloadsLeft,
     this.httpUrl,
+    this.nearby = false,
   });
 
   int get totalBytes => files.fold(0, (a, f) => a + f.size);
   bool get expired =>
       expiresAt != null && !DateTime.now().isBefore(expiresAt!);
   bool get exhausted => downloadsLeft != null && downloadsLeft! <= 0;
+}
+
+/// One file of a nearby share, as listed to a trusted device or browser.
+/// Holds no path or token.
+class NearbyFile {
+  final String id;
+  final String name;
+  final String mime;
+  final int size;
+  const NearbyFile(this.id, this.name, this.mime, this.size);
+}
+
+/// A share another device offered to nearby devices.
+class NearbyShare {
+  final String id;
+  final DateTime createdAt;
+  final DateTime? expiresAt;
+  final int? downloadsLeft;
+
+  /// True when the owner has more files than are listed.
+  final bool truncated;
+  final List<NearbyFile> files;
+  const NearbyShare({
+    required this.id,
+    required this.createdAt,
+    required this.files,
+    this.expiresAt,
+    this.downloadsLeft,
+    this.truncated = false,
+  });
 }
 
 abstract class LanDropCore {
@@ -474,8 +508,13 @@ abstract class LanDropCore {
   /// Shares files and/or folders (folders recursively, keeping relative
   /// paths). [ttl] null = until revoked; [maxDownloads] null = unlimited.
   /// Throws [ArgumentError] when nothing can be shared.
-  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads});
+  Share createShare(List<String> paths,
+      {Duration? ttl, int? maxDownloads, bool nearby = false});
   void revokeShare(String id);
+
+  /// Shows or hides a share to nearby devices (trusted apps, paired
+  /// browsers) right away.
+  void setShareNearby(String id, bool on);
 
   /// Whether shares are saved and restored across restarts (only when the
   /// core has a store, e.g. `LanDropCoreOptions.sharesStorePath`). Turning it

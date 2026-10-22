@@ -271,6 +271,7 @@ class _Share {
         'expiresAt': expiresAt?.toUtc().toIso8601String(),
         'maxDownloads': maxDownloads,
         'downloadsLeft': downloadsLeft,
+        'nearby': nearby,
         'files': [
           for (final f in files)
             {
@@ -341,12 +342,35 @@ class _Share {
     final created = j['createdAt'];
     return _Share(id, token, files, expiresAt, maxDownloads,
         createdAt: created is String ? DateTime.tryParse(created)?.toLocal() : null)
-      ..downloads = used;
+      ..downloads = used
+      ..nearby = j['nearby'] == true;
   }
 
   bool expired(DateTime now) => expiresAt != null && !now.isBefore(expiresAt!);
   int? get downloadsLeft =>
       maxDownloads == null ? null : max(0, maxDownloads! - downloads);
+
+  /// Listed to nearby devices (trusted apps, paired browsers).
+  bool nearby = false;
+
+  static const maxNearbyFiles = 1000;
+
+  /// What a nearby device may see: names, sizes and ids. Deliberately not
+  /// built from [toJson] (which has local paths and the token).
+  Map<String, dynamic> toNearbyJson() {
+    final listed = files.take(maxNearbyFiles);
+    return {
+      'id': id,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'expiresAt': expiresAt?.toUtc().toIso8601String(),
+      'downloadsLeft': downloadsLeft,
+      'truncated': files.length > maxNearbyFiles,
+      'files': [
+        for (final f in listed)
+          {'id': f.id, 'name': f.name, 'size': f.size, 'mime': f.mime}
+      ],
+    };
+  }
 
   /// Slots a new client could still take.
   bool get available =>
@@ -619,6 +643,7 @@ class WebService {
       expiresAt: s.expiresAt,
       maxDownloads: s.maxDownloads,
       downloadsLeft: s.downloadsLeft,
+      nearby: s.nearby,
     );
   }
 
@@ -721,7 +746,8 @@ class WebService {
       .split(RegExp(r'[\\/]'))
       .lastWhere((s) => s.isNotEmpty, orElse: () => 'file');
 
-  Share createShare(List<String> paths, {Duration? ttl, int? maxDownloads}) {
+  Share createShare(List<String> paths,
+      {Duration? ttl, int? maxDownloads, bool nearby = false}) {
     if (!_running) throw StateError('core not started');
     if (maxDownloads != null && maxDownloads < 1) {
       throw ArgumentError.value(maxDownloads, 'maxDownloads');
@@ -770,10 +796,23 @@ class WebService {
     }
     if (files.isEmpty) throw ArgumentError('nothing to share');
     final s = _Share(randomHex(8), randomToken(16), files,
-        ttl == null ? null : DateTime.now().add(ttl), maxDownloads);
+        ttl == null ? null : DateTime.now().add(ttl), maxDownloads)
+      ..nearby = nearby;
     _sharesByToken[webTokenKey(s.token)] = s;
     _emitShares();
     return _snapshot(s);
+  }
+
+  /// Shows or hides share [id] to nearby devices; takes effect at once.
+  void setShareNearby(String id, bool on) {
+    var changed = false;
+    for (final s in _sharesByToken.values) {
+      if (s.id == id && s.nearby != on) {
+        s.nearby = on;
+        changed = true;
+      }
+    }
+    if (changed) _emitShares();
   }
 
   void revokeShare(String id) {
@@ -921,6 +960,25 @@ class WebService {
           }
           bodyRead = true; // the core's upload handler consumes the body
           await upload(req, s.id);
+        case ['web', 'nearby'] when get:
+          await drainBounded(req);
+          bodyRead = true;
+          _nearbyListing(req, ip);
+        case ['web', 'nearby', final shareId, 'files', final fileId]
+            when get || m == 'HEAD':
+          await drainBounded(req);
+          bodyRead = true;
+          final sess = _sessionOf(req, ip);
+          if (sess == null) {
+            _fail(ip);
+            throw HttpStatusError(401, 'not paired');
+          }
+          final s = _nearbyShare(shareId);
+          if (s == null) {
+            _fail(ip);
+            throw _notFound;
+          }
+          await _serveFile(req, ip, s, fileId, head: m == 'HEAD');
         case ['shares', final token] when get:
           await drainBounded(req);
           bodyRead = true;
@@ -1164,6 +1222,32 @@ class WebService {
 
   static final _notFound = HttpStatusError(404, 'not found');
 
+  /// A live, nearby share by id; unknown, hidden and expired look the same.
+  _Share? _nearbyShare(String id) {
+    if (id.length > 64) return null;
+    final now = DateTime.now();
+    for (final s in _sharesByToken.values) {
+      if (s.id == id) return s.nearby && !s.expired(now) ? s : null;
+    }
+    return null;
+  }
+
+  /// GET web/nearby: nearby shares for a paired browser.
+  void _nearbyListing(HttpRequest req, String ip) {
+    if (_sessionOf(req, ip) == null) {
+      _fail(ip);
+      throw HttpStatusError(401, 'not paired');
+    }
+    final now = DateTime.now();
+    final live = [
+      for (final s in _sharesByToken.values)
+        if (s.nearby && !s.expired(now) && s.available) s
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _json(req.response, 200, {
+      'shares': [for (final s in live.take(50)) s.toNearbyJson()],
+    });
+  }
+
   void _listing(HttpResponse res, String ip, String token) {
     final s = _liveShare(token);
     if (s == null || !s.available) {
@@ -1186,10 +1270,21 @@ class WebService {
 
   Future<void> _file(HttpRequest req, String ip, String token, String fileId,
       {required bool head}) async {
-    final res = req.response;
     final s = _liveShare(token);
-    final f = s?.files.where((x) => x.id == fileId).firstOrNull;
-    if (s == null || f == null) {
+    if (s == null) {
+      _fail(ip);
+      throw _notFound;
+    }
+    await _serveFile(req, ip, s, fileId, head: head);
+  }
+
+  /// Serves one file of [s] (whole or a Range), applying the download
+  /// counting rule. Shared by the token route and the browser nearby route.
+  Future<void> _serveFile(HttpRequest req, String ip, _Share s, String fileId,
+      {required bool head}) async {
+    final res = req.response;
+    final f = s.files.where((x) => x.id == fileId).firstOrNull;
+    if (f == null) {
       _fail(ip);
       throw _notFound;
     }

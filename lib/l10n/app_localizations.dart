@@ -1328,6 +1328,18 @@ abstract class AppLocalizations {
   /// **'Anyone on this network who has the link can download while it works. Playing a video counts as one download.'**
   String get shareOptionsNote;
 
+  /// Share options and active share: switch that lists the share to trusted devices and approved browsers.
+  ///
+  /// In en, this message translates to:
+  /// **'Show to nearby devices'**
+  String get shareShowNearby;
+
+  /// Subtitle of the nearby switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Only devices you trust and browsers you approved can see it.'**
+  String get shareShowNearbyHint;
+
   /// Share options: confirm button.
   ///
   /// In en, this message translates to:
