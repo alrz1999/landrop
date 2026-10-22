@@ -3817,6 +3817,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t receive the shared items.'**
   String get shareErrFailed;
+
+  /// Details sheet section title and the device row action: files this device shares with you.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby shares'**
+  String get nearbySharesTitle;
+
+  /// Nearby shares: shown with a spinner while the device is asked.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for shared files…'**
+  String get nearbyLoading;
+
+  /// Nearby shares: empty (or unreachable) state.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing shared with you'**
+  String get nearbyEmpty;
+
+  /// Nearby shares: hint under the empty state.
+  ///
+  /// In en, this message translates to:
+  /// **'If you expected files, the owner may need to allow this device.'**
+  String get nearbyEmptyHint;
+
+  /// Nearby shares: checkbox that selects every listed file.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get nearbySelectAll;
+
+  /// Nearby shares: download button with the number of chosen files.
+  ///
+  /// In en, this message translates to:
+  /// **'Download selected ({count})'**
+  String nearbyDownloadSelected(int count);
+
+  /// Nearby shares: asks the device again.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get nearbyRefresh;
+
+  /// Nearby shares: the owner shares more files than the list shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Some files are not listed'**
+  String get nearbyTruncated;
+
+  /// Owner dialog title when a device asks to list this device's nearby shares.
+  ///
+  /// In en, this message translates to:
+  /// **'{alias} wants to see your nearby shares'**
+  String nearbyAccessTitle(String alias);
+
+  /// Owner dialog: refuse.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny'**
+  String get nearbyAccessDeny;
+
+  /// Owner dialog: allow for one hour, without trusting the device.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow for 1 hour'**
+  String get nearbyAccessOnce;
+
+  /// Owner dialog: allow and trust the device.
+  ///
+  /// In en, this message translates to:
+  /// **'Always allow (trust)'**
+  String get nearbyAccessAlways;
 }
 
 class _AppLocalizationsDelegate

@@ -3082,5 +3082,64 @@
   "shareErrFailed": "Couldn't receive the shared items.",
   "@shareErrFailed": {
     "description": "Snackbar: sharing to LanDrop failed for another reason."
+  },
+  "nearbySharesTitle": "Nearby shares",
+  "@nearbySharesTitle": {
+    "description": "Details sheet section title and the device row action: files this device shares with you."
+  },
+  "nearbyLoading": "Looking for shared files…",
+  "@nearbyLoading": {
+    "description": "Nearby shares: shown with a spinner while the device is asked."
+  },
+  "nearbyEmpty": "Nothing shared with you",
+  "@nearbyEmpty": {
+    "description": "Nearby shares: empty (or unreachable) state."
+  },
+  "nearbyEmptyHint": "If you expected files, the owner may need to allow this device.",
+  "@nearbyEmptyHint": {
+    "description": "Nearby shares: hint under the empty state."
+  },
+  "nearbySelectAll": "Select all",
+  "@nearbySelectAll": {
+    "description": "Nearby shares: checkbox that selects every listed file."
+  },
+  "nearbyDownloadSelected": "Download selected ({count})",
+  "@nearbyDownloadSelected": {
+    "description": "Nearby shares: download button with the number of chosen files.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "nearbyRefresh": "Refresh",
+  "@nearbyRefresh": {
+    "description": "Nearby shares: asks the device again."
+  },
+  "nearbyTruncated": "Some files are not listed",
+  "@nearbyTruncated": {
+    "description": "Nearby shares: the owner shares more files than the list shows."
+  },
+  "nearbyAccessTitle": "{alias} wants to see your nearby shares",
+  "@nearbyAccessTitle": {
+    "description": "Owner dialog title when a device asks to list this device's nearby shares.",
+    "placeholders": {
+      "alias": {
+        "type": "String"
+      }
+    }
+  },
+  "nearbyAccessDeny": "Deny",
+  "@nearbyAccessDeny": {
+    "description": "Owner dialog: refuse."
+  },
+  "nearbyAccessOnce": "Allow for 1 hour",
+  "@nearbyAccessOnce": {
+    "description": "Owner dialog: allow for one hour, without trusting the device."
+  },
+  "nearbyAccessAlways": "Always allow (trust)",
+  "@nearbyAccessAlways": {
+    "description": "Owner dialog: allow and trust the device."
   }
 }

@@ -2423,4 +2423,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareErrFailed => 'Couldn\'t receive the shared items.';
+
+  @override
+  String get nearbySharesTitle => 'Nearby shares';
+
+  @override
+  String get nearbyLoading => 'Looking for shared files…';
+
+  @override
+  String get nearbyEmpty => 'Nothing shared with you';
+
+  @override
+  String get nearbyEmptyHint =>
+      'If you expected files, the owner may need to allow this device.';
+
+  @override
+  String get nearbySelectAll => 'Select all';
+
+  @override
+  String nearbyDownloadSelected(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'Download selected ($countString)';
+  }
+
+  @override
+  String get nearbyRefresh => 'Refresh';
+
+  @override
+  String get nearbyTruncated => 'Some files are not listed';
+
+  @override
+  String nearbyAccessTitle(String alias) {
+    return '$alias wants to see your nearby shares';
+  }
+
+  @override
+  String get nearbyAccessDeny => 'Deny';
+
+  @override
+  String get nearbyAccessOnce => 'Allow for 1 hour';
+
+  @override
+  String get nearbyAccessAlways => 'Always allow (trust)';
 }

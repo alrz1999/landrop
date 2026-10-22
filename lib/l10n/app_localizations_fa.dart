@@ -2410,4 +2410,49 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get shareErrFailed => 'مورد‌های اشتراکی دریافت نشد.';
+
+  @override
+  String get nearbySharesTitle => 'اشتراک‌های نزدیک';
+
+  @override
+  String get nearbyLoading => 'در حال جست‌وجوی فایل‌های اشتراکی…';
+
+  @override
+  String get nearbyEmpty => 'چیزی با شما به اشتراک گذاشته نشده';
+
+  @override
+  String get nearbyEmptyHint =>
+      'اگر انتظار فایلی داشتید، شاید صاحب دستگاه باید این دستگاه را مجاز کند.';
+
+  @override
+  String get nearbySelectAll => 'انتخاب همه';
+
+  @override
+  String nearbyDownloadSelected(int count) {
+    final intl.NumberFormat countNumberFormat =
+        intl.NumberFormat.decimalPattern(localeName);
+    final String countString = countNumberFormat.format(count);
+
+    return 'دانلود موارد انتخاب‌شده ($countString)';
+  }
+
+  @override
+  String get nearbyRefresh => 'تازه‌سازی';
+
+  @override
+  String get nearbyTruncated => 'برخی فایل‌ها نمایش داده نشده‌اند';
+
+  @override
+  String nearbyAccessTitle(String alias) {
+    return '$alias می‌خواهد اشتراک‌های نزدیک شما را ببیند';
+  }
+
+  @override
+  String get nearbyAccessDeny => 'رد';
+
+  @override
+  String get nearbyAccessOnce => 'اجازه برای ۱ ساعت';
+
+  @override
+  String get nearbyAccessAlways => 'همیشه اجازه بده (اعتماد)';
 }

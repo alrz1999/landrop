@@ -356,6 +356,10 @@ Where it differs from 4.1-4.6 (wire details in PROTOCOL.md, "Browser access"):
 - Android notification: see 2.6.
 - Not verified: the Kotlin changes were not compiled (no Android SDK on the machine they were written on); the notification text, the API 24-25 paths and `chmod` on Android are untested on a device.
 
+### 4.10 Implemented (2026-10-22): nearby shares
+
+A share can be marked "Show to nearby devices" (off by default, at creation or later on the share card). Who can see it: only LanDrop apps whose certificate fingerprint is in the owner's trusted-devices list (or that the owner allowed for one hour in the prompt) and browsers that the owner paired; nobody else, and to everyone else the answer is one constant empty body (no hint whether shares exist or the caller is trusted). An unknown but proven app triggers a prompt on the owner's screen (Deny / Allow for 1 hour / Always allow = trust), at most a few at a time, with a cool-down after Deny. The app lists with a signed challenge (nonce, bound to path and receiver) and downloads with a short-lived (10 min) ticket kept in memory, bound to the caller's IP and sent in a header only; unsharing, switching the flag off or untrusting the device revokes it at once. The UI is the "Nearby shares" section of the device Details sheet (UX.md 3.2 note); downloads reuse the receive pipeline, so cards, history, cancel, free-space check and file-name sanitising are the same as for a received transfer. Limits: 50 shares and 1000 files per listing (`truncated` is shown); listings and tickets live only in memory and die on restart; streaming (play while downloading) exists only in browsers (Range plus cookie), because the platform players of the app reject the self-signed certificate, so the app downloads first. Wire details: PROTOCOL.md "Nearby shares"; findings S24-S29 in SECURITY.md.
+
 ## 5. Protocol work needed for both steps
 
 - Resumable uploads: a way to ask "how many bytes do you have for this file" and continue from there. Needed for fallback during transfers and for large files over weak Wi-Fi.

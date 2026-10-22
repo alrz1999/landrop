@@ -12,6 +12,7 @@ import 'finding_text.dart';
 import 'history_page.dart';
 import 'hotspot_wizard.dart';
 import 'l10n.dart';
+import 'nearby_ui.dart';
 import 'onboarding.dart';
 import 'permission_explainer.dart';
 import 'pickers.dart';
@@ -91,7 +92,19 @@ class _HomePageState extends State<HomePage> {
         continue;
       }
       final next = AppScope.read(context).takePrompt();
-      if (next == null) break;
+      if (next == null) {
+        // Last in line: an app asking to see this device's nearby shares.
+        final n = AppScope.read(context).pendingNearbyRequest;
+        if (n == null) break;
+        final c = AppScope.read(context);
+        await showNearbyAccessDialog(context, c, n);
+        if (!mounted) break;
+        // Closed without an answer (should not happen): do not loop on it.
+        if (c.pendingNearbyRequest?.id == n.id) {
+          await c.answerNearbyRequest(n.id, NearbyDecision.deny);
+        }
+        continue;
+      }
       if (next is WebPairingRequest) {
         if (next.decision.isCompleted) continue; // timed out by core
         final ok = await showWebPairingDialog(context, next);
@@ -324,6 +337,10 @@ class _HomePageState extends State<HomePage> {
     final c = AppScope.of(context);
     final l = context.l;
     final discoveryError = c.discoveryError;
+    // A nearby-share question waits here until no other dialog is open.
+    if (c.pendingNearbyRequest != null && !_dialogOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _drainIncoming());
+    }
     final peersSection = <Widget>[
       // One plain line; the raw error is in the connection check (Help).
       if (discoveryError != null)

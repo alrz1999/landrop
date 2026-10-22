@@ -1195,5 +1195,32 @@
     "description": "REVIEW: quotes the Send button; align with homeSend."
   },
   "shareErrUnreadable": "بعضی مورد‌ها خوانده نشدند و رد شدند.",
-  "shareErrFailed": "مورد‌های اشتراکی دریافت نشد."
+  "shareErrFailed": "مورد‌های اشتراکی دریافت نشد.",
+  "nearbySharesTitle": "اشتراک‌های نزدیک",
+  "nearbyLoading": "در حال جست‌وجوی فایل‌های اشتراکی…",
+  "@nearbyLoading": {
+    "description": "REVIEW: wording of the loading line."
+  },
+  "nearbyEmpty": "چیزی با شما به اشتراک گذاشته نشده",
+  "nearbyEmptyHint": "اگر انتظار فایلی داشتید، شاید صاحب دستگاه باید این دستگاه را مجاز کند.",
+  "@nearbyEmptyHint": {
+    "description": "REVIEW: «مجاز کند» for \"allow this device\"."
+  },
+  "nearbySelectAll": "انتخاب همه",
+  "nearbyDownloadSelected": "دانلود موارد انتخاب‌شده ({count})",
+  "nearbyRefresh": "تازه‌سازی",
+  "nearbyTruncated": "برخی فایل‌ها نمایش داده نشده‌اند",
+  "nearbyAccessTitle": "{alias} می‌خواهد اشتراک‌های نزدیک شما را ببیند",
+  "@nearbyAccessTitle": {
+    "description": "REVIEW: «اشتراک‌های نزدیک» for \"nearby shares\"; keep in line with nearbySharesTitle."
+  },
+  "nearbyAccessDeny": "رد",
+  "nearbyAccessOnce": "اجازه برای ۱ ساعت",
+  "@nearbyAccessOnce": {
+    "description": "REVIEW: the hour is fixed (not a placeholder), digit written in Persian."
+  },
+  "nearbyAccessAlways": "همیشه اجازه بده (اعتماد)",
+  "@nearbyAccessAlways": {
+    "description": "REVIEW: imperative «اجازه بده» vs noun form used by other buttons."
+  }
 }

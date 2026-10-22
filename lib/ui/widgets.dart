@@ -8,6 +8,7 @@ import 'finding_text.dart';
 import 'format.dart';
 import 'l10n.dart';
 import 'ltr_text.dart';
+import 'nearby_ui.dart';
 
 /// "Phone", "Computer", "Browser" for a [DeviceInfo.deviceType].
 String deviceKindLabel(AppLocalizations l, String type) => switch (type) {
@@ -207,10 +208,28 @@ class PeerTile extends StatelessWidget {
           trustedKey: trusted ? Key('trustedMark-${peer.fingerprint}') : null),
       title: AutoDirText(peer.alias,
           maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text([
-        deviceKindLabel(l, peer.deviceType),
-        if (peer.deviceModel != null) l.isoName(peer.deviceModel!),
-      ].join(' · ')),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text([
+            deviceKindLabel(l, peer.deviceType),
+            if (peer.deviceModel != null) l.isoName(peer.deviceModel!),
+          ].join(' · ')),
+          // Trusted LanDrop devices: their nearby shares, one tap away.
+          if (trusted && offersNearby(peer))
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 4),
+              child: ActionChip(
+                key: Key('nearbyChip-${peer.fingerprint}'),
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.folder_shared_outlined, size: 16),
+                label: Text(l.nearbySharesTitle),
+                onPressed: () =>
+                    showPeerDetails(context, peer, nearbyFirst: true),
+              ),
+            ),
+        ],
+      ),
       onLongPress: () => showPeerDetails(context, peer),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
@@ -276,7 +295,8 @@ class RecentTile extends StatelessWidget {
 
 /// Bottom sheet with a device's technical details: address, other
 /// addresses, direct cable link, security code (UX.md 3.2).
-Future<void> showPeerDetails(BuildContext context, DeviceInfo peer) {
+Future<void> showPeerDetails(BuildContext context, DeviceInfo peer,
+    {bool nearbyFirst = false}) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -298,6 +318,9 @@ Future<void> showPeerDetails(BuildContext context, DeviceInfo peer) {
               ],
             ),
           );
+      final nearby = offersNearby(peer) && AppScope.maybeOf(ctx) != null
+          ? NearbySharesSection(peer: peer)
+          : null;
       return SafeArea(
         child: SingleChildScrollView(
           key: const Key('peerDetailsSheet'),
@@ -313,6 +336,7 @@ Future<void> showPeerDetails(BuildContext context, DeviceInfo peer) {
                 title: AutoDirText(peer.alias, style: t.titleMedium),
                 subtitle: Text(deviceKindLabel(l, peer.deviceType)),
               ),
+              if (nearby != null && nearbyFirst) nearby,
               row(
                   l.detailsAddress,
                   LtrText(
@@ -346,6 +370,7 @@ Future<void> showPeerDetails(BuildContext context, DeviceInfo peer) {
                         Text(l.securityCodeHint, style: t.bodySmall),
                       ],
                     )),
+              if (nearby != null && !nearbyFirst) nearby,
             ],
           ),
         ),
